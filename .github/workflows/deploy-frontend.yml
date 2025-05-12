@@ -1,0 +1,37 @@
+name: Deploy Frontend to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup SSH access to EC2
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy frontend
+        run: |
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /opt/itbem-events-frontend
+            git pull origin main
+            docker stop itbem-events-frontend || true && docker rm itbem-events-frontend || true
+            docker build -t itbem-events-frontend . \
+              --build-arg PUBLIC_API_URL=${{ secrets.PUBLIC_API_URL }}
+
+            docker run -d --name itbem-events-frontend \
+              --restart always \
+              -p 4321:4321 \
+              ${{ secrets.DOCKER_ENV_VARS }} \
+              itbem-events-frontend
+          EOF
