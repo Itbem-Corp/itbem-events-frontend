@@ -1,0 +1,12 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import { AuthLayout } from '../components/AuthLayout.tsx'
+import LoginForm from '../components/LoginForm.tsx'
+import { Toaster } from 'sonner'
+---
+<Toaster position="top-center" richColors />
+<BaseLayout>
+  <AuthLayout client:load>
+       <LoginForm client:load />
+  </AuthLayout>
+</BaseLayout>

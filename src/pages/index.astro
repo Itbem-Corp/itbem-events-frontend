@@ -1,0 +1,9 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import ProtectedLayout from '../components/ProtectedLayout.tsx'
+---
+<BaseLayout>
+  <ProtectedLayout client:load>
+    <h1 class="text-2xl font-bold">Bienvenido al Dashboard</h1>
+  </ProtectedLayout>
+</BaseLayout>
