@@ -5,13 +5,27 @@ on:
     branches:
       - main
 
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: true
+        default: 'main'
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch || 'main' }}
 
       - name: Setup SSH access to EC2
         run: |
@@ -22,16 +36,20 @@ jobs:
 
       - name: Deploy frontend
         run: |
-          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
             cd /opt/itbem-events-frontend
-            git pull origin main
+            git pull origin ${{ github.event.inputs.branch || 'main' }}
             docker stop itbem-events-frontend || true && docker rm itbem-events-frontend || true
+
             docker build -t itbem-events-frontend . \
-              --build-arg PUBLIC_API_URL=${{ secrets.PUBLIC_API_URL }}
+              --build-arg EVENTS_URL=${{ secrets.EVENTS_URL }} \
+              --build-arg REDIS_URL=${{ secrets.REDIS_URL }}
 
             docker run -d --name itbem-events-frontend \
               --restart always \
-              -p 4321:4321 \
-              ${{ secrets.DOCKER_ENV_VARS }} \
+              -p 80:4321 \
+              -e PORT=4321 \
+              -e EVENTS_URL=${{ secrets.EVENTS_URL }} \
+              -e REDIS_URL=${{ secrets.REDIS_URL }} \
               itbem-events-frontend
           EOF
