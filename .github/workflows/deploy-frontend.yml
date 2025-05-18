@@ -47,7 +47,7 @@ jobs:
 
             docker run -d --name itbem-events-frontend \
               --restart always \
-              -p 3000:4321 \
+              -p 4321:4321 \
               -e PORT=4321 \
               -e EVENTS_URL=${{ secrets.EVENTS_URL }} \
               -e REDIS_URL=${{ secrets.REDIS_URL }} \
