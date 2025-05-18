@@ -26,7 +26,4 @@ export default defineConfig({
     },
     ttl: 3600, // 1 hour
   },
-  experimental: {
-    session: true,  // 🔥 Habilitas sesiones experimentales
-  },
 });
