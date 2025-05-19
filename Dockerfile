@@ -28,13 +28,15 @@ FROM base AS runtime
 # Copy production node_modules
 COPY --from=prod-deps /app/node_modules ./node_modules
 
-# Copy built app
+# Copy built app (server and client)
 COPY --from=build /app/dist ./dist
 
-# Configure host and port
+# COPY estáticos del frontend a un volumen accesible por NGINX (nuevo paso)
+RUN mkdir -p /public
+COPY --from=build /app/dist/client /public
+
 ENV HOST=0.0.0.0
 ENV PORT=4321
 EXPOSE 4321
 
-# Run the app
 CMD ["node", "./dist/server/entry.mjs"]
