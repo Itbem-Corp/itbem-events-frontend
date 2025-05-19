@@ -1,7 +1,6 @@
 # ---------- Base image ----------
 FROM node:lts AS base
 WORKDIR /app
-
 # Accept public API URL at build time
 ARG PUBLIC_API_URL
 ENV PUBLIC_API_URL=${PUBLIC_API_URL}
