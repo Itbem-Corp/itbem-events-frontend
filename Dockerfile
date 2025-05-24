@@ -2,8 +2,11 @@
 FROM node:lts AS base
 WORKDIR /app
 # Accept public API URL at build time
-ARG PUBLIC_API_URL
-ENV PUBLIC_API_URL=${PUBLIC_API_URL}
+ARG EVENTS_URL
+ENV EVENTS_URL=${EVENTS_URL}
+
+ARG REDIS_URL
+ENV REDIS_URL=${REDIS_URL}
 
 # Copy only package files to install dependencies
 COPY package.json package-lock.json ./
