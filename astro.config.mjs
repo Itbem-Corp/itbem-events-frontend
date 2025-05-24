@@ -12,7 +12,7 @@ export default defineConfig({
   env: {
     schema: {
       PORT: envField.number({ context: "server", access: "secret", default: 4321 }),
-      REDIS_URL: envField.string({ context: "server", access: "secret" }),
+      REDIS_URL: envField.string({ context: "server", access: "secret", default: "" }),
       EVENTS_URL: envField.string({ context: "server", access: "secret" }),
     },
     validateSecrets: false
