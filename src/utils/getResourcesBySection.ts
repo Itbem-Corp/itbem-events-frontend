@@ -52,16 +52,14 @@ export async function fetchAllResources() {
         allResources.push({
             sectionId,
             sectionResources: (() => {
-                // Si resources es directamente un array
-                if (Array.isArray(resources) && resources.length > 0) {
-                    return resources;
-                }
-                // Si resources es un objeto con propiedad data
-                if (resources && Array.isArray(resources.data) && resources.data.length > 0) {
-                    return resources.data;
-                }
-                // Array vacío por defecto
-                return [];
+                const rawData =
+                    Array.isArray(resources)
+                        ? resources
+                        : Array.isArray(resources?.data)
+                            ? resources.data
+                            : [];
+
+                return rawData.sort((a: { position: number; }, b: { position: number; }) => a.position - b.position);
             })()
         });
     }

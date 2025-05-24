@@ -97,22 +97,20 @@ interface Section {
     <div class="text-4xl font-bold">
       <p>2022 - 2025</p>
     </div>
-    <div class="flex flex-row justify-items-center">
-      <div class="basis-1/3">
+    <div class="flex flex-row items-center justify-center gap-4 md:gap-6 max-w-4xl mx-auto">
+      <div class="w-24 h-24 md:w-32 md:h-32">
         {resourcesBySection[0] && resourcesBySection[0].sectionResources[1] && (
-            <div class="mx-auto w-24 h-24">
-              <ImageWithLoader
-                  src={resourcesBySection[0].sectionResources[1].view_url}
-                  alt={resourcesBySection[0].sectionResources[1].title || 'Colegio Izapa'}
-                  className="w-full h-full object-cover"
-                  client:load
-              />
-            </div>
+            <ImageWithLoader
+                src={resourcesBySection[0].sectionResources[1].view_url}
+                alt={resourcesBySection[0].sectionResources[1].title || 'Colegio Izapa'}
+                className="w-full h-full object-cover"
+                client:load
+            />
         )}
       </div>
-      <div class="basis-2/3">
-        <h3 class="text-4xl bold mt-2">PREPARATORIA</h3>
-      </div>
+      <h3 class="text-4xl md:text-5xl font-bold text-center md:text-start mt-4 md:mt-0">
+        PREPARATORIA
+      </h3>
     </div>
   </section>
 </main>
@@ -125,7 +123,7 @@ interface Section {
             <ImageWithLoader
                 src={resourcesBySection[1]?.sectionResources[index].view_url}
                 alt={resourcesBySection[1]?.sectionResources[index].title || 'Colegio Izapa'}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
                 client:load
             />
       ))}
@@ -148,19 +146,15 @@ interface Section {
           la misa se celebrará en el Santuario la Villita de Guadalupe a las 6:45 p.m.
         </p>
       </div>
-      <div class="basis-2/3">
-        <div class="bg-gray-300 w-full max-w-[250px] aspect-square rounded mx-auto flex items-center justify-center text-white text-lg font-semibold">
+      <div class="basis-full sm:basis-2/3 px-2">
+        <div class="bg-gray-300 w-full max-w-[500px] aspect-[4/3] rounded mx-auto overflow-hidden">
           <iframe
               src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3855.711226652614!2d-92.25383992316038!3d14.897417285624766!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x858e0eef1d27d96d%3A0x8759c291e89adbe8!2sSantuario%20Diocesano%20La%20Villita%20de%20Guadalupe!5e0!3m2!1ses-419!2smx!4v1748106996850!5m2!1ses-419!2smx"
-              class="w-full h-full rounded"
-              width="600"
-              height="450"
-              style="border:0;"
+              class="w-full h-full"
               allowfullscreen=""
               loading="lazy"
               referrerpolicy="no-referrer-when-downgrade"
-          >
-          </iframe>
+          ></iframe>
         </div>
       </div>
     </div>
@@ -172,8 +166,8 @@ interface Section {
       {[resourcesBySection[2].sectionResources[0], resourcesBySection[2].sectionResources[1]].map((src, index) => (
           <div class="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
             <ImageWithLoader
-                src={resourcesBySection[2]?.sectionResources[index]?.view_url}
-                alt={resourcesBySection[2]?.sectionResources[index]?.title || 'Colegio Izapa'}
+                src={src.view_url}
+                alt={src.title || 'Colegio Izapa'}
                 className="w-full h-full object-cover"
                 client:load
             />
@@ -181,16 +175,14 @@ interface Section {
       ))}
     </div>
     <div class="flex flex-row">
-      <div class="basis-2/3">
-        <div class="bg-gray-300 w-full max-w-[250px] aspect-square rounded mx-auto flex items-center justify-center text-white text-lg font-semibold">
-          <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3856.1165481300136!2d-92.28686442316067!3d14.874759985644767!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x858e0f003d3b1c25%3A0x878b155778419b43!2sHotel%20holiday%20entrada%20principal!5e0!3m2!1ses-419!2smx!4v1748107202928!5m2!1ses-419!2smx"
-                  class="w-full h-full rounded"
-                  width="600"
-                  height="450"
-                  style="border:0;"
-                  allowfullscreen=""
-                  loading="lazy"
-                  referrerpolicy="no-referrer-when-downgrade"
+      <div class="basis-full sm:basis-2/3 px-2">
+        <div class="bg-gray-300 w-full max-w-[500px] aspect-[4/3] rounded mx-auto overflow-hidden">
+          <iframe
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3856.1165481300136!2d-92.28686442316067!3d14.874759985644767!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x858e0f003d3b1c25%3A0x878b155778419b43!2sHotel%20holiday%20entrada%20principal!5e0!3m2!1ses-419!2smx!4v1748107202928!5m2!1ses-419!2smx"
+              class="w-full h-full"
+              allowfullscreen=""
+              loading="lazy"
+              referrerpolicy="no-referrer-when-downgrade"
           ></iframe>
         </div>
       </div>
@@ -201,11 +193,11 @@ interface Section {
       </div>
     </div>
     <div class="grid grid-cols-2 gap-4">
-      {resourcesBySection[2]?.sectionResources.slice(0, 2).map((resource: Resource, index: number) => (
+      {[resourcesBySection[2].sectionResources[2], resourcesBySection[2].sectionResources[3]].map((src, index) => (
           <div class="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
             <ImageWithLoader
-                src={resourcesBySection[2]?.sectionResources[index]?.view_url}
-                alt={resourcesBySection[2]?.sectionResources[index]?.title || 'Colegio Izapa'}
+                src={src.view_url}
+                alt={src.title || 'Colegio Izapa'}
                 className="w-full h-full object-cover"
                 client:load
             />
@@ -250,8 +242,8 @@ interface Section {
       {resourcesBySection[4]?.sectionResources.slice(0, 2).map((resource: Resource, index: number) => (
           <div class="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
             <ImageWithLoader
-                src={resourcesBySection[4]?.sectionResources[index]?.view_url}
-                alt={resourcesBySection[4]?.sectionResources[index]?.title || 'Colegio Izapa'}
+                src={resource.view_url}
+                alt={resource.title || 'Colegio Izapa'}
                 className="w-full h-full object-cover"
                 client:load
             />
@@ -259,11 +251,11 @@ interface Section {
       ))}
     </div>
     <div class="grid grid-cols-3 gap-4">
-      {resourcesBySection[4]?.sectionResources.slice(3, 6).map((resource: Resource, index: number) => (
+      {resourcesBySection[4]?.sectionResources.slice(2, 6).map((resource: Resource, index: number) => (
           <div class="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
             <ImageWithLoader
-                src={resourcesBySection[4]?.sectionResources[index]?.view_url}
-                alt={resourcesBySection[4]?.sectionResources[index]?.title || 'Colegio Izapa'}
+                src={resource.view_url}
+                alt={resource.title || 'Colegio Izapa'}
                 className="w-full h-full object-cover"
                 client:load
             />
