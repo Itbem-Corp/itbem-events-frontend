@@ -15,16 +15,16 @@ interface TimeLeft {
 
 export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
     const [timeLeft, setTimeLeft] = useState<TimeLeft>({
-        days: 20,
-        hours: 15,
-        minutes: 45,
-        seconds: 22,
-    })
+        days: 0,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+    });
 
     useEffect(() => {
         const calculateTimeLeft = (): TimeLeft => {
-            const target = typeof targetDate === "string" ? new Date(targetDate) : targetDate
-            const difference = target.getTime() - new Date().getTime()
+            const target = typeof targetDate === "string" ? new Date(targetDate) : targetDate;
+            const difference = target.getTime() - new Date().getTime();
 
             if (difference > 0) {
                 return {
@@ -32,42 +32,38 @@ export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
                     hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
                     minutes: Math.floor((difference / 1000 / 60) % 60),
                     seconds: Math.floor((difference / 1000) % 60),
-                }
+                };
             }
 
-            return {
-                days: 20,
-                hours: 15,
-                minutes: 45,
-                seconds: 22,
-            }
-        }
+            return { days: 0, hours: 0, minutes: 0, seconds: 0 };
+        };
 
         const timer = setInterval(() => {
-            setTimeLeft(calculateTimeLeft())
-        }, 1000)
+            setTimeLeft(calculateTimeLeft());
+        }, 1000);
 
-        return () => clearInterval(timer)
-    }, [targetDate])
+        return () => clearInterval(timer);
+    }, [targetDate]);
 
     return (
-        <>
+        <div className="flex justify-center md:gap-18 sm:gap-14 gap-10 text-[#07293A]">
             <div className="text-center">
-                <div className="text-2xl sm:text-3xl font-bold">{timeLeft.days}</div>
-                <div className="text-xs sm:text-sm">Días</div>
+                <div className="text-3xl font-bold text-[#007BC4]">{timeLeft.days}</div>
+                <div className="text-sm font-medium">Días</div>
             </div>
             <div className="text-center">
-                <div className="text-2xl sm:text-3xl font-bold">{timeLeft.hours}</div>
-                <div className="text-xs sm:text-sm">Horas</div>
+                <div className="text-3xl font-bold text-[#007BC4]">{timeLeft.hours}</div>
+                <div className="text-sm font-medium">Horas</div>
             </div>
             <div className="text-center">
-                <div className="text-2xl sm:text-3xl font-bold">{timeLeft.minutes}</div>
-                <div className="text-xs sm:text-sm">Minutos</div>
+                <div className="text-3xl font-bold text-[#007BC4]">{timeLeft.minutes}</div>
+                <div className="text-sm font-medium">Minutos</div>
             </div>
             <div className="text-center">
-                <div className="text-2xl sm:text-3xl font-bold">{timeLeft.seconds}</div>
-                <div className="text-xs sm:text-sm">Segundos</div>
+                <div className="text-3xl font-bold text-[#007BC4]">{timeLeft.seconds}</div>
+                <div className="text-sm font-medium">Segundos</div>
             </div>
-        </>
-    )
+        </div>
+    );
 }
+

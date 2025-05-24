@@ -1,102 +1,308 @@
 ---
 import TemplateLayout from '../layouts/template.astro'
 import CountdownTimer from '../components/CountdownTimer';
+import ImageWithLoader from '../components/ImageWithLoader';
+import { fetchAllResources } from '../utils/getResourcesBySection';
 
-const graduationDate = new Date('2023-06-22T00:00:00');
-const bgImageUrl = "https://itbem-events-bucket-prod.s3.amazonaws.com/events/df05579f-b9fd-4f2e-a2be-287867bdecab.webp";
+const resourcesBySection = await fetchAllResources();
+
+const graduationDate = new Date('2025-06-22T18:45:00');
+interface Resource {
+  view_url: string;
+  title: string;
+}
+
+interface Section {
+  sectionResources: Resource[];
+}
 ---
 
 <TemplateLayout title="Nos Graduamos 2022-2025 | El Gran Día">
-  <div class="flex justify-center items-center min-h-screen bg-gray-50">
-    <div class="w-full max-w-2xl px-4 pb-10 font-[Montserrat] bg-white shadow-sm">
-      <!-- Header -->
-      <header class="bg-white py-4 sticky top-0 z-10">
-        <h1 class="text-center text-2xl font-bold text-amber-800">EL GRAN DÍA</h1>
-        <div class="flex justify-between my-4 text-center px-8">
-          <CountdownTimer targetDate={graduationDate} client:visible />
-        </div>
-      </header>
 
-      <!-- Title -->
-      <div class="text-center my-8">
-        <h2 class="text-4xl font-bold text-slate-800">NOS GRADUAMOS</h2>
-        <div class="flex flex-col items-center mt-2">
-          <span class="text-5xl font-bold">2022</span>
-          <span class="text-2xl">-</span>
-          <span class="text-5xl font-bold">2025</span>
-        </div>
+  <head>
+    <title>Nos Graduamos | Colegio Izapa</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <style>
+      @font-face {
+        font-family: 'Bigilla';
+        src: url('/fonts/Bigilla.otf') format('opentype');
+      }
+      @font-face {
+        font-family: 'Aloevera';
+        src: url('/fonts/Aloevera-Medium.otf') format('opentype');
+      }
+      @font-face {
+        font-family: 'Quicksand';
+        src: url('/fonts/Quicksand-VariableFont_wght.ttf') format('truetype');
+      }
+
+      body {
+        background-image: url('https://itbem-events-bucket-prod.s3.amazonaws.com/patterns/patron-fino-ondas.svg');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+        background-color: #ffffff;
+        font-family: 'Quicksand', sans-serif;
+        color: #07293A;
+        margin: 0;
+        padding: 0;
+      }
+      h1, h2, h3, .title {
+        font-family: 'Bigilla', serif;
+        color: #8B5D3D;
+      }
+      .highlight {
+        color: #007BC4;
+      }
+      .alt-highlight {
+        color: #1B1464;
+      }
+    </style>
+  </head>
+  <body>
+<main class="max-w-5xl mx-auto px-4 py-2 space-y-20 overflow-x-hidden">
+  <img
+      src="/backgrounds/vectores-1.svg"
+      alt=""
+      class="absolute top-0 right-0 w-[72px]  z-[-1] opacity-20"
+  />
+
+    <!-- Header -->
+  <header class="py-2 text-center space-y-6 relative z-10">
+    <h1 class="text-4xl bold font-[Bigilla] text-[#8B5D3D]">EL GRAN DÍA</h1>
+    <div class="">
+      <div class="min-w-[360px] flex justify-center gap-8 text-[#07293A]">
+        <CountdownTimer targetDate={graduationDate} client:visible />
       </div>
+    </div>
+  </header>
 
-      <!-- Preparatoria -->
-      <div class="text-center my-8">
-        <div class="inline-flex items-center justify-center">
-          <div class="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white mr-2">
-            <span class="font-bold text-lg">P</span>
-          </div>
-          <h3 class="text-3xl font-bold">PREPARATORIA</h3>
-        </div>
-      </div>
-
-      <!-- Gallery -->
-      <div class="grid grid-cols-3 gap-3 my-6 px-4">
-        {Array(6).fill(0).map((_, i) => (
-          <div
-            class="aspect-square rounded overflow-hidden shadow-md"
-            style={`background-image: url('${bgImageUrl}'); background-size: cover; background-position: center;`}
-          ></div>
-        ))}
-      </div>
-
-      <p class="text-center my-6 text-base">
-        Tenemos un lindo año y queremos compartir lo vivido
-      </p>
-
-      <p class="text-center font-bold my-4 text-lg">
-        Jueves 22 de junio del 2023
-      </p>
-
-      <!-- Mapa -->
-      <div class="my-8 px-4">
-        <h3 class="text-center font-bold mb-4 text-lg">MAPA</h3>
-        <div class="space-y-4">
-          {Array(3).fill(0).map((_, i) => (
-            <div class="space-y-2">
-              <div
-                class="w-full aspect-video rounded shadow-md overflow-hidden"
-                style={`background-image: url('${bgImageUrl}'); background-size: cover; background-position: center;`}
-              >
-                <div class="w-full h-full bg-black bg-opacity-10"></div>
-              </div>
-              <p class="text-xs sm:text-sm text-gray-600">Imagen de graduación {i + 1}</p>
+  <!-- SECCIÓN 1 -->
+  <section class="text-center space-y-6 pb-4 relative z-10">
+    <h2 class="text-5xl font-bold">NOS GRADUAMOS</h2>
+    <div class="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-100 rounded shadow-md overflow-hidden">
+      {resourcesBySection[0]?.sectionResources[0]?.view_url && (
+            <ImageWithLoader
+                src={resourcesBySection[0].sectionResources[0].view_url}
+                alt={resourcesBySection[0].sectionResources[0].title || 'Colegio Izapa'}
+                className="w-full h-full object-cover"
+                client:load
+            />
+      )}
+    </div>
+    <div class="text-4xl font-bold">
+      <p>2022 - 2025</p>
+    </div>
+    <div class="flex flex-row justify-items-center">
+      <div class="basis-1/3">
+        {resourcesBySection[0] && resourcesBySection[0].sectionResources[1] && (
+            <div class="mx-auto w-24 h-24">
+              <ImageWithLoader
+                  src={resourcesBySection[0].sectionResources[1].view_url}
+                  alt={resourcesBySection[0].sectionResources[1].title || 'Colegio Izapa'}
+                  className="w-full h-full object-cover"
+                  client:load
+              />
             </div>
-          ))}
+        )}
+      </div>
+      <div class="basis-2/3">
+        <h3 class="text-4xl bold mt-2">PREPARATORIA</h3>
+      </div>
+    </div>
+  </section>
+</main>
+
+<main class="max-w-5xl mx-auto px-4 py-2 space-y-20 overflow-x-hidden">
+  <!-- SECCIÓN 2 -->
+  <section class="text-center space-y-6 relative z-10">
+    <div class="grid grid-cols-2 gap-2">
+      {resourcesBySection[1]?.sectionResources.slice(0, 2).map((resource: Resource, index: number) => (
+            <ImageWithLoader
+                src={resourcesBySection[1]?.sectionResources[index].view_url}
+                alt={resourcesBySection[1]?.sectionResources[index].title || 'Colegio Izapa'}
+                className="w-full h-full object-cover"
+                client:load
+            />
+      ))}
+    </div>
+    <p class="text-2xl leading-snug">Tenemos un logro más y queremos compartirlo contigo</p>
+    <div class="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-100 rounded shadow-md overflow-hidden">
+      {resourcesBySection[1] && resourcesBySection[1].sectionResources[2] && (
+            <ImageWithLoader
+                src={resourcesBySection[1]?.sectionResources[2].view_url}
+                alt={resourcesBySection[1].sectionResources[2].title || 'Colegio Izapa'}
+                className="w-full h-full object-cover"
+                client:load
+            />
+      )}
+    </div>
+    <p class="text-2xl">este 22 de junio del 2025</p>
+    <div class="flex flex-row">
+      <div class="basis-2/3 place-content-center pe-4">
+        <p class="text-sm leading-relaxed">
+          la misa se celebrará en el Santuario la Villita de Guadalupe a las 6:45 p.m.
+        </p>
+      </div>
+      <div class="basis-2/3">
+        <div class="bg-gray-300 w-full max-w-[250px] aspect-square rounded mx-auto flex items-center justify-center text-white text-lg font-semibold">
+          <iframe
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3855.711226652614!2d-92.25383992316038!3d14.897417285624766!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x858e0eef1d27d96d%3A0x8759c291e89adbe8!2sSantuario%20Diocesano%20La%20Villita%20de%20Guadalupe!5e0!3m2!1ses-419!2smx!4v1748106996850!5m2!1ses-419!2smx"
+              class="w-full h-full rounded"
+              width="600"
+              height="450"
+              style="border:0;"
+              allowfullscreen=""
+              loading="lazy"
+              referrerpolicy="no-referrer-when-downgrade"
+          >
+          </iframe>
         </div>
       </div>
+    </div>
+  </section>
 
-      <!-- Graduados -->
-      <div class="my-8 px-6">
-        <h3 class="text-center font-bold text-2xl mb-4">Graduados</h3>
-        <ul class="text-sm space-y-1 sm:columns-2 md:columns-1 lg:columns-2">
-          <li>Juan Carlos Vázquez Hernández</li>
-          <li>María Guadalupe González</li>
-          <li>José Antonio García Sánchez</li>
-          <li>Ana Sofía Martínez Rodríguez</li>
-          <li>Pedro Luis Ramírez Quiroga</li>
-          <li>Laura Patricia Mendoza</li>
-          <li>Miguel Ángel Gómez Ortega</li>
-          <li>Raúl Pérez Wong</li>
-        </ul>
-      </div>
-
-      <!-- Footer -->
-      <footer class="mt-10 text-center text-sm text-gray-500">
-        <p>celebremos juntos</p>
-        <div class="flex justify-center gap-4 mt-4">
-          <div class="w-7 h-7 bg-red-500 rounded-full"></div>
-          <div class="w-7 h-7 bg-blue-500 rounded-full"></div>
-          <div class="w-7 h-7 bg-yellow-500 rounded-full"></div>
+  <!-- SECCIÓN 3 -->
+  <section class="space-y-6 text-center relative z-0">
+    <div class="grid grid-cols-2 gap-4">
+      {[resourcesBySection[2].sectionResources[0], resourcesBySection[2].sectionResources[1]].map((src, index) => (
+          <div class="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
+            <ImageWithLoader
+                src={resourcesBySection[2]?.sectionResources[index]?.view_url}
+                alt={resourcesBySection[2]?.sectionResources[index]?.title || 'Colegio Izapa'}
+                className="w-full h-full object-cover"
+                client:load
+            />
+          </div>
+      ))}
+    </div>
+    <div class="flex flex-row">
+      <div class="basis-2/3">
+        <div class="bg-gray-300 w-full max-w-[250px] aspect-square rounded mx-auto flex items-center justify-center text-white text-lg font-semibold">
+          <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3856.1165481300136!2d-92.28686442316067!3d14.874759985644767!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x858e0f003d3b1c25%3A0x878b155778419b43!2sHotel%20holiday%20entrada%20principal!5e0!3m2!1ses-419!2smx!4v1748107202928!5m2!1ses-419!2smx"
+                  class="w-full h-full rounded"
+                  width="600"
+                  height="450"
+                  style="border:0;"
+                  allowfullscreen=""
+                  loading="lazy"
+                  referrerpolicy="no-referrer-when-downgrade"
+          ></iframe>
         </div>
-      </footer>
+      </div>
+      <div class="basis-2/3 place-content-center ps-2">
+        <p class="text-sm leading-relaxed">
+        posteriormente la recepción será en el Salón Barista del Hotel Holiday Inn a las 8:30 p.m.
+        </p>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+      {resourcesBySection[2]?.sectionResources.slice(0, 2).map((resource: Resource, index: number) => (
+          <div class="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
+            <ImageWithLoader
+                src={resourcesBySection[2]?.sectionResources[index]?.view_url}
+                alt={resourcesBySection[2]?.sectionResources[index]?.title || 'Colegio Izapa'}
+                className="w-full h-full object-cover"
+                client:load
+            />
+          </div>
+      ))}
+    </div>
+  </section>
+
+  <!-- SECCIÓN 4 -->
+  <section class="space-y-6 text-center relative z-0">
+    <h2 class="text-3xl font-semibold">Graduados</h2>
+    <ul class="font-medium space-y-1">
+      <li class="highlight">Ana Gloria Vásquez Velázquez</li>
+      <li class="alt-highlight">Ángel Tonatiuh Vanegas Zamora</li>
+      <li class="highlight">Ernesto Salas Obregón</li>
+      <li class="alt-highlight">Gael Adrián García Somohano</li>
+      <li class="highlight">José Antonio Bolaños Córdoba</li>
+      <li class="alt-highlight">Julia Magaña Ramírez</li>
+      <li class="highlight">Kelly Berenice Villalobos Zamora</li>
+      <li class="alt-highlight">María de Jesús Romero Cigarroa</li>
+      <li class="highlight">María Luisa Córdoba Tang</li>
+      <li class="alt-highlight">Miguel Ángel Aceves Orellana</li>
+      <li class="highlight">Pedro Maximiliano López Miranda</li>
+      <li class="alt-highlight">Raúl Flores Wong</li>
+      <li class="highlight">Renata Montiel Díaz</li>
+      <li class="alt-highlight">Valeria Trujillo Iniesta</li>
+    </ul>
+    <div class="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-100 rounded shadow-md overflow-hidden my-6">
+      <ImageWithLoader
+          src={resourcesBySection[3]?.sectionResources[0]?.view_url}
+          alt="Foto final de graduados"
+          className="w-full h-full object-cover"
+          client:load
+      />
+    </div>
+    <p class="italic text-xl">celebremos juntos</p>
+  </section>
+
+  <!-- SECCIÓN 5 -->
+  <section class="space-y-6 relative z-0">
+    <div class="grid grid-cols-2 gap-4">
+      {resourcesBySection[4]?.sectionResources.slice(0, 2).map((resource: Resource, index: number) => (
+          <div class="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
+            <ImageWithLoader
+                src={resourcesBySection[4]?.sectionResources[index]?.view_url}
+                alt={resourcesBySection[4]?.sectionResources[index]?.title || 'Colegio Izapa'}
+                className="w-full h-full object-cover"
+                client:load
+            />
+          </div>
+      ))}
+    </div>
+    <div class="grid grid-cols-3 gap-4">
+      {resourcesBySection[4]?.sectionResources.slice(3, 6).map((resource: Resource, index: number) => (
+          <div class="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
+            <ImageWithLoader
+                src={resourcesBySection[4]?.sectionResources[index]?.view_url}
+                alt={resourcesBySection[4]?.sectionResources[index]?.title || 'Colegio Izapa'}
+                className="w-full h-full object-cover"
+                client:load
+            />
+          </div>
+      ))}
+    </div>
+  </section>
+</main>
+
+<main class="max-w-5xl mx-auto px-4 py-2 space-y-20 overflow-x-hidden">
+<!-- FOOTER -->
+<footer class="bg-white border-t mt-16 py-10 text-center text-gray-600 text-sm">
+  <div class="flex flex-col sm:flex-row justify-center items-center gap-4">
+    <div class="flex items-center gap-1">
+      <span class="font-bold" style="color: #DD2284">eventi</span><span class="font-bold text-black">app</span><span class="ml-1">2025 by itbem.</span>
+    </div>
+    <div class="flex items-center gap-2">
+      📱 <span class="text-black">9626240796</span>
+    </div>
+    <div class="flex items-center gap-2">
+      ✉️ <span class="text-black">contacto@itbem.com</span>
     </div>
   </div>
+</footer>
+</main>
+</body>
+  <style>
+    .highlight {
+      background: linear-gradient(120deg, #a78bfa 0%, #ec4899 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .alt-highlight {
+      background: linear-gradient(120deg, #06b6d4 0%, #3b82f6 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+  </style>
 </TemplateLayout>
