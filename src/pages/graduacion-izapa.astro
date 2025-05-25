@@ -1,10 +1,14 @@
 ---
+import { EVENTS_URL } from "astro:env/server";
 import TemplateLayout from '../layouts/template.astro'
 import CountdownTimer from '../components/CountdownTimer';
 import ImageWithLoader from '../components/ImageWithLoader';
-import { fetchAllResources } from '../utils/getResourcesBySection';
-
-const resourcesBySection = await fetchAllResources();
+import ResourcesLoader from '../components/ResourcesLoader.tsx';
+import Section1Wrapper from '../components/templates/graduations/template_1/section_1/Section1Wrapper';
+import Section2Wrapper from '../components/templates/graduations/template_1/section_2/Section2Wrapper';
+import Section3Wrapper from '../components/templates/graduations/template_1/section_3/Section3Wrapper';
+import Section4Wrapper from '../components/templates/graduations/template_1/section_4/Section4Wrapper';
+import Section5Wrapper from '../components/templates/graduations/template_1/section_5/Section5Wrapper';
 
 const graduationDate = new Date('2025-06-22T18:45:00');
 interface Resource {
@@ -18,7 +22,6 @@ interface Section {
 ---
 
 <TemplateLayout title="Nos Graduamos 2022-2025 | El Gran Día">
-
   <head>
     <title>Nos Graduamos | Colegio Izapa</title>
     <meta charset="UTF-8" />
@@ -61,10 +64,13 @@ interface Section {
       .alt-highlight {
         color: #1B1464;
       }
+      .pointer-events-none {
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
-<main class="max-w-5xl mx-auto px-4 py-2 space-y-20 overflow-x-hidden">
+  <main class="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20 overflow-x-hidden">
   <img
       src="/backgrounds/vectores-1.svg"
       alt=""
@@ -75,211 +81,54 @@ interface Section {
   <header class="py-2 text-center space-y-6 relative z-10">
     <h1 class="text-4xl bold font-[Bigilla] text-[#8B5D3D]">EL GRAN DÍA</h1>
     <div class="">
-      <div class="min-w-[360px] flex justify-center gap-8 text-[#07293A]">
+      <div class="w-full flex flex-wrap justify-center gap-4 text-[#07293A]">
         <CountdownTimer targetDate={graduationDate} client:visible />
       </div>
     </div>
   </header>
 
   <!-- SECCIÓN 1 -->
-  <section class="text-center space-y-6 pb-4 relative z-10">
-    <h2 class="text-5xl font-bold">NOS GRADUAMOS</h2>
-    <div class="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-100 rounded shadow-md overflow-hidden">
-      {resourcesBySection[0]?.sectionResources[0]?.view_url && (
-            <ImageWithLoader
-                src={resourcesBySection[0].sectionResources[0].view_url}
-                alt={resourcesBySection[0].sectionResources[0].title || 'Colegio Izapa'}
-                className="w-full h-full object-cover"
-                client:load
-            />
-      )}
-    </div>
-    <div class="text-4xl font-bold">
-      <p>2022 - 2025</p>
-    </div>
-    <div class="flex flex-row items-center justify-center gap-4 md:gap-6 max-w-4xl mx-auto">
-      <div class="w-24 h-24 md:w-32 md:h-32">
-        {resourcesBySection[0] && resourcesBySection[0].sectionResources[1] && (
-            <ImageWithLoader
-                src={resourcesBySection[0].sectionResources[1].view_url}
-                alt={resourcesBySection[0].sectionResources[1].title || 'Colegio Izapa'}
-                className="w-full h-full object-cover"
-                client:load
-            />
-        )}
-      </div>
-      <h3 class="text-4xl md:text-5xl font-bold text-center md:text-start mt-4 md:mt-0">
-        PREPARATORIA
-      </h3>
-    </div>
-  </section>
+    <Section1Wrapper client:only="react" EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
 </main>
+  <main class="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20 overflow-x-hidden">
 
-<main class="max-w-5xl mx-auto px-4 py-2 space-y-20 overflow-x-hidden">
   <!-- SECCIÓN 2 -->
-  <section class="text-center space-y-6 relative z-10">
-    <div class="grid grid-cols-2 gap-2">
-      {resourcesBySection[1]?.sectionResources.slice(0, 2).map((resource: Resource, index: number) => (
-            <ImageWithLoader
-                src={resourcesBySection[1]?.sectionResources[index].view_url}
-                alt={resourcesBySection[1]?.sectionResources[index].title || 'Colegio Izapa'}
-                className="w-full h-full object-contain"
-                client:load
-            />
-      ))}
-    </div>
-    <p class="text-2xl leading-snug">Tenemos un logro más y queremos compartirlo contigo</p>
-    <div class="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-100 rounded shadow-md overflow-hidden">
-      {resourcesBySection[1] && resourcesBySection[1].sectionResources[2] && (
-            <ImageWithLoader
-                src={resourcesBySection[1]?.sectionResources[2].view_url}
-                alt={resourcesBySection[1].sectionResources[2].title || 'Colegio Izapa'}
-                className="w-full h-full object-cover"
-                client:load
-            />
-      )}
-    </div>
-    <p class="text-2xl">este 22 de junio del 2025</p>
-    <div class="flex flex-row">
-      <div class="basis-2/3 place-content-center pe-4">
-        <p class="text-sm leading-relaxed">
-          la misa se celebrará en el Santuario la Villita de Guadalupe a las 6:45 p.m.
-        </p>
-      </div>
-      <div class="basis-full sm:basis-2/3 px-2">
-        <div class="bg-gray-300 w-full max-w-[500px] aspect-[4/3] rounded mx-auto overflow-hidden">
-          <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3855.711226652614!2d-92.25383992316038!3d14.897417285624766!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x858e0eef1d27d96d%3A0x8759c291e89adbe8!2sSantuario%20Diocesano%20La%20Villita%20de%20Guadalupe!5e0!3m2!1ses-419!2smx!4v1748106996850!5m2!1ses-419!2smx"
-              class="w-full h-full"
-              allowfullscreen=""
-              loading="lazy"
-              referrerpolicy="no-referrer-when-downgrade"
-          ></iframe>
-        </div>
-      </div>
-    </div>
-  </section>
+    <Section2Wrapper client:only="react" EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
 
   <!-- SECCIÓN 3 -->
-  <section class="space-y-6 text-center relative z-0">
-    <div class="grid grid-cols-2 gap-4">
-      {[resourcesBySection[2].sectionResources[0], resourcesBySection[2].sectionResources[1]].map((src, index) => (
-          <div class="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
-            <ImageWithLoader
-                src={src.view_url}
-                alt={src.title || 'Colegio Izapa'}
-                className="w-full h-full object-cover"
-                client:load
-            />
-          </div>
-      ))}
-    </div>
-    <div class="flex flex-row">
-      <div class="basis-full sm:basis-2/3 px-2">
-        <div class="bg-gray-300 w-full max-w-[500px] aspect-[4/3] rounded mx-auto overflow-hidden">
-          <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3856.1165481300136!2d-92.28686442316067!3d14.874759985644767!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x858e0f003d3b1c25%3A0x878b155778419b43!2sHotel%20holiday%20entrada%20principal!5e0!3m2!1ses-419!2smx!4v1748107202928!5m2!1ses-419!2smx"
-              class="w-full h-full"
-              allowfullscreen=""
-              loading="lazy"
-              referrerpolicy="no-referrer-when-downgrade"
-          ></iframe>
-        </div>
-      </div>
-      <div class="basis-2/3 place-content-center ps-2">
-        <p class="text-sm leading-relaxed">
-        posteriormente la recepción será en el Salón Barista del Hotel Holiday Inn a las 8:30 p.m.
-        </p>
-      </div>
-    </div>
-    <div class="grid grid-cols-2 gap-4">
-      {[resourcesBySection[2].sectionResources[2], resourcesBySection[2].sectionResources[3]].map((src, index) => (
-          <div class="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
-            <ImageWithLoader
-                src={src.view_url}
-                alt={src.title || 'Colegio Izapa'}
-                className="w-full h-full object-cover"
-                client:load
-            />
-          </div>
-      ))}
-    </div>
-  </section>
+    <Section3Wrapper client:visible EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
 
   <!-- SECCIÓN 4 -->
-  <section class="space-y-6 text-center relative z-0">
-    <h2 class="text-3xl font-semibold">Graduados</h2>
-    <ul class="font-medium space-y-1">
-      <li class="highlight">Ana Gloria Vásquez Velázquez</li>
-      <li class="alt-highlight">Ángel Tonatiuh Vanegas Zamora</li>
-      <li class="highlight">Ernesto Salas Obregón</li>
-      <li class="alt-highlight">Gael Adrián García Somohano</li>
-      <li class="highlight">José Antonio Bolaños Córdoba</li>
-      <li class="alt-highlight">Julia Magaña Ramírez</li>
-      <li class="highlight">Kelly Berenice Villalobos Zamora</li>
-      <li class="alt-highlight">María de Jesús Romero Cigarroa</li>
-      <li class="highlight">María Luisa Córdoba Tang</li>
-      <li class="alt-highlight">Miguel Ángel Aceves Orellana</li>
-      <li class="highlight">Pedro Maximiliano López Miranda</li>
-      <li class="alt-highlight">Raúl Flores Wong</li>
-      <li class="highlight">Renata Montiel Díaz</li>
-      <li class="alt-highlight">Valeria Trujillo Iniesta</li>
-    </ul>
-    <div class="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-100 rounded shadow-md overflow-hidden my-6">
-      <ImageWithLoader
-          src={resourcesBySection[3]?.sectionResources[0]?.view_url}
-          alt="Foto final de graduados"
-          className="w-full h-full object-cover"
-          client:load
-      />
-    </div>
-    <p class="italic text-xl">celebremos juntos</p>
-  </section>
+    <Section4Wrapper client:visible EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
 
   <!-- SECCIÓN 5 -->
-  <section class="space-y-6 relative z-0">
-    <div class="grid grid-cols-2 gap-4">
-      {resourcesBySection[4]?.sectionResources.slice(0, 2).map((resource: Resource, index: number) => (
-          <div class="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
-            <ImageWithLoader
-                src={resource.view_url}
-                alt={resource.title || 'Colegio Izapa'}
-                className="w-full h-full object-cover"
-                client:load
-            />
-          </div>
-      ))}
-    </div>
-    <div class="grid grid-cols-3 gap-4">
-      {resourcesBySection[4]?.sectionResources.slice(2, 6).map((resource: Resource, index: number) => (
-          <div class="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
-            <ImageWithLoader
-                src={resource.view_url}
-                alt={resource.title || 'Colegio Izapa'}
-                className="w-full h-full object-cover"
-                client:load
-            />
-          </div>
-      ))}
-    </div>
-  </section>
+    <Section5Wrapper client:visible EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
 </main>
 
-<main class="max-w-5xl mx-auto px-4 py-2 space-y-20 overflow-x-hidden">
+  <main class="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20 overflow-x-hidden">
+
 <!-- FOOTER -->
-<footer class="bg-white border-t mt-16 py-10 text-center text-gray-600 text-sm">
-  <div class="flex flex-col sm:flex-row justify-center items-center gap-4">
-    <div class="flex items-center gap-1">
-      <span class="font-bold" style="color: #DD2284">eventi</span><span class="font-bold text-black">app</span><span class="ml-1">2025 by itbem.</span>
+  <footer class="relative bg-white border-t mt-16 py-10 text-gray-600 text-sm overflow-hidden">
+    <div class="max-w-5xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-2 text-center md:text-left">
+
+      <!-- Logo vector eventiapp -->
+      <img src="/backgrounds/vectores-03.svg" alt="eventiapp 2025 by itbem" class="w-[160px] sm:w-[200px] md:w-[240px]" />
+
+      <!-- WhatsApp (vector-04) -->
+      <div class="flex items-center">
+        <img src="/backgrounds/vectores-04.svg" alt="WhatsApp icon" class="w-12 h-12" />
+        <span class="text-black text-xl">9626240796</span>
+      </div>
+
+      <!-- Email (vector-05) -->
+      <div class="flex items-center">
+        <img src="/backgrounds/vectores-05.svg" alt="Email icon" class="w-12 h-12" />
+        <span class="text-black text-xl">contacto@itbem.com</span>
+      </div>
+
     </div>
-    <div class="flex items-center gap-2">
-      📱 <span class="text-black">9626240796</span>
-    </div>
-    <div class="flex items-center gap-2">
-      ✉️ <span class="text-black">contacto@itbem.com</span>
-    </div>
-  </div>
-</footer>
+  </footer>
+
 </main>
 </body>
   <style>

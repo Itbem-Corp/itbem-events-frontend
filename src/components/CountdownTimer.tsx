@@ -14,30 +14,25 @@ interface TimeLeft {
 }
 
 export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
-    const [timeLeft, setTimeLeft] = useState<TimeLeft>({
-        days: 0,
-        hours: 0,
-        minutes: 0,
-        seconds: 0,
-    });
+    const calculateTimeLeft = (): TimeLeft => {
+        const target = typeof targetDate === "string" ? new Date(targetDate) : targetDate;
+        const difference = target.getTime() - new Date().getTime();
+
+        if (difference > 0) {
+            return {
+                days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+                hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+                minutes: Math.floor((difference / 1000 / 60) % 60),
+                seconds: Math.floor((difference / 1000) % 60),
+            };
+        }
+
+        return { days: 0, hours: 0, minutes: 0, seconds: 0 };
+    };
+
+    const [timeLeft, setTimeLeft] = useState<TimeLeft>(calculateTimeLeft); // 👈 calcular de una vez
 
     useEffect(() => {
-        const calculateTimeLeft = (): TimeLeft => {
-            const target = typeof targetDate === "string" ? new Date(targetDate) : targetDate;
-            const difference = target.getTime() - new Date().getTime();
-
-            if (difference > 0) {
-                return {
-                    days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-                    hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-                    minutes: Math.floor((difference / 1000 / 60) % 60),
-                    seconds: Math.floor((difference / 1000) % 60),
-                };
-            }
-
-            return { days: 0, hours: 0, minutes: 0, seconds: 0 };
-        };
-
         const timer = setInterval(() => {
             setTimeLeft(calculateTimeLeft());
         }, 1000);
@@ -66,4 +61,3 @@ export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
         </div>
     );
 }
-
