@@ -6,6 +6,7 @@ import Section3Wrapper from '../components/templates/graduations/template_1/sect
 import Section4Wrapper from '../components/templates/graduations/template_1/section_4/Section4Wrapper';
 import Section5Wrapper from '../components/templates/graduations/template_1/section_5/Section5Wrapper';
 import Header from '../components/templates/graduations/template_1/Header';
+import MusicWidget from '../components/templates/graduations/template_1/MusicWidget';
 import Footer from '../components/common/Footer.tsx';
 
 const graduationDate = new Date('2025-06-22T18:45:00');
@@ -21,6 +22,7 @@ interface Section {
 
 <TemplateLayout title="Nos Graduamos 2022-2025 | El Gran Día">
   <body>
+  <MusicWidget client:only="react" />
   <main class="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20">
     <img
         src="/backgrounds/vectores-1.svg"
