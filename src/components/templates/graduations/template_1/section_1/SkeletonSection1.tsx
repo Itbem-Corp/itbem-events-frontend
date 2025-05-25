@@ -3,7 +3,7 @@ import React from "react";
 
 export default function SkeletonSection1() {
     return (
-        <section className="text-center space-y-6 pb-4 relative z-10 animate-pulse">
+        <section className="text-center space-y-6 pb-4 relative z-10 animate-pulse pt-10">
             <h2 className="text-5xl font-bold text-gray-300">NOS GRADUAMOS</h2>
 
             <div className="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-200 rounded shadow-md" />

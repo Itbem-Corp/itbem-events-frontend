@@ -1,0 +1,18 @@
+/* src/styles/fonts.css */
+@font-face {
+  font-family: 'Bigilla';
+  src: url('/fonts/Bigilla.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Aloevera';
+  src: url('/fonts/Aloevera-Medium.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Quicksand';
+  src: url('/fonts/Quicksand-VariableFont_wght.ttf') format('truetype');
+}
+
+body {
+  font-family: 'Quicksand', sans-serif;
+  color: #07293A;
+}

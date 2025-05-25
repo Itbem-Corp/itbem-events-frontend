@@ -2,7 +2,7 @@ import React from "react";
 
 export default function SkeletonSection3() {
     return (
-        <section className="space-y-6 text-center relative z-0 animate-pulse">
+        <section className="space-y-6 text-center relative z-0 animate-pulse pt-10">
             {/* Primer bloque de 2 imágenes */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-200 aspect-[3/2] rounded shadow-md w-full" />

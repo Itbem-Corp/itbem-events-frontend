@@ -26,7 +26,7 @@ export default function Section5Wrapper({ EVENTS_URL }: Props) {
                 {sectionData ? (
                     <motion.section
                         key="section-5-loaded"
-                        className="space-y-6 relative z-0"
+                        className="space-y-6 relative z-0 pt-10"
                         initial={{ opacity: 0, y: 30 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}

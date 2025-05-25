@@ -96,3 +96,16 @@
 .animate-breathe-slow {
   animation: breathe-slow 3s ease-in-out infinite;
 }
+
+@font-face {
+  font-family: 'Bigilla';
+  src: url('/fonts/Bigilla.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Aloevera';
+  src: url('/fonts/Aloevera-Medium.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Quicksand';
+  src: url('/fonts/Quicksand-VariableFont_wght.ttf') format('truetype');
+}

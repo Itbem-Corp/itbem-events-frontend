@@ -2,7 +2,7 @@ import React from "react";
 
 export default function SkeletonSection2() {
     return (
-        <section className="text-center space-y-6 relative z-10 animate-pulse">
+        <section className="text-center space-y-6 relative z-10 animate-pulse pt-10">
             <div className="grid grid-cols-2 gap-2">
                 <div className="aspect-[3/2] bg-gray-200 rounded shadow-md w-full" />
                 <div className="aspect-[3/2] bg-gray-200 rounded shadow-md w-full" />

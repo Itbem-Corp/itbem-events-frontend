@@ -43,7 +43,7 @@ export default function Section4Wrapper({ EVENTS_URL }: Props) {
                 {sectionData ? (
                     <motion.section
                         key="section-4-loaded"
-                        className="space-y-6 text-center relative z-0"
+                        className="space-y-6 text-center relative z-0 pt-10"
                         initial={{ opacity: 0, y: 30 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
@@ -57,7 +57,7 @@ export default function Section4Wrapper({ EVENTS_URL }: Props) {
                             variants={{
                                 visible: {
                                     transition: {
-                                        staggerChildren: 0.08
+                                        staggerChildren: 0.44
                                     }
                                 }
                             }}
@@ -67,10 +67,10 @@ export default function Section4Wrapper({ EVENTS_URL }: Props) {
                                     key={name}
                                     className={index % 2 === 0 ? "highlight" : "alt-highlight"}
                                     variants={{
-                                        hidden: { opacity: 0, y: 10 },
+                                        hidden: { opacity: 0, y: 20 },
                                         visible: { opacity: 1, y: 0 }
                                     }}
-                                    transition={{ duration: 1.5 }}
+                                    transition={{ duration: 3 }}
                                 >
                                     {name}
                                 </motion.li>

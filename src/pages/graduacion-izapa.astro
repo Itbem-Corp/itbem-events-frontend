@@ -1,14 +1,12 @@
 ---
-import { EVENTS_URL } from "astro:env/server";
 import TemplateLayout from '../layouts/template.astro'
-import CountdownTimer from '../components/CountdownTimer';
-import ImageWithLoader from '../components/ImageWithLoader';
-import ResourcesLoader from '../components/ResourcesLoader.tsx';
 import Section1Wrapper from '../components/templates/graduations/template_1/section_1/Section1Wrapper';
 import Section2Wrapper from '../components/templates/graduations/template_1/section_2/Section2Wrapper';
 import Section3Wrapper from '../components/templates/graduations/template_1/section_3/Section3Wrapper';
 import Section4Wrapper from '../components/templates/graduations/template_1/section_4/Section4Wrapper';
 import Section5Wrapper from '../components/templates/graduations/template_1/section_5/Section5Wrapper';
+import Header from '../components/templates/graduations/template_1/Header';
+import Footer from '../components/common/Footer.tsx';
 
 const graduationDate = new Date('2025-06-22T18:45:00');
 interface Resource {
@@ -22,75 +20,31 @@ interface Section {
 ---
 
 <TemplateLayout title="Nos Graduamos 2022-2025 | El Gran Día">
-  <head>
-    <title>Nos Graduamos | Colegio Izapa</title>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <style>
-      @font-face {
-        font-family: 'Bigilla';
-        src: url('/fonts/Bigilla.otf') format('opentype');
-      }
-      @font-face {
-        font-family: 'Aloevera';
-        src: url('/fonts/Aloevera-Medium.otf') format('opentype');
-      }
-      @font-face {
-        font-family: 'Quicksand';
-        src: url('/fonts/Quicksand-VariableFont_wght.ttf') format('truetype');
-      }
-
-      body {
-        background-image: url('https://itbem-events-bucket-prod.s3.amazonaws.com/patterns/patron-fino-ondas.svg');
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-        background-color: #ffffff;
-        font-family: 'Quicksand', sans-serif;
-        color: #07293A;
-        margin: 0;
-        padding: 0;
-      }
-      h1, h2, h3, .title {
-        font-family: 'Bigilla', serif;
-        color: #8B5D3D;
-      }
-      .highlight {
-        color: #007BC4;
-      }
-      .alt-highlight {
-        color: #1B1464;
-      }
-      .pointer-events-none {
-        pointer-events: none;
-      }
-    </style>
-  </head>
   <body>
-  <main class="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20 overflow-x-hidden">
-  <img
-      src="/backgrounds/vectores-1.svg"
-      alt=""
-      class="absolute top-0 right-0 w-[72px]  z-[-1] opacity-20"
-  />
+  <main class="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20">
+    <img
+        src="/backgrounds/vectores-1.svg"
+        alt=""
+        class="absolute inset-0 w-full h-full object-cover opacity-20 z-[-1] pointer-events-none"
+        loading="lazy"
+        decoding="async"
+    />
 
     <!-- Header -->
-  <header class="py-2 text-center space-y-6 relative z-10">
-    <h1 class="text-4xl bold font-[Bigilla] text-[#8B5D3D]">EL GRAN DÍA</h1>
-    <div class="">
-      <div class="w-full flex flex-wrap justify-center gap-4 text-[#07293A]">
-        <CountdownTimer targetDate={graduationDate} client:visible />
-      </div>
-    </div>
-  </header>
+    <Header targetDate={graduationDate} client:only="react" />
 
   <!-- SECCIÓN 1 -->
     <Section1Wrapper client:only="react" EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
 </main>
-  <main class="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20 overflow-x-hidden">
+  <div class="relative overflow-hidden">
+    <img
+        src="/backgrounds/vectores-2.svg"
+        alt=""
+        class="absolute inset-0 w-full h-full object-cover opacity-20 z-[-1] pointer-events-none"
+        loading="lazy"
+        decoding="async"
+    />
+  <main class="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20 relative z-10">
 
   <!-- SECCIÓN 2 -->
     <Section2Wrapper client:only="react" EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
@@ -104,46 +58,12 @@ interface Section {
   <!-- SECCIÓN 5 -->
     <Section5Wrapper client:visible EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
 </main>
-
+  </div>
   <main class="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20 overflow-x-hidden">
 
 <!-- FOOTER -->
-  <footer class="relative bg-white border-t mt-16 py-10 text-gray-600 text-sm overflow-hidden">
-    <div class="max-w-5xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-2 text-center md:text-left">
-
-      <!-- Logo vector eventiapp -->
-      <img src="/backgrounds/vectores-03.svg" alt="eventiapp 2025 by itbem" class="w-[160px] sm:w-[200px] md:w-[240px]" />
-
-      <!-- WhatsApp (vector-04) -->
-      <div class="flex items-center">
-        <img src="/backgrounds/vectores-04.svg" alt="WhatsApp icon" class="w-12 h-12" />
-        <span class="text-black text-xl">9626240796</span>
-      </div>
-
-      <!-- Email (vector-05) -->
-      <div class="flex items-center">
-        <img src="/backgrounds/vectores-05.svg" alt="Email icon" class="w-12 h-12" />
-        <span class="text-black text-xl">contacto@itbem.com</span>
-      </div>
-
-    </div>
-  </footer>
+    <Footer client:only="react" />
 
 </main>
 </body>
-  <style>
-    .highlight {
-      background: linear-gradient(120deg, #a78bfa 0%, #ec4899 100%);
-      background-clip: text;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .alt-highlight {
-      background: linear-gradient(120deg, #06b6d4 0%, #3b82f6 100%);
-      background-clip: text;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-  </style>
 </TemplateLayout>

@@ -25,7 +25,7 @@ export default function Section1Wrapper({ EVENTS_URL }: Props) {
             {sectionData ? (
                 <motion.section
                     key="loaded"
-                    className="text-center space-y-6 pb-4 relative z-10"
+                    className="text-center space-y-6 pb-4 relative z-10 pt-10"
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -30 }}

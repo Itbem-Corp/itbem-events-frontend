@@ -2,7 +2,7 @@ import React from "react";
 
 export default function SkeletonSection4() {
     return (
-        <section className="space-y-6 text-center relative z-0 animate-pulse">
+        <section className="space-y-6 text-center relative z-0 animate-pulse pt-10">
             <h2 className="text-3xl font-semibold">Graduados</h2>
 
             {/* Simulación de lista de nombres */}

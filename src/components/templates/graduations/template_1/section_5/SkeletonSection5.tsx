@@ -2,7 +2,7 @@ import React from "react";
 
 export default function SkeletonSection5() {
     return (
-        <section className="space-y-6 relative z-0 animate-pulse">
+        <section className="space-y-6 relative z-0 animate-pulse pt-10">
             {/* Primera fila de 2 columnas */}
             <div className="grid grid-cols-2 gap-4">
                 {[...Array(2)].map((_, i) => (
