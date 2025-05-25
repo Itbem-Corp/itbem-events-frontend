@@ -26,7 +26,7 @@ export default function ResourcesBySectionSingle({ sectionId, EVENTS_URL, onLoad
     useEffect(() => {
         const loadResources = async () => {
             const now = new Date();
-            const halfDay = Math.floor(now.getHours() / 12);
+            const halfDay = Math.floor(now.getHours());
             const cacheKey = `resourcesBySection-${sectionId}-${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${halfDay}`;
             const cached = sessionStorage.getItem(cacheKey);
 
