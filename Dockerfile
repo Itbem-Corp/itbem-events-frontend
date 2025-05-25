@@ -22,6 +22,7 @@ RUN npm install
 # ---------- Build step ----------
 FROM build-deps AS build
 COPY . .
+COPY public ./public
 RUN npm run build
 
 # ---------- Runtime image ----------
