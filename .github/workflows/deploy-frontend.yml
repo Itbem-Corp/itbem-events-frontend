@@ -48,6 +48,6 @@ jobs:
 
             # Crear contenedor temporal para copiar archivos
             docker create --name tmp-frontend itbem-events-frontend
-            docker cp tmp-frontend:/app/dist/client /var/www/eventiapp
+            docker cp tmp-frontend:/app/dist/client/. /var/www/eventiapp
             docker rm tmp-frontend
           EOF
