@@ -12,15 +12,15 @@ export default defineConfig({
   env: {
     schema: {
       PORT: envField.number({ context: "server", access: "secret", default: 4321 }),
-      REDIS_URL: envField.string({ context: "server", access: "secret", default: "" }),
-      EVENTS_URL: envField.string({ context: "server", access: "secret" }),
+      PUBLIC_REDIS_URL: envField.string({ context: "server", access: "secret", default: "" }),
+      PUBLIC_EVENTS_URL: envField.string({ context: "server", access: "public" }),
     },
     validateSecrets: false
   },
   session: {
     driver: 'redis',
     options: {
-      url: process.env.REDIS_URL,
+      url: process.env.PUBLIC_REDIS_URL,
     },
     ttl: 3600,
   },

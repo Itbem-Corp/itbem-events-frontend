@@ -42,8 +42,8 @@ jobs:
             docker stop itbem-events-frontend || true && docker rm itbem-events-frontend || true
 
             docker build -t itbem-events-frontend . \
-              --build-arg EVENTS_URL=${{ secrets.EVENTS_URL }} \
-              --build-arg REDIS_URL=${{ secrets.REDIS_URL }}
+              --build-arg PUBLIC_EVENTS_URL=${{ secrets.EVENTS_URL }} \
+              --build-arg PUBLIC_REDIS_URL=${{ secrets.REDIS_URL }}
 
             docker run -d --name itbem-events-frontend \
               --restart always \
