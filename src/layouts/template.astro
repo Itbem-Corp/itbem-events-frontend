@@ -8,7 +8,13 @@ const { title } = Astro.props;
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="stylesheet" href="/src/styles/fonts.css" />
+    <link rel="stylesheet" href="/styles/fonts.css" />
+    <!-- Preconnect to AWS S3 -->
+    <link rel="preconnect" href="https://itbem-events-bucket-prod.s3.us-east-2.amazonaws.com" crossorigin>
+
+    <!-- Preconnect to Google Maps -->
+    <link rel="preconnect" href="https://maps.googleapis.com" crossorigin>
+    <link rel="dns-prefetch" href="https://maps.googleapis.com">
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
   </head>
