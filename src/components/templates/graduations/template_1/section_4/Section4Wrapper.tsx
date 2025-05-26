@@ -83,7 +83,7 @@ export default function Section4Wrapper({ EVENTS_URL }: Props) {
                             <Section4_1 section={sectionData} />
                         </div>
 
-                        <p className="font-bigilla text-xl text-[#8B5D3D]">celebremos juntos</p>
+                        <p className="font-bigilla text-xl md:text-2xl text-[#8B5D3D]">celebremos juntos</p>
                     </motion.section>
                 ) : (
                     <motion.div

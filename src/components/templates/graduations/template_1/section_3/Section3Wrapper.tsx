@@ -46,7 +46,7 @@ export default function Section3Wrapper({ EVENTS_URL }: Props) {
                                 </div>
                             </div>
                             <div className="basis-2/3 place-content-center ps-2">
-                                <p className="text-sm leading-relaxed font-quicksand text-[#07293A]">
+                                <p className="text-sm md:text-2xl leading-relaxed font-quicksand text-[#07293A]">
                                     posteriormente la recepción será en el Salón Barista del Hotel Holiday Inn a las 8:30 p.m.
                                 </p>
                             </div>

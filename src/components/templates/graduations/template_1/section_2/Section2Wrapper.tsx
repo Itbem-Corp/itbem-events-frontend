@@ -42,7 +42,7 @@ export default function Section2Wrapper({ EVENTS_URL }: Props) {
                         </p>
                         <div className="flex flex-row">
                             <div className="basis-2/3 place-content-center pe-4">
-                                <p className="text-sm leading-relaxed font-quicksand text-[#07293A]">
+                                <p className="text-sm md:text-2xl leading-relaxed font-quicksand text-[#07293A]">
                                     la misa se celebrará en el Santuario la Villita de Guadalupe a las 6:45 p.m.
                                 </p>
                             </div>

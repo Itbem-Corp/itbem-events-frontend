@@ -26,12 +26,11 @@ export function Section5Top({ section }: Props) {
                         visible: { opacity: 1, y: 0 }
                     }}
                     transition={{ duration: 0.4 }}
-                    className="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden"
+                    className="bg-transparent aspect-[3/2] rounded shadow-md overflow-hidden"
                 >
                     <ImageWithLoader
                         src={resource.view_url}
                         alt={resource.title || "Colegio Izapa"}
-                        className="w-full h-full object-cover"
                     />
                 </motion.div>
             ))}
@@ -58,12 +57,11 @@ export function Section5Bottom({ section }: Props) {
                         visible: { opacity: 1, y: 0 }
                     }}
                     transition={{ duration: 0.4 }}
-                    className="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden"
+                    className="bg-transparent aspect-[3/2] rounded shadow-md overflow-hidden"
                 >
                     <ImageWithLoader
                         src={resource.view_url}
                         alt={resource.title || "Colegio Izapa"}
-                        className="w-full h-full object-cover"
                     />
                 </motion.div>
             ))}
