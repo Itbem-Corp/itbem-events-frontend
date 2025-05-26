@@ -19,12 +19,20 @@ export default function MusicWidget({ volume = 0.8 }: MusicWidgetProps) {
             window.removeEventListener('scroll', enableMusic);
         };
 
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                setPlaying(false); // Pausar cuando la app esté oculta
+            }
+        };
+
         window.addEventListener('click', enableMusic);
         window.addEventListener('scroll', enableMusic);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
             window.removeEventListener('click', enableMusic);
             window.removeEventListener('scroll', enableMusic);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, []);
 
