@@ -38,11 +38,11 @@ export default function Section1Wrapper({ EVENTS_URL }: Props) {
                     <div className="text-4xl font-bold">
                         <h3>2022 - 2025</h3>
                     </div>
-                    <div className="flex flex-row items-center justify-center gap-4 md:gap-6 max-w-4xl mx-auto">
-                        <div className="w-24 h-24 md:w-32 md:h-32">
+                    <div className="flex flex-row items-center justify-center gap-2 md:gap-6 max-w-4xl mx-auto">
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 flex-shrink-0">
                             <Section1_2 section={sectionData} />
                         </div>
-                        <h3 className="text-4xl md:text-5xl font-bold text-center md:text-start mt-4 md:mt-0">
+                        <h3 className="text-3xl sm:text-4xl md:text-5xl font-bold text-center md:text-start mt-4 md:mt-0">
                             PREPARATORIA
                         </h3>
                     </div>
