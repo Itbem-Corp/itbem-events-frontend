@@ -33,11 +33,11 @@ export default function Section2Wrapper({ EVENTS_URL }: Props) {
                         transition={{ duration: 0.6 }}
                     >
                         <Section2_1 section={sectionData} />
-                        <p className="text-2xl font-bold font-bigilla leading-snug text-[#07293A]">
+                        <p className="text-2xl font-semibold font-bigilla leading-snug text-[#07293A]">
                             Tenemos un logro más y queremos compartirlo contigo
                         </p>
                         <Section2_2 section={sectionData} />
-                        <p className="text-2xl font-bold font-bigilla text-[#8B5D3D]">
+                        <p className="text-2xl font-semibold font-bigilla text-[#8B5D3D]">
                             este 22 de junio del 2025
                         </p>
                         <div className="flex flex-row">
