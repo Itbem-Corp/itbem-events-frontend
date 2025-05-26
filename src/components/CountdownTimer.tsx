@@ -16,9 +16,8 @@ interface TimeLeft {
 
 export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
     const calculateTimeLeft = (): TimeLeft => {
-        const target = typeof targetDate === "string" ? new Date(targetDate) : targetDate;
+        const target = typeof targetDate === "string" ? getDateInTimeZone("America/Mexico_City", targetDate) : getDateInTimeZone("America/Mexico_City", targetDate);
 
-        // 👇 Aquí aplicamos la hora actual en zona horaria deseada
         const now = getDateInTimeZone("America/Mexico_City");
 
         const difference = target.getTime() - now.getTime();

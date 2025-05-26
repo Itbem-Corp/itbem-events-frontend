@@ -1,5 +1,10 @@
-export function getDateInTimeZone(timeZone: string): Date {
-    const now = new Date();
+export function getDateInTimeZone(
+    timeZone: string,
+    baseDate?: string | Date
+): Date {
+    const inputDate =
+        typeof baseDate === "string" ? new Date(baseDate) : baseDate ?? new Date();
+
     const formatter = new Intl.DateTimeFormat("en-US", {
         timeZone,
         year: "numeric",
@@ -11,7 +16,7 @@ export function getDateInTimeZone(timeZone: string): Date {
         hour12: false,
     });
 
-    const parts = formatter.formatToParts(now);
+    const parts = formatter.formatToParts(inputDate);
     const values: Record<string, string> = {};
 
     parts.forEach(({ type, value }) => {
