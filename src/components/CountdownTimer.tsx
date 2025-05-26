@@ -16,7 +16,7 @@ interface TimeLeft {
 
 export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
     const calculateTimeLeft = (): TimeLeft => {
-        const target = typeof targetDate === "string" ? getDateInTimeZone("America/Mexico_City", targetDate) : getDateInTimeZone("America/Mexico_City", targetDate);
+        const target = typeof targetDate === "string" ? getDateInTimeZone("America/Mexico_City", targetDate) : targetDate;
 
         const now = getDateInTimeZone("America/Mexico_City");
 
