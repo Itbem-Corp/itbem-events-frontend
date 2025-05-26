@@ -3,11 +3,15 @@ import ReactHowler from 'react-howler';
 import { Pause, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export default function MusicWidget() {
+interface MusicWidgetProps {
+    volume?: number; // volumen entre 0 y 1
+}
+
+export default function MusicWidget({ volume = 0.8 }: MusicWidgetProps) {
     const [playing, setPlaying] = useState(false);
     const howlerRef = useRef(null);
 
-    // Activar la música en la primera interacción del usuario (scroll o clic)
+    // Autoplay en primera interacción
     useEffect(() => {
         const enableMusic = () => {
             setPlaying(true);
@@ -24,20 +28,18 @@ export default function MusicWidget() {
         };
     }, []);
 
-    const togglePlayback = () => setPlaying((prev) => !prev);
+    const togglePlayback = () => setPlaying(prev => !prev);
 
     return (
         <>
-            {/* Reproductor oculto pero funcional */}
             <ReactHowler
                 src="https://itbem-events-bucket-prod.s3.us-east-2.amazonaws.com/events/graduaciones/izapa/Perfect+Morning+Short+Version.mp3"
                 playing={playing}
                 loop
-                volume={0.8}
+                volume={volume}
                 ref={howlerRef}
             />
 
-            {/* Botón flotante */}
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -49,7 +51,6 @@ export default function MusicWidget() {
                     className="group relative w-16 h-16 bg-white/70 backdrop-blur-md border border-white/20 rounded-full shadow-xl flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
                     aria-label={playing ? 'Pausar música' : 'Reproducir música'}
                 >
-                    {/* Animación tipo pulso */}
                     <AnimatePresence>
                         {playing && (
                             <motion.div
@@ -66,7 +67,6 @@ export default function MusicWidget() {
                         )}
                     </AnimatePresence>
 
-                    {/* Ícono encima del pulso */}
                     <div className="text-black relative z-10">
                         {playing ? (
                             <Pause size={28} className="group-hover:scale-110 transition-transform" />
