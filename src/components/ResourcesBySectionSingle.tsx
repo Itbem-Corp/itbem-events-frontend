@@ -87,7 +87,7 @@ export default function ResourcesBySectionSingle({ sectionId, EVENTS_URL, onLoad
 
             const section = {
                 sectionId,
-                sectionResources: data.sort((a, b) => a.position - b.position),
+                sectionResources: data.sort((a: { position: number; }, b: { position: number; }) => a.position - b.position),
             };
 
             // Detecta la expiración más cercana entre las URLs

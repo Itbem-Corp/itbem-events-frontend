@@ -1,22 +1,27 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
+import { useState, useEffect } from "react";
+import { getDateInTimeZone } from "../utils/getDateInTimeZone";
 
 interface CountdownTimerProps {
-    targetDate: string | Date
+    targetDate: string | Date;
 }
 
 interface TimeLeft {
-    days: number
-    hours: number
-    minutes: number
-    seconds: number
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
 }
 
 export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
     const calculateTimeLeft = (): TimeLeft => {
         const target = typeof targetDate === "string" ? new Date(targetDate) : targetDate;
-        const difference = target.getTime() - new Date().getTime();
+
+        // 👇 Aquí aplicamos la hora actual en zona horaria deseada
+        const now = getDateInTimeZone("America/Mexico_City");
+
+        const difference = target.getTime() - now.getTime();
 
         if (difference > 0) {
             return {
@@ -30,7 +35,7 @@ export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
         return { days: 0, hours: 0, minutes: 0, seconds: 0 };
     };
 
-    const [timeLeft, setTimeLeft] = useState<TimeLeft>(calculateTimeLeft); // 👈 calcular de una vez
+    const [timeLeft, setTimeLeft] = useState<TimeLeft>(calculateTimeLeft);
 
     useEffect(() => {
         const timer = setInterval(() => {
