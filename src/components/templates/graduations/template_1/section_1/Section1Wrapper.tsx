@@ -44,7 +44,7 @@ export default function Section1Wrapper({ EVENTS_URL }: Props) {
                         <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 flex-shrink-0">
                             <Section1_2 section={sectionData} />
                         </div>
-                        <h3 className="text-3xl sm:text-4xl md:text-5xl font-bigilla text-[#8B5D3D] text-center md:text-start mt-4 md:mt-0">
+                        <h3 className="text-3xl sm:text-4xl md:text-5xl font-bold font-bigilla text-[#8B5D3D] text-center md:text-start mt-4 md:mt-0">
                             PREPARATORIA
                         </h3>
                     </div>

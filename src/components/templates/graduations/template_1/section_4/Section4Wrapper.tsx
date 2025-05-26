@@ -49,7 +49,7 @@ export default function Section4Wrapper({ EVENTS_URL }: Props) {
                         exit={{ opacity: 0, y: -20 }}
                         transition={{ duration: 0.6 }}
                     >
-                        <h2 className="text-3xl font-bigilla text-black">Graduados</h2>
+                        <h2 className="text-3xl font-bold font-bigilla text-black">Graduados</h2>
                         <motion.ul
                             className="font-medium space-y-1"
                             initial="hidden"
@@ -83,7 +83,7 @@ export default function Section4Wrapper({ EVENTS_URL }: Props) {
                             <Section4_1 section={sectionData} />
                         </div>
 
-                        <p className="font-bigilla text-xl md:text-2xl text-[#8B5D3D]">celebremos juntos</p>
+                        <p className="font-bigilla font-bold text-xl md:text-2xl text-[#8B5D3D]">celebremos juntos</p>
                     </motion.section>
                 ) : (
                     <motion.div
