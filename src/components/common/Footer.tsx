@@ -36,7 +36,7 @@ export default function Footer() {
                         alt="Email icon"
                         className="w-12 h-12"
                     />
-                    <span className="text-black font-aloevera text-xl">contacto@itbem.com</span>
+                    <span className="text-black font-aloevera text-xl">contacto.eventiapp@itbem.com</span>
                 </div>
             </div>
         </motion.footer>
