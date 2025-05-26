@@ -31,7 +31,9 @@ export default function Section1Wrapper({ EVENTS_URL }: Props) {
                     exit={{ opacity: 0, y: -30 }}
                     transition={{ duration: 0.6 }}
                 >
-                    <h2 className="text-5xl font-bigilla text-[#07293a]">NOS GRADUAMOS</h2>
+                    <div className="text-4xl font-bold">
+                        <h2 className="text-5xl font-bigilla font-bold text-[#07293a]">NOS GRADUAMOS</h2>
+                    </div>
                     <div className="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-100 rounded shadow-md overflow-hidden">
                         <Section1_1 section={sectionData} />
                     </div>
