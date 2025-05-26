@@ -15,7 +15,6 @@ export function Section4_1({ section }: Props) {
         <ImageWithLoader
             src={resource.view_url}
             alt={resource.title || "Foto final de graduados"}
-            className="w-full h-full object-cover"
         />
     );
 }

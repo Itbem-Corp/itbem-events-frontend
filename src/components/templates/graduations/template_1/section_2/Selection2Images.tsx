@@ -16,7 +16,6 @@ export function Section2_1({ section }: Props) {
                     <ImageWithLoader
                         src={resource.view_url}
                         alt={resource.title || 'Colegio Izapa'}
-                        className="w-full h-full object-cover"
                     />
                 </div>
             ))}
@@ -34,7 +33,6 @@ export function Section2_2({ section }: Props) {
             <ImageWithLoader
                 src={resource.view_url}
                 alt={resource.title || 'Colegio Izapa'}
-                className="w-full h-full object-cover"
             />
         </div>
     );
