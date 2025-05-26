@@ -49,7 +49,7 @@ export default function Section4Wrapper({ EVENTS_URL }: Props) {
                         exit={{ opacity: 0, y: -20 }}
                         transition={{ duration: 0.6 }}
                     >
-                        <h2 className="text-3xl font-semibold text-black">Graduados</h2>
+                        <h2 className="text-3xl font-bigilla text-black">Graduados</h2>
                         <motion.ul
                             className="font-medium space-y-1"
                             initial="hidden"
@@ -65,7 +65,7 @@ export default function Section4Wrapper({ EVENTS_URL }: Props) {
                             {nameList.map((name, index) => (
                                 <motion.li
                                     key={name}
-                                    className={`text-lg ${
+                                    className={`text-lg font-quicksand ${
                                         index % 2 === 0 ? 'text-[#007BC4]' : 'text-[#1B1464]'
                                     }`}
                                     variants={{
@@ -83,7 +83,7 @@ export default function Section4Wrapper({ EVENTS_URL }: Props) {
                             <Section4_1 section={sectionData} />
                         </div>
 
-                        <p className="italic text-xl text-[#8B5D3D]">celebremos juntos</p>
+                        <p className="font-bigilla text-xl text-[#8B5D3D]">celebremos juntos</p>
                     </motion.section>
                 ) : (
                     <motion.div

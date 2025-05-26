@@ -33,16 +33,16 @@ export default function Section2Wrapper({ EVENTS_URL }: Props) {
                         transition={{ duration: 0.6 }}
                     >
                         <Section2_1 section={sectionData} />
-                        <p className="text-2xl leading-snug text-[#07293A]">
+                        <p className="text-2xl font-bigilla leading-snug text-[#07293A]">
                             Tenemos un logro más y queremos compartirlo contigo
                         </p>
                         <Section2_2 section={sectionData} />
-                        <p className="text-2xl text-[#8B5D3D]">
+                        <p className="text-2xl font-bigilla text-[#8B5D3D]">
                             este 22 de junio del 2025
                         </p>
                         <div className="flex flex-row">
                             <div className="basis-2/3 place-content-center pe-4">
-                                <p className="text-sm leading-relaxed text-[#07293A]">
+                                <p className="text-sm leading-relaxed font-quicksand text-[#07293A]">
                                     la misa se celebrará en el Santuario la Villita de Guadalupe a las 6:45 p.m.
                                 </p>
                             </div>

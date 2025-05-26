@@ -26,7 +26,7 @@ export default function Footer() {
                         alt="WhatsApp icon"
                         className="w-12 h-12"
                     />
-                    <span className="text-black text-xl">9626240796</span>
+                    <span className="text-black font-aloevera text-xl">9626240796</span>
                 </div>
 
                 {/* Email (vector-05) */}
@@ -36,7 +36,7 @@ export default function Footer() {
                         alt="Email icon"
                         className="w-12 h-12"
                     />
-                    <span className="text-black text-xl">contacto@itbem.com</span>
+                    <span className="text-black font-aloevera text-xl">contacto@itbem.com</span>
                 </div>
             </div>
         </motion.footer>

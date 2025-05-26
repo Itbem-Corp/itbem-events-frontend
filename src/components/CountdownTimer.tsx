@@ -44,19 +44,19 @@ export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
         <div className="flex justify-center md:gap-18 sm:gap-14 gap-10 text-[#07293A]">
             <div className="text-center">
                 <div className="text-3xl font-bold text-[#007BC4]">{timeLeft.days}</div>
-                <div className="text-sm font-medium">Días</div>
+                <div className="text-sm font-medium font-quicksand">Días</div>
             </div>
             <div className="text-center">
                 <div className="text-3xl font-bold text-[#007BC4]">{timeLeft.hours}</div>
-                <div className="text-sm font-medium">Horas</div>
+                <div className="text-sm font-medium font-quicksand">Horas</div>
             </div>
             <div className="text-center">
                 <div className="text-3xl font-bold text-[#007BC4]">{timeLeft.minutes}</div>
-                <div className="text-sm font-medium">Minutos</div>
+                <div className="text-sm font-medium font-quicksand">Minutos</div>
             </div>
             <div className="text-center">
                 <div className="text-3xl font-bold text-[#007BC4]">{timeLeft.seconds}</div>
-                <div className="text-sm font-medium">Segundos</div>
+                <div className="text-sm font-medium font-quicksand">Segundos</div>
             </div>
         </div>
     );
