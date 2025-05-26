@@ -11,11 +11,12 @@ export function Section3_1({ section }: Props) {
             {section.sectionResources.slice(0, 2).map((resource, index) => (
                 <div
                     key={index}
-                    className="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden"
+                    className="bg-gray-100 aspect-[3/2]  rounded shadow-md overflow-hidden"
                 >
                     <ImageWithLoader
                         src={resource.view_url}
                         alt={resource.title || "Colegio Izapa"}
+                        className="aspect-3/2 object-fill"
                     />
                 </div>
             ))}
