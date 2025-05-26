@@ -79,7 +79,7 @@ export default function Section4Wrapper({ EVENTS_URL }: Props) {
                             ))}
                         </motion.ul>
 
-                        <div className="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-100 rounded shadow-md overflow-hidden my-6">
+                        <div className="mx-auto w-[100%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[5/2] bg-gray-100 rounded shadow-md overflow-hidden my-6">
                             <Section4_1 section={sectionData} />
                         </div>
 
