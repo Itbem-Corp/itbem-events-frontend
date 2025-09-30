@@ -109,3 +109,21 @@
   font-family: 'Quicksand';
   src: url('/fonts/Quicksand-VariableFont_wght.ttf') format('truetype');
 }
+
+@font-face {
+  font-family: "Aloevera";
+  src: url("/fonts/Aloevera-Light.otf") format("opentype");
+  font-weight: 300;
+}
+
+@font-face {
+  font-family: "Aloevera";
+  src: url("/fonts/Aloevera-Regular.otf") format("opentype");
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "Astralaga";
+  src: url("/fonts/Astralaga SemiBold.ttf") format("truetype");
+  font-weight: 600;
+}

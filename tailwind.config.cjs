@@ -11,6 +11,8 @@ module.exports = {
     		colors: {
     			background: 'hsl(var(--background))',
     			foreground: 'hsl(var(--foreground))',
+				gold: "#C7A44C",
+				coffee: "#8B5D3D",
     			card: {
     				DEFAULT: 'hsl(var(--card))',
     				foreground: 'hsl(var(--card-foreground))'
@@ -52,8 +54,10 @@ module.exports = {
     		},
 			fontFamily: {
 				bigilla: ['Bigilla', 'serif'],
-				aloevera: ['Aloevera', 'sans-serif'],
 				quicksand: ['Quicksand', 'sans-serif'],
+				aloevera: ["Aloevera-Regular", "sans-serif"],
+				aloeveraLight: ["Aloevera-Light", "sans-serif"],
+				astralaga: ["Astralaga SemiBold", "serif"],
 			},
     	}
     },
