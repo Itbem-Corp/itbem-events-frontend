@@ -77,8 +77,8 @@ export default function Section1Wrapper({ EVENTS_URL }: { EVENTS_URL: string }) 
             />
 
             <ResourcesBySectionSingle
-                //sectionId="8c1600fd-f6d3-494c-9542-2dc4a0897954"
-                sectionId="0eaa96d3-4959-4c06-8c85-a86675e6f78d"
+                sectionId="8c1600fd-f6d3-494c-9542-2dc4a0897954"
+                //sectionId="0eaa96d3-4959-4c06-8c85-a86675e6f78d" // Local Event Test
                 EVENTS_URL={EVENTS_URL}
                 onLoaded={setSectionConfirmed}
             />
