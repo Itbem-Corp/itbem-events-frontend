@@ -77,7 +77,8 @@ export default function Section1Wrapper({ EVENTS_URL }: { EVENTS_URL: string }) 
             />
 
             <ResourcesBySectionSingle
-                sectionId="8c1600fd-f6d3-494c-9542-2dc4a0897954"
+                //sectionId="8c1600fd-f6d3-494c-9542-2dc4a0897954"
+                sectionId="0eaa96d3-4959-4c06-8c85-a86675e6f78d"
                 EVENTS_URL={EVENTS_URL}
                 onLoaded={setSectionConfirmed}
             />
@@ -98,8 +99,8 @@ export default function Section1Wrapper({ EVENTS_URL }: { EVENTS_URL: string }) 
             {invData && !invError && (
                 <>
                     {invData.rsvpStatus === "confirmed" ? (
-                        <div>
-                            <p className="text-xl font-aloevera text-dark mb-4 border-2 border-dashed border-gold rounded-xl px-6 py-3 inline-block">
+                        <div className="flex flex-col items-center">
+                            <p className="text-xl font-aloevera text-dark mb-4 border-2 border-dashed border-gold rounded-xl px-6 py-3 inline-block text-center">
                                 Gracias por confirmar tu asistencia
                                 <br />
                                 Nos vemos el{" "}
@@ -109,7 +110,52 @@ export default function Section1Wrapper({ EVENTS_URL }: { EVENTS_URL: string }) 
                                     day: "numeric",
                                 })}
                             </p>
+
+                            {/* Imagen */}
                             <Section1_2 section={sectionConfirmed} />
+
+                            {/* Texto y enlace de cancelación */}
+                            <div className="mt-24 text-center px-4">
+                                <p className="text-lg font-aloevera text-dark mb-2">
+                                    O si necesitas cancelar por cualquier motivo da clic abajo:
+                                </p>
+                                <a
+                                    href="#"
+                                    onClick={async (e) => {
+                                        e.preventDefault();
+                                        if (!invData) return;
+
+                                        try {
+                                            // Ejecutar la cancelación directamente
+                                            const res = await fetch(`${EVENTS_URL}api/invitations/rsvp`, {
+                                                method: "POST",
+                                                headers: {
+                                                    "Content-Type": "application/json",
+                                                    Authorization: "1",
+                                                },
+                                                body: JSON.stringify({
+                                                    pretty_token: invData.prettyToken,
+                                                    status: "declined",
+                                                    method: "web",
+                                                    guest_count: 0,
+                                                }),
+                                            });
+
+                                            const json = await res.json();
+                                            if (!res.ok) throw new Error(json.message || "Error al cancelar confirmación");
+
+                                            setMessage("Tu confirmación fue cancelada correctamente");
+                                        } catch (err: any) {
+                                            console.error("Error cancelando:", err);
+                                        } finally {
+                                            setTimeout(() => window.location.reload(), 1000);
+                                        }
+                                    }}
+                                    className="text-gold underline text-lg font-aloevera hover:text-dark transition-colors"
+                                >
+                                    Cancelar mi confirmación
+                                </a>
+                            </div>
                         </div>
                     ) : invData.rsvpStatus === "declined" ? (
                         <div>
