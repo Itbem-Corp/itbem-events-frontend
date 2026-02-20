@@ -1,53 +1,66 @@
-name: Deploy Frontend to EC2
+name: Deploy to Cloudflare Pages
 
 on:
   push:
-    branches:
-      - main
-
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch to deploy'
-        required: true
-        default: 'main'
-      environment:
-        description: 'Deployment environment'
-        required: true
-        default: 'production'
 
 jobs:
-  deploy:
+  # ── Job 1: build + lint check (runs on every push & PR) ──────────────────
+  build:
+    name: Build
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'production' }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
-          ref: ${{ github.event.inputs.branch || 'main' }}
+          node-version: 20
+          cache: npm
 
-      - name: Setup SSH access to EC2
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Deploy frontend
-        run: |
-          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            cd /opt/itbem-events-frontend
-            git pull origin ${{ github.event.inputs.branch || 'main' }}
+      - name: Build (static)
+        run: npm run build
+        env:
+          # Use production URL for build verification.
+          # The actual deploy step overrides this via Cloudflare Pages env vars.
+          PUBLIC_EVENTS_URL: https://api.eventiapp.com.mx
 
-            docker stop itbem-events-frontend || true && docker rm itbem-events-frontend || true
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 1
 
-            docker build -t itbem-events-frontend . \
-              --build-arg PUBLIC_EVENTS_URL=${{ secrets.EVENTS_URL }} \
-              --build-arg PUBLIC_REDIS_URL=${{ secrets.REDIS_URL }}
+  # ── Job 2: deploy to Cloudflare Pages (main branch only) ─────────────────
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
 
-            # Crear contenedor temporal para copiar archivos
-            docker create --name tmp-frontend itbem-events-frontend
-            docker cp tmp-frontend:/app/dist/client/. /var/www/eventiapp
-            docker rm tmp-frontend
-          EOF
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=itbem-events-frontend --branch=main

@@ -1,34 +1,34 @@
+// @ts-check
 import { defineConfig, envField } from 'astro/config';
 import react from '@astrojs/react';
 import tailwind from '@astrojs/tailwind';
-import node from '@astrojs/node';
 import Critters from 'critters';
 
+// Static output — served by Cloudflare Pages.
+// All interactivity is handled by client:only React islands that call
+// PUBLIC_EVENTS_URL (the Go backend) directly from the browser.
+// No SSR server, no Redis sessions needed.
 export default defineConfig({
+  output: 'static',
+
+  site: 'https://eventiapp.com.mx',
+
   integrations: [react(), tailwind()],
-  adapter: node({
-    mode: 'standalone',
-  }),
+
   env: {
     schema: {
-      PORT: envField.number({ context: "server", access: "secret", default: 4321 }),
-      PUBLIC_REDIS_URL: envField.string({ context: "server", access: "secret", default: "" }),
-      PUBLIC_EVENTS_URL: envField.string({ context: "server", access: "public" }),
+      // Backend API URL injected at build time — available to client-side code.
+      // Local: http://localhost:8080  |  Production: https://api.eventiapp.com.mx
+      PUBLIC_EVENTS_URL: envField.string({ context: 'client', access: 'public' }),
     },
-    validateSecrets: false
   },
-  session: {
-    driver: 'redis',
-    options: {
-      url: process.env.PUBLIC_REDIS_URL,
-    },
-    ttl: 3600,
-  },
+
   vite: {
     build: {
       rollupOptions: {
         output: {
-          manualChunks: undefined, // importante para que Critters funcione correctamente
+          // Required for Critters (critical CSS inlining) to work correctly.
+          manualChunks: undefined,
         },
       },
     },
@@ -38,10 +38,7 @@ export default defineConfig({
         enforce: 'post',
         apply: 'build',
         async generateBundle(_, bundle) {
-          const critters = new Critters({
-            preload: 'swap',
-          });
-
+          const critters = new Critters({ preload: 'swap' });
           for (const file of Object.keys(bundle)) {
             const chunk = bundle[file];
             if (chunk.type === 'asset' && chunk.fileName.endsWith('.html')) {
