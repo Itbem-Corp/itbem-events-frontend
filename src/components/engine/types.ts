@@ -46,6 +46,20 @@ export interface GraduatesListConfig {
 export type PhotoGridConfig = Record<string, never>;
 export type RSVPConfirmationConfig = Record<string, never>;
 
+export interface AgendaItem {
+  time: string
+  title: string
+  description?: string
+  icon?: 'ceremony' | 'reception' | 'dinner' | 'party' | 'music' | 'photo' | 'default'
+  location?: string
+}
+
+export interface AgendaConfig {
+  title?: string
+  subtitle?: string
+  items: AgendaItem[]
+}
+
 // ── Page spec ─────────────────────────────────────────────────────────────────
 
 export interface SectionSpec {
