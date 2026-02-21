@@ -49,4 +49,8 @@ export const SECTION_REGISTRY: Record<string, RegistryEntry> = {
     loader: () => import('../sections/AgendaSection'),
     hydration: 'visible',
   },
+  MomentWall: {
+    loader: () => import("../sections/MomentWall"),
+    hydration: "visible",
+  },
 } as const;
