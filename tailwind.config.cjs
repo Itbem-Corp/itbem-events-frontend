@@ -13,6 +13,8 @@ module.exports = {
     			foreground: 'hsl(var(--foreground))',
 				gold: "#C7A44C",
 				coffee: "#8B5D3D",
+				blue: "#007BC4",
+				navy: "#1B1464",
     			card: {
     				DEFAULT: 'hsl(var(--card))',
     				foreground: 'hsl(var(--card-foreground))'

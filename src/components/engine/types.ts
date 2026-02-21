@@ -81,6 +81,10 @@ export interface PageMeta {
   /** If present, MusicWidget renders with this URL */
   musicUrl?: string;
   contact?: PageContact;
+  /** Backend event UUID */
+  eventId?: string;
+  /** Human-readable event identifier */
+  identifier?: string;
 }
 
 export interface PageSpec {

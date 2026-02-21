@@ -1,48 +1,74 @@
-# Astro Starter Kit: Basics
+# Eventiapp — Frontend de Invitaciones
 
-```sh
-npm create astro@latest -- --template basics
+Vistas públicas de invitaciones y RSVP. Construido con Astro + React + Tailwind.
+
+---
+
+## Setup local
+
+```bash
+# 1. Instalar dependencias
+npm install
+
+# 2. Copiar y configurar variables de entorno
+cp .env.example .env
+# Editar .env con los valores correctos
+
+# 3. Iniciar servidor de desarrollo
+npm run dev
+# → http://localhost:4321
 ```
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/withastro/astro/tree/latest/examples/basics)
-[![Open with CodeSandbox](https://assets.codesandbox.io/github/button-edit-lime.svg)](https://codesandbox.io/p/sandbox/github/withastro/astro/tree/latest/examples/basics)
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/withastro/astro?devcontainer_path=.devcontainer/basics/devcontainer.json)
+---
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+## Variables de entorno
 
-![just-the-basics](https://github.com/withastro/astro/assets/2244813/a0a5533c-a856-4198-8470-2d67b1d7c554)
+| Variable | Descripción | Requerida |
+|---|---|---|
+| `PUBLIC_EVENTS_URL` | URL base de la API (con trailing slash) | Sí |
+| `PORT` | Puerto del servidor Node.js | No (default: 4321) |
 
-## 🚀 Project Structure
+Copiar `.env.example` → `.env` y ajustar los valores.
 
-Inside of your Astro project, you'll see the following folders and files:
+---
 
-```text
-/
-├── public/
-│   └── favicon.svg
-├── src/
-│   ├── layouts/
-│   │   └── Layout.astro
-│   └── pages/
-│       └── index.astro
-└── package.json
+## Comandos
+
+```bash
+npm run dev          # Servidor de desarrollo (localhost:4321)
+npm run build        # Build de producción → dist/
+npm run preview      # Preview del build local
+npm run test:e2e     # Tests E2E Playwright (headless)
+npm run test:e2e:ui  # Tests E2E con interfaz visual
 ```
 
-To learn more about the folder structure of an Astro project, refer to [our guide on project structure](https://docs.astro.build/en/basics/project-structure/).
+---
 
-## 🧞 Commands
+## Páginas activas
 
-All commands are run from the root of the project, from a terminal:
+| URL | Descripción |
+|---|---|
+| `/evento?token=XXX` | Página genérica — cualquier evento nuevo |
+| `/graduacion-izapa?token=XXX` | Invitación graduación Izapa 2025 |
+| `/AndresIvanna/Confirmacion?token=XXX` | RSVP boda Andrés & Ivanna |
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+El `token` es el identificador del evento en el backend.
 
-## 👀 Want to learn more?
+---
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+## Docker (producción)
+
+```bash
+docker build \
+  --build-arg PUBLIC_EVENTS_URL=https://api.eventiapp.com.mx/ \
+  -t eventiapp-frontend .
+
+# Los estáticos quedan en /public dentro del contenedor
+# El servidor corre en el puerto 4321
+```
+
+---
+
+## Arquitectura
+
+Ver `docs/architecture.md` para la documentación completa del sistema.

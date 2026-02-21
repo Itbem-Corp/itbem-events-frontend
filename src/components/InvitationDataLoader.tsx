@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export interface InvitationData {
     id: string;
@@ -7,24 +7,30 @@ export interface InvitationData {
     guestName: string;
     maxGuests: number;
     prettyToken: string;
-    rsvpStatus: string;   // ✅ nuevo
-    eventDate: string;    // ✅ nuevo
+    rsvpStatus: string;
+    eventDate: string;
 }
 
 interface Props {
     token: string;
     EVENTS_URL: string;
     onLoaded: (data: InvitationData) => void;
+    onError?: (message: string) => void;
 }
 
-export default function InvitationLoader({ token, EVENTS_URL, onLoaded }: Props) {
+export default function InvitationLoader({ token, EVENTS_URL, onLoaded, onError }: Props) {
+    // Ref guard: prevents re-fetching if parent re-renders and recreates onLoaded/onError refs
+    const loadedRef = useRef(false);
+
     useEffect(() => {
-        if (!token) return;
+        if (!token || loadedRef.current) return;
+
+        const controller = new AbortController();
 
         const loadInvitation = async () => {
             try {
-                const res = await fetch(`${EVENTS_URL}api/invitations/byToken/${token}`, {
-                    headers: { Authorization: "1" },
+                const res = await fetch(`${EVENTS_URL}api/invitations/ByToken/${token}`, {
+                    signal: controller.signal,
                 });
 
                 if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -43,14 +49,21 @@ export default function InvitationLoader({ token, EVENTS_URL, onLoaded }: Props)
                     eventDate: inv?.Event?.EventDateTime ?? "",
                 };
 
+                loadedRef.current = true;
                 onLoaded(data);
-            } catch (err) {
+            } catch (err: unknown) {
+                if (err instanceof Error && err.name === "AbortError") return;
+                const message = err instanceof Error ? err.message : "Error cargando invitación";
                 console.error("Error loading invitation:", err);
+                onError?.(message);
             }
         };
 
         loadInvitation();
-    }, [token, EVENTS_URL, onLoaded]);
+
+        // Cleanup: cancela la petición si el componente se desmonta antes de terminar
+        return () => { controller.abort(); };
+    }, [token, EVENTS_URL]); // onLoaded/onError excluidos: son estables (setter useState / handler inline)
 
     return null;
 }

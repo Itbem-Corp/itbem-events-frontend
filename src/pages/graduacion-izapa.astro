@@ -1,57 +1,13 @@
 ---
-import TemplateLayout from '../layouts/template.astro'
-import Section1Wrapper from '../components/templates/graduations/template_1/section_1/Section1Wrapper';
-import Section2Wrapper from '../components/templates/graduations/template_1/section_2/Section2Wrapper';
-import Section3Wrapper from '../components/templates/graduations/template_1/section_3/Section3Wrapper';
-import Section4Wrapper from '../components/templates/graduations/template_1/section_4/Section4Wrapper';
-import Section5Wrapper from '../components/templates/graduations/template_1/section_5/Section5Wrapper';
-import Header from '../components/templates/graduations/template_1/Header';
-import MusicWidget from '../components/templates/graduations/template_1/MusicWidget';
-import Footer from '../components/common/Footer.tsx';
-
-const graduationDate = new Date('2025-06-22T20:30:00-06:00');
-interface Resource {
-  view_url: string;
-  title: string;
-}
-
-interface Section {
-  sectionResources: Resource[];
-}
+import TemplateLayout from '../layouts/template.astro';
+import EventPage from '../components/engine/EventPage';
 ---
 
-<TemplateLayout title="Nos Graduamos 2022-2025 | El Gran Día">
+<TemplateLayout title="Nos Graduamos | Izapa 2022–2025">
   <body>
-  <MusicWidget client:only="react" volume={0.3} />
-  <main class="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20">
-
-    <!-- Header -->
-    <Header targetDate={graduationDate} client:only="react" />
-
-  <!-- SECCIÓN 1 -->
-    <Section1Wrapper client:only="react" EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
-</main>
-  <div class="relative overflow-hidden">
-  <main class="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20 relative z-10">
-
-  <!-- SECCIÓN 2 -->
-    <Section2Wrapper client:only="react" EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
-
-  <!-- SECCIÓN 3 -->
-    <Section3Wrapper client:visible EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
-
-  <!-- SECCIÓN 4 -->
-    <Section4Wrapper client:visible EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
-
-  <!-- SECCIÓN 5 -->
-    <Section5Wrapper client:visible EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
-</main>
-  </div>
-  <main class="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20 overflow-x-hidden">
-
-<!-- FOOTER -->
-    <Footer client:only="react" />
-
-</main>
-</body>
+    <EventPage
+      client:only="react"
+      EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL}
+    />
+  </body>
 </TemplateLayout>

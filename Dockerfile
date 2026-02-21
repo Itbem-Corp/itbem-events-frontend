@@ -5,9 +5,6 @@ WORKDIR /app
 ARG PUBLIC_EVENTS_URL
 ENV PUBLIC_EVENTS_URL=${PUBLIC_EVENTS_URL}
 
-ARG PUBLIC_REDIS_URL
-ENV PUBLIC_REDIS_URL=${PUBLIC_REDIS_URL}
-
 # Copy only package files to install dependencies
 COPY package.json package-lock.json ./
 
@@ -34,6 +31,9 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 # Copy built app (server and client)
 COPY --from=build /app/dist ./dist
 
+# Copy custom server with gzip/brotli compression middleware
+COPY server.mjs ./server.mjs
+
 # COPY estáticos del frontend a un volumen accesible por NGINX (nuevo paso)
 RUN mkdir -p /public
 COPY --from=build /app/dist/client /public
@@ -42,4 +42,4 @@ ENV HOST=0.0.0.0
 ENV PORT=4321
 EXPOSE 4321
 
-CMD ["node", "./dist/server/entry.mjs"]
+CMD ["node", "./server.mjs"]

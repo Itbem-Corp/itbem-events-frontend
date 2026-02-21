@@ -5,27 +5,35 @@ interface Props {
     src: string;
     alt: string;
     className?: string;
+    priority?: boolean; // true → loading="eager" + fetchpriority="high" (LCP images)
 }
 
-export default function ImageWithLoader({ src, alt, className = "" }: Props) {
+export default function ImageWithLoader({ src, alt, className = "", priority = false }: Props) {
     const [loaded, setLoaded] = useState(false);
     const [error, setError] = useState(false);
 
     const orientation = useImageOrientation(src);
 
     useEffect(() => {
-        if (!src || typeof src !== "string") return;
+        if (!src) return;
+
+        let cancelled = false;
 
         const img = new Image();
-        img.src = src;
-        img.onload = () => setLoaded(true);
+        img.onload = () => { if (!cancelled) setLoaded(true); };
         img.onerror = () => {
-            setError(true);
-            setLoaded(true);
+            if (!cancelled) {
+                setError(true);
+                setLoaded(true);
+            }
         };
+        img.src = src;
+
+        // Cleanup: evita setState sobre componente desmontado
+        return () => { cancelled = true; };
     }, [src]);
 
-    if (!src || typeof src !== "string" || !src.startsWith("http")) {
+    if (!src || !src.startsWith("http")) {
         return (
             <div className="bg-transparent text-xs text-gray-500 flex items-center justify-center w-full h-full">
                 Imagen inválida
@@ -55,6 +63,10 @@ export default function ImageWithLoader({ src, alt, className = "" }: Props) {
                 <img
                     src={src}
                     alt={alt}
+                    loading={priority ? "eager" : "lazy"}
+                    decoding="async"
+                    // @ts-ignore — fetchpriority is valid but not yet in all TS libs
+                    fetchpriority={priority ? "high" : undefined}
                     className={`w-full h-full ${dynamicObjectClass} transition-opacity duration-500 ${
                         loaded ? "opacity-100" : "opacity-0"
                     } ${className}`}

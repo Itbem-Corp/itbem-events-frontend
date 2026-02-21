@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 
 export interface Resource {
     view_url: string;
@@ -44,15 +44,20 @@ function getPresignedExpiry(viewUrl: string): Date | null {
 }
 
 export default function ResourcesBySectionSingle({ sectionId, EVENTS_URL, onLoaded }: Props) {
-    const [loaded, setLoaded] = useState(false);
+    // Ref guard: prevents duplicate fetches when parent re-renders and recreates onLoaded
+    const loadedRef = useRef(false);
 
     useEffect(() => {
+        if (loadedRef.current) return;
+
+        const controller = new AbortController();
+        const cacheKey = `resourcesBySection-${sectionId}`;
+        const expiryKey = `resourcesExpiry-${sectionId}`;
+
         const loadResources = async () => {
             const now = new Date();
-            const cacheKey = `resourcesBySection-${sectionId}`;
-            const expiryKey = `resourcesExpiry-${sectionId}`;
 
-            // Verifica si hay expiración previa
+            // Check sessionStorage cache with localStorage expiry
             const cachedExpiry = localStorage.getItem(expiryKey);
             if (cachedExpiry) {
                 const expiryDate = new Date(cachedExpiry);
@@ -61,53 +66,61 @@ export default function ResourcesBySectionSingle({ sectionId, EVENTS_URL, onLoad
                     if (cached) {
                         try {
                             const parsed = JSON.parse(cached);
+                            loadedRef.current = true;
                             onLoaded(parsed);
-                            setLoaded(true);
                             return;
                         } catch {
-                            sessionStorage.removeItem(cacheKey);
-                            localStorage.removeItem(expiryKey);
+                            // Corrupt cache — fall through to fetch
                         }
                     }
-                } else {
-                    // ⚠️ Expirado, limpia
-                    sessionStorage.removeItem(cacheKey);
-                    localStorage.removeItem(expiryKey);
+                    // sessionStorage vacío (pestaña cerrada y reabierta) — limpiar expiry y refetch
                 }
+                // Expirado o sessionStorage vacío: limpiar ambas keys juntas para mantener sincronía
+                sessionStorage.removeItem(cacheKey);
+                localStorage.removeItem(expiryKey);
             }
 
-            const res = await fetch(`${EVENTS_URL}api/resources/section/${sectionId}`, {
-                headers: {
-                    Authorization: "1",
-                },
-            });
+            try {
+                const res = await fetch(`${EVENTS_URL}api/resources/section/${sectionId}`, {
+                    signal: controller.signal,
+                });
 
-            const json = await res.json();
-            const data = Array.isArray(json?.data) ? json.data : [];
+                if (!res.ok) throw new Error(`API error: ${res.status}`);
 
-            const section = {
-                sectionId,
-                sectionResources: data.sort((a: { position: number; }, b: { position: number; }) => a.position - b.position),
-            };
+                const json = await res.json();
+                const data = Array.isArray(json?.data) ? json.data : [];
 
-            // Detecta la expiración más cercana entre las URLs
-            const expirations = section.sectionResources
-                .map((r) => getPresignedExpiry(r.view_url))
-                .filter((d): d is Date => d instanceof Date);
+                const section: Section = {
+                    sectionId,
+                    sectionResources: data.sort((a: Resource, b: Resource) => a.position - b.position),
+                };
 
-            const minExpiry = expirations.length
-                ? new Date(Math.min(...expirations.map((d) => d.getTime())))
-                : new Date(Date.now() + 6 * 60 * 60 * 1000); // fallback: 6 horas
+                // Detectar la expiración más cercana entre todas las URLs
+                const expirations = section.sectionResources
+                    .map((r) => getPresignedExpiry(r.view_url))
+                    .filter((d): d is Date => d instanceof Date);
 
-            sessionStorage.setItem(cacheKey, JSON.stringify(section));
-            localStorage.setItem(expiryKey, minExpiry.toISOString());
+                const minExpiry = expirations.length
+                    ? new Date(Math.min(...expirations.map((d) => d.getTime())))
+                    : new Date(Date.now() + 6 * 60 * 60 * 1000); // fallback: 6 horas
 
-            onLoaded(section);
-            setLoaded(true);
+                // Siempre almacenar ambas keys juntas para evitar desincronización
+                sessionStorage.setItem(cacheKey, JSON.stringify(section));
+                localStorage.setItem(expiryKey, minExpiry.toISOString());
+
+                loadedRef.current = true;
+                onLoaded(section);
+            } catch (err: unknown) {
+                if (err instanceof Error && err.name === "AbortError") return;
+                console.error(`Error loading section ${sectionId}:`, err);
+            }
         };
 
         loadResources();
-    }, [sectionId, EVENTS_URL, onLoaded]);
+
+        // Cleanup: cancela la petición si el componente se desmonta antes de terminar
+        return () => { controller.abort(); };
+    }, [sectionId, EVENTS_URL]); // onLoaded excluido: es estable (setter de useState)
 
     return null;
 }

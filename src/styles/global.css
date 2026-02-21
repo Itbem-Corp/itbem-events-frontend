@@ -97,33 +97,4 @@
   animation: breathe-slow 3s ease-in-out infinite;
 }
 
-@font-face {
-  font-family: 'Bigilla';
-  src: url('/fonts/Bigilla.otf') format('opentype');
-}
-@font-face {
-  font-family: 'Aloevera';
-  src: url('/fonts/Aloevera-Medium.otf') format('opentype');
-}
-@font-face {
-  font-family: 'Quicksand';
-  src: url('/fonts/Quicksand-VariableFont_wght.ttf') format('truetype');
-}
-
-@font-face {
-  font-family: "Aloevera";
-  src: url("/fonts/Aloevera-Light.otf") format("opentype");
-  font-weight: 300;
-}
-
-@font-face {
-  font-family: "Aloevera";
-  src: url("/fonts/Aloevera-Regular.otf") format("opentype");
-  font-weight: 400;
-}
-
-@font-face {
-  font-family: "Astralaga";
-  src: url("/fonts/Astralaga SemiBold.ttf") format("truetype");
-  font-weight: 600;
-}
+/* @font-face declarations live in fonts.css (imported by template.astro) */

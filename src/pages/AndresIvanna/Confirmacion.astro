@@ -1,21 +1,13 @@
 ---
-import TemplateLayout from '../../layouts/template.astro'
-import Section1Wrapper from '../../components/templates/weddings/confirmations/template_1/section_1/Section1Wrapper';
-
-interface Resource {
-  view_url: string;
-  title: string;
-}
-
-interface Section {
-  sectionResources: Resource[];
-}
+import TemplateLayout from '../../layouts/template.astro';
+import EventPage from '../../components/engine/EventPage';
 ---
 
-<TemplateLayout title="Andres & Ivanna | Confirmacion">
+<TemplateLayout title="Andres & Ivanna | Confirmación">
   <body>
-  <main class="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20">
-    <Section1Wrapper client:only="react" EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL} />
-  </main>
-</body>
+    <EventPage
+      client:only="react"
+      EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL}
+    />
+  </body>
 </TemplateLayout>
