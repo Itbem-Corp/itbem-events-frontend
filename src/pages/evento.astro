@@ -1,0 +1,58 @@
+---
+/**
+ * Generic event page — zero-code route for new events.
+ * Fetches event metadata server-side (Astro SSR) for OG tags so
+ * WhatsApp / Telegram / iMessage show rich link previews.
+ */
+import TemplateLayout from '../layouts/template.astro';
+import EventPage from '../components/engine/EventPage';
+
+const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string;
+
+// Read token from query string at SSR time
+const token = Astro.url.searchParams.get('token') ?? '';
+
+// Fetch invitation data server-side for OG meta (best-effort, 3s timeout)
+let ogTitle   = 'Eventiapp | Tu invitación';
+let ogDesc    = 'Estás invitado a un evento especial.';
+let ogImage   = '';
+const ogUrl   = Astro.url.href;
+
+if (token) {
+  try {
+    const res = await fetch(`${EVENTS_URL}api/invitations/ByToken/${token}`, {
+      headers: { Authorization: '1' },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (res.ok) {
+      const json = await res.json() as { data?: { event?: { name?: string; description?: string; cover_image_url?: string; organizer_name?: string; location_name?: string } } };
+      const ev = json?.data?.event;
+      if (ev) {
+        if (ev.name) ogTitle = ev.name;
+        if (ev.description)  ogDesc = ev.description.slice(0, 160);
+        else if (ev.organizer_name || ev.location_name) {
+          ogDesc = [ev.organizer_name ? `Organizado por ${ev.organizer_name}` : '', ev.location_name ?? ''].filter(Boolean).join(' · ');
+        }
+        if (ev.cover_image_url) ogImage = ev.cover_image_url;
+      }
+    }
+  } catch {
+    // Fail silently — page works fine without OG tags
+  }
+}
+---
+
+<TemplateLayout
+  title={ogTitle}
+  ogTitle={ogTitle}
+  ogDescription={ogDesc}
+  ogImage={ogImage}
+  ogUrl={ogUrl}
+>
+  <body>
+    <EventPage
+      client:only="react"
+      EVENTS_URL={EVENTS_URL}
+    />
+  </body>
+</TemplateLayout>
