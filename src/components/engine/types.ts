@@ -60,6 +60,13 @@ export interface AgendaConfig {
   items: AgendaItem[]
 }
 
+export interface MomentWallConfig {
+  /** identifier is injected by the backend into the section config */
+  identifier: string;
+  title?: string;
+  subtitle?: string;
+}
+
 // ── Page spec ─────────────────────────────────────────────────────────────────
 
 export interface SectionSpec {

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import InvitationLoader, { type InvitationData } from "../InvitationDataLoader";
-import type { SectionComponentProps } from "../engine/types";
+import type { SectionComponentProps, MomentWallConfig } from "../engine/types";
 
 interface Moment {
   id: string;
@@ -13,10 +13,12 @@ interface Moment {
 }
 
 export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps) {
-  const title = (config.title as string) ?? 'Momentos';
-  const subtitle = config.subtitle as string | undefined;
-  // identifier set in section config by the backend
-  const identifier = config.identifier as string | undefined;
+  // identifier is injected directly into this section's config by the backend;
+  // spec.meta.identifier exists but is not passed through SectionComponentProps.
+  const cfg = config as MomentWallConfig;
+  const title = cfg.title ?? 'Momentos';
+  const subtitle = cfg.subtitle;
+  const identifier = cfg.identifier;
 
   const [moments, setMoments] = useState<Moment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +39,7 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
   const fetchMoments = useCallback(async () => {
     if (!identifier) { setLoading(false); return; }
     try {
-      const res = await fetch(EVENTS_URL + 'api/events/' + identifier + '/moments');
+      const res = await fetch(`${EVENTS_URL}api/events/${identifier}/moments`);
       if (!res.ok) return;
       const json = await res.json();
       setMoments(json.data ?? []);
@@ -67,7 +69,7 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
     fd.append('pretty_token', invData.prettyToken);
     fd.append('description', descInput.value);
     try {
-      const res = await fetch(EVENTS_URL + 'api/events/' + identifier + '/moments', { method: 'POST', body: fd });
+      const res = await fetch(`${EVENTS_URL}api/events/${identifier}/moments`, { method: 'POST', body: fd });
       if (!res.ok) { const err = await res.json(); throw new Error(err.message ?? 'Error al subir'); }
       setUploadSuccess(true);
       setShowUpload(false);
@@ -97,7 +99,7 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
           {uploadSuccess && (
             <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
               className="mb-6 rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700 text-center">
-              Foto enviada. Aparecera aqui cuando sea aprobada.
+              ¡Foto enviada! Aparecerá aquí cuando sea aprobada.
             </motion.div>
           )}
         </AnimatePresence>
