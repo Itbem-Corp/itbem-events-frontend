@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import InvitationLoader, { type InvitationData } from '../InvitationDataLoader';
 import ResourcesBySectionSingle, { type Section } from '../ResourcesBySectionSingle';
@@ -8,6 +8,8 @@ import ImageWithLoader from '../ImageWithLoader';
 import type { SectionComponentProps } from '../engine/types';
 import { useToast } from '../../hooks/useToast';
 import ToastList from '../common/Toast';
+
+const RSVPConfirmationCard = lazy(() => import('../RSVPConfirmationCard'));
 
 export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionComponentProps) {
   const [invData, setInvData] = useState<InvitationData | null>(null);
@@ -19,6 +21,7 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
   const [token, setToken] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [showCard, setShowCard] = useState(false);
   const [sectionImages, setSectionImages] = useState<Section | null>(null);
   const { toasts, addToast, removeToast } = useToast();
 
@@ -59,6 +62,7 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
           ? `Gracias por confirmar tu asistencia\nNos vemos el ${new Date(invData.eventDate).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}`
           : 'Lamentamos que no nos puedas acompañar esta vez',
       );
+      if (respuesta === 'yes') setShowCard(true);
       addToast(
         respuesta === 'yes' ? '¡Asistencia confirmada! 🎉' : 'Respuesta registrada',
         'success',
@@ -144,6 +148,15 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
                   Cancelar mi confirmación
                 </button>
               </div>
+              {invData && (
+                <Suspense fallback={null}>
+                  <RSVPConfirmationCard
+                    invData={invData}
+                    token={invData.prettyToken}
+                    EVENTS_URL={EVENTS_URL}
+                  />
+                </Suspense>
+              )}
             </div>
           ) : invData.rsvpStatus === 'declined' ? (
             <div>
@@ -170,6 +183,15 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
                 <div className="w-40 md:w-52 lg:w-60 xl:w-64 rounded-3xl border-2 border-dashed border-gold shadow-lg overflow-hidden mx-auto mt-4">
                   <ImageWithLoader src={imgNo.view_url} alt={imgNo.title || ''} />
                 </div>
+              )}
+              {showCard && invData && (
+                <Suspense fallback={null}>
+                  <RSVPConfirmationCard
+                    invData={invData}
+                    token={invData.prettyToken}
+                    EVENTS_URL={EVENTS_URL}
+                  />
+                </Suspense>
               )}
             </div>
           ) : (
