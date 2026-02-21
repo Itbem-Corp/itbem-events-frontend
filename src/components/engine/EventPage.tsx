@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import SectionRenderer from './SectionRenderer';
 import MusicWidget from '../MusicWidget';
+import ShareWidget from '../ShareWidget';
 import Footer from '../common/Footer';
 import type { PageSpec } from './types';
 
@@ -149,6 +150,8 @@ export default function EventPage({ EVENTS_URL }: Props) {
       {spec.meta.musicUrl && (
         <MusicWidget audioUrl={spec.meta.musicUrl} volume={0.3} />
       )}
+
+      <ShareWidget eventTitle={spec.meta.pageTitle} />
 
       <main className="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20">
         {sorted.map(section => (
