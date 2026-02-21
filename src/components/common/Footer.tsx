@@ -8,8 +8,6 @@ interface FooterProps {
 }
 
 export default function Footer({ contact }: FooterProps = {}) {
-  const phone = contact?.phone ?? "9999988610";
-  const email = contact?.email ?? "contacto.eventiapp@itbem.com";
   const showName = Boolean(contact?.name?.trim());
 
   return (
@@ -36,40 +34,44 @@ export default function Footer({ contact }: FooterProps = {}) {
         )}
 
         {/* WhatsApp */}
-        <a
-          href={`https://wa.me/${phone.replace(/\D/g, "")}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 hover:opacity-80 transition-opacity"
-          aria-label={`Contactar por WhatsApp: ${phone}`}
-        >
-          <img
-            src="/backgrounds/vectores-04.svg"
-            alt=""
-            className="w-12 h-12"
-            loading="lazy"
-            decoding="async"
-            aria-hidden="true"
-          />
-          <span className="text-black font-aloevera text-xl">{phone}</span>
-        </a>
+        {contact?.phone && (
+          <a
+            href={`https://wa.me/${contact.phone.replace(/\D/g, "")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+            aria-label={`Contactar por WhatsApp: ${contact.phone}`}
+          >
+            <img
+              src="/backgrounds/vectores-04.svg"
+              alt=""
+              className="w-12 h-12"
+              loading="lazy"
+              decoding="async"
+              aria-hidden="true"
+            />
+            <span className="text-black font-aloevera text-xl">{contact.phone}</span>
+          </a>
+        )}
 
         {/* Email */}
-        <a
-          href={`mailto:${email}`}
-          className="flex items-center gap-1 hover:opacity-80 transition-opacity"
-          aria-label={`Enviar correo a ${email}`}
-        >
-          <img
-            src="/backgrounds/vectores-05.svg"
-            alt=""
-            className="w-12 h-12"
-            loading="lazy"
-            decoding="async"
-            aria-hidden="true"
-          />
-          <span className="text-black font-aloevera text-md">{email}</span>
-        </a>
+        {contact?.email && (
+          <a
+            href={`mailto:${contact.email}`}
+            className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+            aria-label={`Enviar correo a ${contact.email}`}
+          >
+            <img
+              src="/backgrounds/vectores-05.svg"
+              alt=""
+              className="w-12 h-12"
+              loading="lazy"
+              decoding="async"
+              aria-hidden="true"
+            />
+            <span className="text-black font-aloevera text-md">{contact.email}</span>
+          </a>
+        )}
       </div>
     </motion.footer>
   );
