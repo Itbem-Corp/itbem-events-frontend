@@ -9,6 +9,10 @@ import type { PageSpec } from './types';
 
 interface Props {
   EVENTS_URL: string;
+  /** When set, loads page-spec by event identifier instead of ?token= query param. */
+  identifier?: string;
+  /** When set, opens in RSVP mode — auto-scrolls to the RSVPConfirmation section. */
+  rsvpMode?: boolean;
 }
 
 // ── Cache ────────────────────────────────────────────────────────────────────
@@ -199,7 +203,7 @@ function PasswordGate({
  * 5. Each section is wrapped in SectionErrorBoundary.
  * 6. After load: tracks view (once per session) + enforces date/password gates.
  */
-export default function EventPage({ EVENTS_URL: rawEventsUrl }: Props) {
+export default function EventPage({ EVENTS_URL: rawEventsUrl, identifier: identifierProp, rsvpMode }: Props) {
   // Normalize: ensure trailing slash so `${EVENTS_URL}api/...` always produces a valid URL.
   const EVENTS_URL = rawEventsUrl.endsWith('/') ? rawEventsUrl : rawEventsUrl + '/';
   const [spec, setSpec] = useState<PageSpec | null>(null);
@@ -207,24 +211,32 @@ export default function EventPage({ EVENTS_URL: rawEventsUrl }: Props) {
   const [token, setToken] = useState<string | null>(null);
   const [passwordVerified, setPasswordVerified] = useState(false);
 
-  const loadSpec = useCallback(async (tok: string) => {
+  // Dashboard Studio sends ?preview=1 — skip tracking, cache, and gates.
+  const [isPreview, setIsPreview] = useState(false);
+
+  const loadSpec = useCallback(async (tok: string, byIdentifier = false, skipCache = false) => {
     setError(null);
 
-    // Cache hit — render immediately
-    const cached = readSpecCache(tok);
-    if (cached) {
-      if (cached.meta?.pageTitle) document.title = cached.meta.pageTitle;
-      setSpec(cached);
-      return;
+    // Cache hit — render immediately (skip in preview mode)
+    if (!skipCache) {
+      const cached = readSpecCache(tok);
+      if (cached) {
+        if (cached.meta?.pageTitle) document.title = cached.meta.pageTitle;
+        setSpec(cached);
+        return;
+      }
     }
 
-    // Cache miss — fetch with retry
+    // Cache miss (or preview mode) — fetch with retry
     try {
-      const res = await fetchWithRetry(
-        `${EVENTS_URL}api/events/page-spec?token=${encodeURIComponent(tok)}`
-      );
+      const url = byIdentifier
+        ? `${EVENTS_URL}api/events/${encodeURIComponent(tok)}/page-spec`
+        : `${EVENTS_URL}api/events/page-spec?token=${encodeURIComponent(tok)}`;
+      const res = await fetchWithRetry(url);
       if (res.status === 404) {
-        setError('Invitación no encontrada. Verifica el enlace que recibiste.');
+        setError(byIdentifier
+          ? 'Evento no encontrado. Verifica el enlace.'
+          : 'Invitación no encontrada. Verifica el enlace que recibiste.');
         return;
       }
       if (!res.ok) throw new Error(`Error del servidor (${res.status})`);
@@ -232,7 +244,7 @@ export default function EventPage({ EVENTS_URL: rawEventsUrl }: Props) {
       const json = await res.json();
       const pageSpec: PageSpec = json.data;
       if (pageSpec?.meta?.pageTitle) document.title = pageSpec.meta.pageTitle;
-      writeSpecCache(tok, pageSpec);
+      if (!skipCache) writeSpecCache(tok, pageSpec);
       setSpec(pageSpec);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar la invitación.');
@@ -241,14 +253,25 @@ export default function EventPage({ EVENTS_URL: rawEventsUrl }: Props) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const preview = params.get('preview') === '1';
+    setIsPreview(preview);
+
+    // Identifier mode — load by event slug directly
+    if (identifierProp) {
+      setToken(identifierProp);
+      loadSpec(identifierProp, true, preview);
+      return;
+    }
+
+    // Token mode — read from query string
     const tok = params.get('token');
     if (!tok) {
       setError('Token requerido. Verifica el enlace de tu invitación.');
       return;
     }
     setToken(tok);
-    loadSpec(tok);
-  }, [loadSpec]);
+    loadSpec(tok, false, preview);
+  }, [loadSpec, identifierProp]);
 
   // Track view + restore password verification after spec loads
   useEffect(() => {
@@ -263,9 +286,22 @@ export default function EventPage({ EVENTS_URL: rawEventsUrl }: Props) {
       }
     } catch { /* ignore */ }
 
-    // Track view (fire-and-forget, once per session)
-    trackView(EVENTS_URL, id);
-  }, [spec?.meta?.identifier, EVENTS_URL]);
+    // Track view (fire-and-forget, once per session) — skip in preview mode
+    if (!isPreview) trackView(EVENTS_URL, id);
+  }, [spec?.meta?.identifier, EVENTS_URL, isPreview]);
+
+  // RSVP mode — auto-scroll to the RSVPConfirmation section after render
+  useEffect(() => {
+    if (!rsvpMode || !spec) return;
+    const rsvpSection = spec.sections.find(s => s.type === 'RSVPConfirmation');
+    if (!rsvpSection) return;
+    // Wait for section to render + hydrate
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`section-${rsvpSection.sectionId}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [rsvpMode, spec]);
 
   if (error) {
     return (
@@ -285,30 +321,33 @@ export default function EventPage({ EVENTS_URL: rawEventsUrl }: Props) {
 
   if (!spec) return <PageSkeleton />;
 
-  const { access } = spec.meta;
-  const now = new Date();
+  // Preview mode (dashboard Studio) — bypass all gates
+  if (!isPreview) {
+    const { access } = spec.meta;
+    const now = new Date();
 
-  // Date gate: coming soon
-  if (access?.activeFrom) {
-    const from = new Date(access.activeFrom);
-    if (now < from) return <ComingSoonGate activeFrom={access.activeFrom} />;
-  }
+    // Date gate: coming soon
+    if (access?.activeFrom) {
+      const from = new Date(access.activeFrom);
+      if (now < from) return <ComingSoonGate activeFrom={access.activeFrom} />;
+    }
 
-  // Date gate: event ended
-  if (access?.activeUntil) {
-    const until = new Date(access.activeUntil);
-    if (now > until) return <EventEndedGate activeUntil={access.activeUntil} />;
-  }
+    // Date gate: event ended
+    if (access?.activeUntil) {
+      const until = new Date(access.activeUntil);
+      if (now > until) return <EventEndedGate activeUntil={access.activeUntil} />;
+    }
 
-  // Password gate
-  if (access?.passwordProtected && !passwordVerified && spec.meta.identifier) {
-    return (
-      <PasswordGate
-        eventsUrl={EVENTS_URL}
-        identifier={spec.meta.identifier}
-        onSuccess={() => setPasswordVerified(true)}
-      />
-    );
+    // Password gate
+    if (access?.passwordProtected && !passwordVerified && spec.meta.identifier) {
+      return (
+        <PasswordGate
+          eventsUrl={EVENTS_URL}
+          identifier={spec.meta.identifier}
+          onSuccess={() => setPasswordVerified(true)}
+        />
+      );
+    }
   }
 
   const sorted = [...spec.sections].sort((a, b) => a.order - b.order);

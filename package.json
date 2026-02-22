@@ -13,6 +13,7 @@
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
+    "@astrojs/cloudflare": "^12.6.12",
     "@astrojs/node": "^9.2.1",
     "@astrojs/react": "^4.2.7",
     "@astrojs/tailwind": "^6.0.2",

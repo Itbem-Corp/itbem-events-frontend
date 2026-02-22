@@ -66,12 +66,14 @@ export default function SectionRenderer({ spec, EVENTS_URL }: Props) {
   }
 
   return (
-    <SectionErrorBoundary sectionType={spec.type}>
-      <Component
-        sectionId={spec.sectionId}
-        config={spec.config}
-        EVENTS_URL={EVENTS_URL}
-      />
-    </SectionErrorBoundary>
+    <div id={`section-${spec.sectionId}`}>
+      <SectionErrorBoundary sectionType={spec.type}>
+        <Component
+          sectionId={spec.sectionId}
+          config={spec.config}
+          EVENTS_URL={EVENTS_URL}
+        />
+      </SectionErrorBoundary>
+    </div>
   );
 }

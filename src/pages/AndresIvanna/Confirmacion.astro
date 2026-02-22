@@ -4,10 +4,8 @@ import EventPage from '../../components/engine/EventPage';
 ---
 
 <TemplateLayout title="Andres & Ivanna | Confirmación">
-  <body>
-    <EventPage
-      client:only="react"
-      EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL}
-    />
-  </body>
+  <EventPage
+    client:only="react"
+    EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL}
+  />
 </TemplateLayout>

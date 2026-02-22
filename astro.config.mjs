@@ -2,14 +2,17 @@
 import { defineConfig, envField } from 'astro/config';
 import react from '@astrojs/react';
 import tailwind from '@astrojs/tailwind';
+import cloudflare from '@astrojs/cloudflare';
 import Critters from 'critters';
 
-// Static output — served by Cloudflare Pages.
+// Static by default — pages with `export const prerender = false` opt into SSR.
+// SSR pages (e.g. /e/[identifier], /rsvp/[identifier], /evento) run on
+// Cloudflare Pages Functions for dynamic OG tags.
 // All interactivity is handled by client:only React islands that call
 // PUBLIC_EVENTS_URL (the Go backend) directly from the browser.
-// No SSR server, no Redis sessions needed.
 export default defineConfig({
   output: 'static',
+  adapter: cloudflare(),
 
   site: 'https://eventiapp.com.mx',
 

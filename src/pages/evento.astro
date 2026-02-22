@@ -1,4 +1,6 @@
 ---
+export const prerender = false;
+
 /**
  * Generic event page — zero-code route for new events.
  * Fetches event metadata server-side (Astro SSR) for OG tags so
@@ -49,10 +51,8 @@ if (token) {
   ogImage={ogImage}
   ogUrl={ogUrl}
 >
-  <body>
-    <EventPage
-      client:only="react"
-      EVENTS_URL={EVENTS_URL}
-    />
-  </body>
+  <EventPage
+    client:only="react"
+    EVENTS_URL={EVENTS_URL}
+  />
 </TemplateLayout>

@@ -4,10 +4,8 @@ import EventPage from '../components/engine/EventPage';
 ---
 
 <TemplateLayout title="Nos Graduamos | Izapa 2022–2025">
-  <body>
-    <EventPage
-      client:only="react"
-      EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL}
-    />
-  </body>
+  <EventPage
+    client:only="react"
+    EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL}
+  />
 </TemplateLayout>
