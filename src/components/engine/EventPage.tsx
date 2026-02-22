@@ -199,7 +199,9 @@ function PasswordGate({
  * 5. Each section is wrapped in SectionErrorBoundary.
  * 6. After load: tracks view (once per session) + enforces date/password gates.
  */
-export default function EventPage({ EVENTS_URL }: Props) {
+export default function EventPage({ EVENTS_URL: rawEventsUrl }: Props) {
+  // Normalize: ensure trailing slash so `${EVENTS_URL}api/...` always produces a valid URL.
+  const EVENTS_URL = rawEventsUrl.endsWith('/') ? rawEventsUrl : rawEventsUrl + '/';
   const [spec, setSpec] = useState<PageSpec | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);

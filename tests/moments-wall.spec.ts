@@ -11,6 +11,7 @@ import {
   mockMomentsGet,
   mockMomentsPost,
   mockMomentWallInvitation,
+  mockMomentWallInvitationNotFound,
   installApiGuard,
   MOMENT_TEST_TOKEN,
   API_BASE,
@@ -19,14 +20,19 @@ import { installStorageClearScript } from './helpers/storage';
 import { makeMoment, MOMENT_EVENT_IDENTIFIER } from './fixtures/api-data';
 
 const PAGE_URL      = `/evento?token=${MOMENT_TEST_TOKEN}`;
-const PAGE_URL_ANON = `/evento`; // no token = anonymous visitor
+// Anonymous visitor still needs the page-spec token so EventPage can render the
+// MomentWall.  "Anonymous" means the invitation lookup returns 404 (no upload button).
+const PAGE_URL_ANON = `/evento?token=${MOMENT_TEST_TOKEN}`;
 
 // Standard setup: clear cache, guard first (lowest priority), then specific mocks.
 // Playwright routes are LIFO: last registered wins.
+// mockMomentWallInvitationNotFound is the default — authenticated tests override it
+// by registering mockMomentWallInvitation AFTER beforeEach (LIFO wins).
 test.beforeEach(async ({ page }) => {
   await installStorageClearScript(page);
   await installApiGuard(page);
   await mockMomentWallPageSpec(page);
+  await mockMomentWallInvitationNotFound(page);
 });
 
 // ---------------------------------------------------------------------------
@@ -83,7 +89,7 @@ test.describe('Upload modal', () => {
       mimeType: 'image/jpeg',
       buffer: Buffer.from('fake-image-data'),
     });
-    await page.getByRole('button', { name: 'Subir' }).click();
+    await page.getByRole('button', { name: 'Subir', exact: true }).click();
     await expect(page.getByText(/Aparecerá aquí cuando sea aprobado/)).toBeVisible({ timeout: 10_000 });
   });
 
@@ -96,7 +102,7 @@ test.describe('Upload modal', () => {
       mimeType: 'image/jpeg',
       buffer: Buffer.from('fake-image-data'),
     });
-    await page.getByRole('button', { name: 'Subir' }).click();
+    await page.getByRole('button', { name: 'Subir', exact: true }).click();
     // <p class="text-sm text-red-600"> inside the modal
     await expect(page.locator('.text-red-600')).toBeVisible({ timeout: 10_000 });
   });
@@ -186,7 +192,7 @@ test.describe('Rate-limit (429) handling', () => {
     await page.getByRole('button', { name: /Subir foto o video/ }).click();
     await expect(page.getByRole('heading', { name: 'Subir foto o video' })).toBeVisible({ timeout: 5_000 });
     await page.locator('input[type="file"]').setInputFiles({ name: 'photo.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('x') });
-    await page.getByRole('button', { name: 'Subir' }).click();
+    await page.getByRole('button', { name: 'Subir', exact: true }).click();
     await expect(page.getByText(/Ya registramos tus 3 contribuciones/)).toBeVisible({ timeout: 10_000 });
   });
 });

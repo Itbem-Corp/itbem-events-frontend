@@ -63,7 +63,13 @@ export function makeGraduationPageSpec() {
     data: {
       meta: {
         pageTitle: 'Nos Graduamos 2022-2025 | El Gran Día',
-        musicUrl: '',
+        // Use an S3 URL so mockS3Images intercepts it (returns 404 silently) — Howler
+        // will fail to load audio but the MusicWidget button still renders in tests.
+        musicUrl: 'https://itbem-events-bucket-prod.s3.us-east-2.amazonaws.com/test/graduation-music.mp3',
+        contact: {
+          phone: '9999988610',
+          email: 'contacto.eventiapp@itbem.com',
+        },
       },
       sections: [
         {

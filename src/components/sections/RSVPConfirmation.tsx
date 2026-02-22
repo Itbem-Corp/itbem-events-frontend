@@ -196,7 +196,7 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
             </div>
           ) : (
             <>
-              <h3 className="text-4xl font-astralaga text-dark">{invData.guestName}</h3>
+              <h3 className="text-2xl sm:text-3xl md:text-4xl font-astralaga text-dark">{invData.guestName}</h3>
               <p className="text-2xl font-aloevera text-gold">
                 No. personas: <span className="font-semibold">{invData.maxGuests}</span>
               </p>
@@ -234,7 +234,7 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
                   <select
                     value={numPersonas}
                     onChange={e => setNumPersonas(Number(e.target.value))}
-                    className="border-2 border-dashed border-gold rounded px-3 py-1 font-aloevera text-dark text-xl"
+                    className="border-2 border-dashed border-gold rounded px-3 py-2 font-aloevera text-dark text-xl"
                   >
                     {Array.from({ length: invData.maxGuests }, (_, i) => i + 1).map(n => (
                       <option key={n} value={n}>{n}</option>
@@ -273,7 +273,7 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
                       value={dietaryOther}
                       onChange={(e) => setDietaryOther(e.target.value)}
                       placeholder="Escribe tu restricción..."
-                      className="border-2 border-dashed border-gold rounded-xl px-4 py-2 font-aloevera text-dark text-sm w-64 text-center"
+                      className="border-2 border-dashed border-gold rounded-xl px-4 py-2 font-aloevera text-dark text-sm w-full max-w-xs text-center"
                       aria-label="Especifica tu restricción alimentaria"
                     />
                   )}

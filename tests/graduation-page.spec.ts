@@ -83,7 +83,10 @@ test.describe('Estructura y contenido above-fold', () => {
   test('Section 1 skeleton desaparece después de que carguen los datos', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'NOS GRADUAMOS' }))
       .toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('main').first().locator('.animate-pulse').first()).not.toBeVisible({ timeout: 5_000 });
+    // Check the page-level skeleton <main class="...animate-pulse"> is gone.
+    // Use main.animate-pulse (not a descendant selector) to avoid matching the
+    // hydration placeholders of below-fold sections, which also use animate-pulse.
+    await expect(page.locator('main.animate-pulse')).not.toBeVisible({ timeout: 5_000 });
   });
 
   test('Section 2 renderiza texto de la misa', async ({ page }) => {
@@ -102,6 +105,10 @@ test.describe('Estructura y contenido above-fold', () => {
 test.describe('Secciones below-fold (visible hydration)', () => {
 
   async function scrollToFraction(page: Page, fraction: number): Promise<void> {
+    // Wait for above-fold content so page-spec is fully rendered before we measure
+    // scrollHeight.  Without this guard the skeleton height (~200-400 px) is used,
+    // which leaves below-fold sections out of view after the scroll completes.
+    await page.getByRole('heading', { name: 'NOS GRADUAMOS' }).waitFor({ timeout: 10_000 });
     await page.evaluate(
       (f) => window.scrollTo(0, document.body.scrollHeight * f),
       fraction
@@ -122,13 +129,15 @@ test.describe('Secciones below-fold (visible hydration)', () => {
   });
 
   test('Section 4 hidrata y renderiza heading "Graduados"', async ({ page }) => {
-    await scrollToFraction(page, 0.75);
+    // Scroll past all sections — below-fold placeholders are h-64, so fractional
+    // scrolling under-estimates the target. A large absolute value is reliable.
+    await scrollToFraction(page, 1.0);
     await expect(page.getByRole('heading', { name: 'Graduados' }))
       .toBeVisible({ timeout: 15_000 });
   });
 
   test('Section 4 muestra exactamente 3 nombres de graduados desde DB', async ({ page }) => {
-    await scrollToFraction(page, 0.75);
+    await scrollToFraction(page, 1.0);
     await expect(page.getByRole('heading', { name: 'Graduados' }))
       .toBeVisible({ timeout: 15_000 });
     const items = page.getByRole('listitem');
@@ -136,7 +145,7 @@ test.describe('Secciones below-fold (visible hydration)', () => {
   });
 
   test('Section 4 incluye nombres específicos de la lista de DB', async ({ page }) => {
-    await scrollToFraction(page, 0.75);
+    await scrollToFraction(page, 1.0);
     await expect(page.getByText('Ana Gloria Vásquez Velázquez')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('Valeria Trujillo Iniesta')).toBeVisible({ timeout: 15_000 });
   });
@@ -178,7 +187,9 @@ test.describe('Comportamiento de API y caché', () => {
   });
 
   test('sessionStorage almacena attendees después de cargar GraduatesList', async ({ page }) => {
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight * 0.75));
+    // Wait for above-fold content before scrolling (same reason as scrollToFraction helper).
+    await page.getByRole('heading', { name: 'NOS GRADUAMOS' }).waitFor({ timeout: 10_000 });
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(600);
     await expect(page.getByRole('heading', { name: 'Graduados' })).toBeVisible({ timeout: 15_000 });
 

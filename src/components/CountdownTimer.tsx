@@ -63,27 +63,27 @@ export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
     }, [targetDate]);
 
     return (
-        <div className="flex justify-center md:gap-18 sm:gap-14 gap-10 text-[#07293A]">
+        <div className="flex justify-center gap-8 sm:gap-12 md:gap-16 text-[#07293A]">
             <div className="text-center">
-                <div className="text-3xl font-bold text-blue">
+                <div className="text-2xl sm:text-3xl font-bold text-blue">
                     <AnimatedDigit value={timeLeft.days} />
                 </div>
                 <div className="text-sm font-medium font-quicksand">Días</div>
             </div>
             <div className="text-center">
-                <div className="text-3xl font-bold text-blue">
+                <div className="text-2xl sm:text-3xl font-bold text-blue">
                     <AnimatedDigit value={timeLeft.hours} />
                 </div>
                 <div className="text-sm font-medium font-quicksand">Horas</div>
             </div>
             <div className="text-center">
-                <div className="text-3xl font-bold text-blue">
+                <div className="text-2xl sm:text-3xl font-bold text-blue">
                     <AnimatedDigit value={timeLeft.minutes} />
                 </div>
                 <div className="text-sm font-medium font-quicksand">Minutos</div>
             </div>
             <div className="text-center">
-                <div className="text-3xl font-bold text-blue">
+                <div className="text-2xl sm:text-3xl font-bold text-blue">
                     <AnimatedDigit value={timeLeft.seconds} />
                 </div>
                 <div className="text-sm font-medium font-quicksand">Segundos</div>

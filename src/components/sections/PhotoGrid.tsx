@@ -9,12 +9,12 @@ import type { SectionComponentProps } from '../engine/types';
 function Skeleton() {
   return (
     <section className="space-y-6 relative z-0 animate-pulse pt-10">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4">
         {[...Array(2)].map((_, i) => (
           <div key={i} className="bg-gray-200 aspect-[3/2] rounded shadow-md" />
         ))}
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {[...Array(3)].map((_, i) => (
           <div key={i} className="bg-gray-200 aspect-[3/2] rounded shadow-md" />
         ))}
@@ -42,7 +42,7 @@ export default function PhotoGrid({ sectionId, EVENTS_URL }: SectionComponentPro
           >
             {/* Top row — 2 columns */}
             <motion.div
-              className="grid grid-cols-2 gap-4"
+              className="grid grid-cols-2 gap-2 sm:gap-4"
               initial="hidden"
               animate="visible"
               variants={{ visible: { transition: { staggerChildren: 0.1 } }, hidden: {} }}
@@ -61,7 +61,7 @@ export default function PhotoGrid({ sectionId, EVENTS_URL }: SectionComponentPro
 
             {/* Bottom row — 3 columns */}
             <motion.div
-              className="grid grid-cols-3 gap-4"
+              className="grid grid-cols-3 gap-2 sm:gap-4"
               initial="hidden"
               animate="visible"
               variants={{ visible: { transition: { staggerChildren: 0.1 } }, hidden: {} }}

@@ -13,11 +13,11 @@ function Skeleton() {
         <div className="bg-gray-200 aspect-[3/2] rounded shadow-md w-full" />
         <div className="bg-gray-200 aspect-[3/2] rounded shadow-md w-full" />
       </div>
-      <div className="flex flex-row gap-2">
-        <div className="basis-full sm:basis-2/3 px-2">
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="sm:basis-2/3 px-2 pb-2 sm:pb-0">
           <div className="bg-gray-200 w-full max-w-[500px] aspect-[4/3] rounded mx-auto" />
         </div>
-        <div className="basis-2/3 space-y-2 ps-2">
+        <div className="sm:basis-2/3 space-y-2 sm:ps-2">
           <div className="h-4 bg-gray-200 rounded w-3/4 mx-auto" />
           <div className="h-4 bg-gray-200 rounded w-1/2 mx-auto" />
         </div>
@@ -56,8 +56,8 @@ export default function Reception({ sectionId, config, EVENTS_URL }: SectionComp
               ))}
             </div>
 
-            <div className="flex flex-row">
-              <div className="basis-full sm:basis-2/3 px-2">
+            <div className="flex flex-col sm:flex-row">
+              <div className="sm:basis-2/3 px-2 pb-4 sm:pb-0">
                 <div className="bg-gray-300 w-full max-w-[500px] aspect-[4/3] rounded mx-auto overflow-hidden">
                   <iframe
                     src={mapUrl}
@@ -68,8 +68,8 @@ export default function Reception({ sectionId, config, EVENTS_URL }: SectionComp
                   />
                 </div>
               </div>
-              <div className="basis-2/3 place-content-center ps-2">
-                <p className="text-sm md:text-2xl leading-relaxed font-quicksand text-[#07293A]">
+              <div className="sm:basis-2/3 place-content-center sm:ps-2">
+                <p className="text-sm sm:text-base md:text-2xl leading-relaxed font-quicksand text-[#07293A]">
                   {venueText}
                 </p>
               </div>

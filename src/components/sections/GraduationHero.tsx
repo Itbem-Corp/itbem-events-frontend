@@ -59,7 +59,7 @@ export default function GraduationHero({ sectionId, config, EVENTS_URL }: Sectio
               <h3 className="text-2xl sm:text-3xl md:text-4xl font-bigilla text-[#07293a]">{years}</h3>
             </div>
 
-            <div className="flex flex-row items-center justify-center gap-2 md:gap-6 max-w-4xl mx-auto">
+            <div className="flex flex-row items-center justify-center gap-3 sm:gap-4 md:gap-6 max-w-4xl mx-auto">
               <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 flex-shrink-0">
                 {section.sectionResources[1]?.view_url && (
                   <ImageWithLoader

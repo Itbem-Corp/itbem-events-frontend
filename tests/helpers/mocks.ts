@@ -19,7 +19,11 @@ import {
   MOMENT_EVENT_IDENTIFIER,
 } from '../fixtures/api-data';
 
-export const API_BASE = 'http://api.eventiapp.com.mx';
+// Strip trailing slash so route patterns are built consistently:
+//   `${API_BASE}/api/...` always produces a valid URL.
+// Reads PUBLIC_EVENTS_URL from process.env (loaded by playwright.config.ts from .env)
+// so mock interceptors always match the URL the running dev server is configured with.
+export const API_BASE = (process.env['PUBLIC_EVENTS_URL'] ?? 'http://api.eventiapp.com.mx/').replace(/\/$/, '');
 
 // Resource count per graduation section (mirrors actual backend data shape)
 const GRADUATION_RESOURCE_COUNTS: Record<string, number> = {
@@ -262,6 +266,27 @@ export async function mockMomentsPost(
           body: JSON.stringify({ message: 'Error interno del servidor' }),
         });
       }
+    }
+  );
+}
+
+/**
+ * Intercepts the InvitationLoader GET for the MomentWall auth flow — returns 404
+ * (no invitation found). Use for anonymous-visitor tests so the API guard does not
+ * log a console.error for the unmocked invitation endpoint.
+ */
+export async function mockMomentWallInvitationNotFound(
+  page: Page,
+  token = MOMENT_TEST_TOKEN,
+): Promise<void> {
+  await page.route(
+    API_BASE + '/api/invitations/ByToken/' + token,
+    async (route) => {
+      await route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ message: 'Invitation not found' }),
+      });
     }
   );
 }

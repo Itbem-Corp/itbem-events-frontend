@@ -289,7 +289,7 @@ test.describe('Manejo de errores en RSVP', () => {
     await page.getByRole('button', { name: 'Claro, con gusto' }).click();
     await page.getByRole('button', { name: 'Enviar' }).click();
 
-    await expect(page.getByText(/❌ Error: Token inválido/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Error: Token inválido/)).toBeVisible({ timeout: 10_000 });
   });
 
   test('error de red en POST muestra mensaje de error genérico', async ({ page }) => {
@@ -303,7 +303,7 @@ test.describe('Manejo de errores en RSVP', () => {
     await page.getByRole('button', { name: 'Claro, con gusto' }).click();
     await page.getByRole('button', { name: 'Enviar' }).click();
 
-    await expect(page.getByText(/❌ Error:/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Error:/)).toBeVisible({ timeout: 10_000 });
   });
 });
 

@@ -16,12 +16,12 @@ function Skeleton() {
       <p className="bg-gray-200 h-6 w-3/4 mx-auto rounded" />
       <div className="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-200 rounded shadow-md" />
       <p className="bg-gray-200 h-6 w-1/2 mx-auto rounded" />
-      <div className="flex flex-row gap-2">
-        <div className="basis-2/3 space-y-2 pe-4">
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="sm:basis-2/3 space-y-2 sm:pe-4">
           <div className="h-4 bg-gray-200 rounded w-full" />
           <div className="h-4 bg-gray-200 rounded w-5/6" />
         </div>
-        <div className="basis-full sm:basis-2/3 px-2">
+        <div className="sm:basis-2/3 px-2">
           <div className="bg-gray-200 w-full max-w-[500px] aspect-[4/3] rounded mx-auto" />
         </div>
       </div>
@@ -68,13 +68,13 @@ export default function EventVenue({ sectionId, config, EVENTS_URL }: SectionCom
 
             <p className="text-2xl font-semibold font-bigilla text-[#8B5D3D]">{date}</p>
 
-            <div className="flex flex-row">
-              <div className="basis-2/3 place-content-center pe-4">
-                <p className="text-sm md:text-2xl leading-relaxed font-quicksand text-[#07293A]">
+            <div className="flex flex-col sm:flex-row">
+              <div className="sm:basis-2/3 place-content-center sm:pe-4 pb-4 sm:pb-0">
+                <p className="text-sm sm:text-base md:text-2xl leading-relaxed font-quicksand text-[#07293A]">
                   {venueText}
                 </p>
               </div>
-              <div className="basis-full sm:basis-2/3 px-2">
+              <div className="sm:basis-2/3 px-2">
                 <div className="bg-gray-300 w-full max-w-[500px] aspect-[4/3] rounded mx-auto overflow-hidden">
                   <iframe
                     src={mapUrl}

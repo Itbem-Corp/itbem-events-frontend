@@ -1,4 +1,18 @@
 import { defineConfig, devices } from '@playwright/test';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+// Load PUBLIC_EVENTS_URL from .env so test mock interceptors use the same
+// base URL the running dev server is configured with.
+// Workers inherit process.env from the main Playwright process (they are forked),
+// so setting it here makes it available in all test helper files.
+try {
+  const envContent = readFileSync(join(process.cwd(), '.env'), 'utf-8');
+  const match = envContent.match(/^PUBLIC_EVENTS_URL=(.+)$/m);
+  if (match && !process.env['PUBLIC_EVENTS_URL']) {
+    process.env['PUBLIC_EVENTS_URL'] = match[1].trim();
+  }
+} catch { /* .env missing — CI sets the var directly */ }
 
 export default defineConfig({
   testDir: './tests',
@@ -40,7 +54,10 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:4321/graduacion-izapa',
-    reuseExistingServer: !process.env.CI,
+    // Always start a fresh server so PUBLIC_EVENTS_URL in .env is guaranteed
+    // to match the API_BASE used in mock interceptors.
+    // Note: this stops any dev server already running on port 4321.
+    reuseExistingServer: false,
     timeout: 60_000,
     stdout: 'pipe',
     stderr: 'pipe',
