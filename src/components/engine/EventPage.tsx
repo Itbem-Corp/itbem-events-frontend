@@ -38,6 +38,21 @@ function writeSpecCache(token: string, spec: PageSpec) {
   }
 }
 
+// ── View Tracking ────────────────────────────────────────────────────────────
+// Fires once per session per event. Uses sessionStorage so returning to the
+// same tab within the session doesn't double-count.
+
+function trackView(eventsUrl: string, identifier: string) {
+  const key = `view-tracked-${identifier}`;
+  if (sessionStorage.getItem(key)) return; // already counted this session
+  try { sessionStorage.setItem(key, '1'); } catch { /* ignore */ }
+  // Fire-and-forget — never block the page
+  fetch(`${eventsUrl}api/events/${encodeURIComponent(identifier)}/view`, {
+    method: 'POST',
+    keepalive: true,
+  }).catch(() => { /* ignore network errors */ });
+}
+
 // ── Fetch with retry ─────────────────────────────────────────────────────────
 
 async function fetchWithRetry(url: string, retries = 3): Promise<Response> {
@@ -64,6 +79,112 @@ function PageSkeleton() {
   );
 }
 
+// ── Date Gate ─────────────────────────────────────────────────────────────────
+
+function ComingSoonGate({ activeFrom }: { activeFrom: string }) {
+  const date = new Date(activeFrom);
+  const formatted = date.toLocaleDateString('es-MX', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+  });
+  return (
+    <main className="min-h-screen flex flex-col items-center justify-center px-4 text-center space-y-6 bg-white">
+      <div className="text-6xl">🗓️</div>
+      <h1 className="text-2xl font-semibold text-gray-800">Esta invitación aún no está disponible</h1>
+      <p className="text-gray-500 max-w-sm">
+        La página estará disponible el <strong>{formatted}</strong>.
+        <br />Guarda este enlace y vuelve entonces.
+      </p>
+    </main>
+  );
+}
+
+function EventEndedGate({ activeUntil }: { activeUntil: string }) {
+  const date = new Date(activeUntil);
+  const formatted = date.toLocaleDateString('es-MX', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+  return (
+    <main className="min-h-screen flex flex-col items-center justify-center px-4 text-center space-y-6 bg-white">
+      <div className="text-6xl">✨</div>
+      <h1 className="text-2xl font-semibold text-gray-800">¡El evento ya concluyó!</h1>
+      <p className="text-gray-500 max-w-sm">
+        Esta página estuvo disponible hasta el <strong>{formatted}</strong>.
+        <br />Gracias por haber sido parte de este momento especial.
+      </p>
+    </main>
+  );
+}
+
+// ── Password Gate ─────────────────────────────────────────────────────────────
+
+function PasswordGate({
+  eventsUrl,
+  identifier,
+  onSuccess,
+}: {
+  eventsUrl: string;
+  identifier: string;
+  onSuccess: () => void;
+}) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const verify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `${eventsUrl}api/events/${encodeURIComponent(identifier)}/verify-access`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        }
+      );
+      if (res.ok) {
+        try { sessionStorage.setItem(`event-verified-${identifier}`, '1'); } catch { /* ignore */ }
+        onSuccess();
+      } else {
+        setError('Contraseña incorrecta. Intenta de nuevo.');
+      }
+    } catch {
+      setError('Error al verificar. Intenta de nuevo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <main className="min-h-screen flex flex-col items-center justify-center px-4 bg-white">
+      <form onSubmit={verify} className="w-full max-w-xs space-y-5 text-center">
+        <div className="text-5xl">🔒</div>
+        <h1 className="text-xl font-semibold text-gray-800">Esta invitación es privada</h1>
+        <p className="text-gray-500 text-sm">Ingresa la contraseña que recibiste junto con tu invitación.</p>
+        <input
+          type="password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          placeholder="Contraseña"
+          autoFocus
+          required
+          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+        />
+        {error && <p className="text-red-500 text-xs">{error}</p>}
+        <button
+          type="submit"
+          disabled={loading || !password}
+          className="w-full bg-gray-900 text-white rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50 hover:bg-gray-700 transition-colors"
+        >
+          {loading ? 'Verificando…' : 'Acceder'}
+        </button>
+      </form>
+    </main>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 /**
@@ -76,11 +197,13 @@ function PageSkeleton() {
  *    404 responses are not retried (invalid token).
  * 4. Stores result in cache, then renders sections via SectionRenderer.
  * 5. Each section is wrapped in SectionErrorBoundary.
+ * 6. After load: tracks view (once per session) + enforces date/password gates.
  */
 export default function EventPage({ EVENTS_URL }: Props) {
   const [spec, setSpec] = useState<PageSpec | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [passwordVerified, setPasswordVerified] = useState(false);
 
   const loadSpec = useCallback(async (tok: string) => {
     setError(null);
@@ -125,6 +248,23 @@ export default function EventPage({ EVENTS_URL }: Props) {
     loadSpec(tok);
   }, [loadSpec]);
 
+  // Track view + restore password verification after spec loads
+  useEffect(() => {
+    if (!spec?.meta?.identifier) return;
+
+    const id = spec.meta.identifier;
+
+    // Restore verified state from sessionStorage
+    try {
+      if (sessionStorage.getItem(`event-verified-${id}`) === '1') {
+        setPasswordVerified(true);
+      }
+    } catch { /* ignore */ }
+
+    // Track view (fire-and-forget, once per session)
+    trackView(EVENTS_URL, id);
+  }, [spec?.meta?.identifier, EVENTS_URL]);
+
   if (error) {
     return (
       <main className="max-w-screen-md mx-auto px-4 py-20 text-center space-y-4">
@@ -142,6 +282,32 @@ export default function EventPage({ EVENTS_URL }: Props) {
   }
 
   if (!spec) return <PageSkeleton />;
+
+  const { access } = spec.meta;
+  const now = new Date();
+
+  // Date gate: coming soon
+  if (access?.activeFrom) {
+    const from = new Date(access.activeFrom);
+    if (now < from) return <ComingSoonGate activeFrom={access.activeFrom} />;
+  }
+
+  // Date gate: event ended
+  if (access?.activeUntil) {
+    const until = new Date(access.activeUntil);
+    if (now > until) return <EventEndedGate activeUntil={access.activeUntil} />;
+  }
+
+  // Password gate
+  if (access?.passwordProtected && !passwordVerified && spec.meta.identifier) {
+    return (
+      <PasswordGate
+        eventsUrl={EVENTS_URL}
+        identifier={spec.meta.identifier}
+        onSuccess={() => setPasswordVerified(true)}
+      />
+    );
+  }
 
   const sorted = [...spec.sections].sort((a, b) => a.order - b.order);
 

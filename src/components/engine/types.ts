@@ -83,6 +83,15 @@ export interface PageContact {
   email?: string;
 }
 
+export interface PageAccess {
+  /** ISO 8601 — page is not visible before this datetime */
+  activeFrom?: string;
+  /** ISO 8601 — page is not visible after this datetime */
+  activeUntil?: string;
+  /** If true, the guest must enter a password before seeing the page */
+  passwordProtected: boolean;
+}
+
 export interface PageMeta {
   pageTitle: string;
   /** If present, MusicWidget renders with this URL */
@@ -92,6 +101,8 @@ export interface PageMeta {
   eventId?: string;
   /** Human-readable event identifier */
   identifier?: string;
+  /** Access control settings */
+  access?: PageAccess;
 }
 
 export interface PageSpec {

@@ -1,0 +1,6 @@
+# Cloudflare Pages routing rules
+#
+# Rewrite /events/{identifier}/upload → /events/upload (200 = serve without redirect)
+# The React component reads the original pathname from window.location.pathname
+# to extract the event identifier.
+/events/*/upload  /events/upload  200

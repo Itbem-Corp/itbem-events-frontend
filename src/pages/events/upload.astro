@@ -1,0 +1,36 @@
+---
+/**
+ * Shared upload page — linked from the dashboard QR code.
+ *
+ * URL patterns that land here:
+ *   /events/upload               (direct – identifier comes from ?e= query param)
+ *   /events/{identifier}/upload  (via Cloudflare Pages _redirects rewrite → this file)
+ *
+ * The React component reads the event identifier from window.location.pathname
+ * so that the friendly URL (/events/mi-boda/upload) works seamlessly.
+ */
+import TemplateLayout from '../../layouts/template.astro';
+import SharedUploadPage from '../../components/SharedUploadPage';
+
+const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string ?? 'http://localhost:8080/';
+
+// Attempt server-side identifier extraction for OG tags
+// (works at runtime on Cloudflare Pages SSR; gracefully degrades on static builds)
+let ogTitle       = 'Comparte tu momento';
+let ogDescription = 'Sube una foto o video para el organizador del evento.';
+const ogUrl       = Astro.url.href;
+---
+
+<TemplateLayout
+  title={ogTitle}
+  ogTitle={ogTitle}
+  ogDescription={ogDescription}
+  ogUrl={ogUrl}
+>
+  <body>
+    <SharedUploadPage
+      client:only="react"
+      EVENTS_URL={EVENTS_URL}
+    />
+  </body>
+</TemplateLayout>
