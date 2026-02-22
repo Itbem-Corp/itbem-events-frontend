@@ -9,6 +9,24 @@ const QRCodeSVG = lazy(() =>
   import('qrcode.react').then(m => ({ default: m.QRCodeSVG }))
 );
 
+/* ── Catalyst logomark (icon only) ──────────────────────────────────── */
+function EventiAppMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 26 22" fill="currentColor" className={className} aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M6.999.5L6.57.743.57 10.743v.514l6 10 .429.243H19l.353-.854L16.853 18.146 16.499 18H9.274L4.841 11l4.433-7H16.499l.354-.146 2.5-2.5L19 .5H6.999Z"
+      />
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M20.793 4.219l-2.427 2.427-.069.621 2.364 3.732-2.364 3.733.069.621 2.427 2.427.783-.096 3.856-6.427v-.514l-3.856-6.427-.783-.097Z"
+      />
+    </svg>
+  );
+}
+
 interface Props {
   invData: InvitationData;
   token: string;
@@ -33,7 +51,7 @@ export default function RSVPConfirmationCard({ invData, token, EVENTS_URL }: Pro
     if (!cardRef.current) return;
     try {
       const { toPng } = await import('html-to-image');
-      const dataUrl = await toPng(cardRef.current, { quality: 0.95, pixelRatio: 2 });
+      const dataUrl = await toPng(cardRef.current, { quality: 0.95, pixelRatio: 3 });
       const link = document.createElement('a');
       link.download = `confirmacion-${invData.guestName.replace(/\s+/g, '-').toLowerCase()}.png`;
       link.href = dataUrl;
@@ -47,7 +65,7 @@ export default function RSVPConfirmationCard({ invData, token, EVENTS_URL }: Pro
   const eventName = (invData as InvitationData & { eventName?: string }).eventName;
 
   const whatsappText = encodeURIComponent(
-    `¡Confirmé mi asistencia! 🎉\n${eventName ? `${eventName}\n` : ''}${formattedDate}\n\nMi invitación: ${eventUrl}`
+    `¡Confirme mi asistencia! 🎉\n${eventName ? `${eventName}\n` : ''}${formattedDate}\n\nMi invitacion: ${eventUrl}`
   );
 
   return (
@@ -55,65 +73,107 @@ export default function RSVPConfirmationCard({ invData, token, EVENTS_URL }: Pro
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
-      className="flex flex-col items-center gap-4 mt-8"
+      className="flex flex-col items-center gap-5 mt-8"
     >
       {/* Card — captured by html-to-image */}
       <div
         ref={cardRef}
-        className="w-72 rounded-3xl p-6 flex flex-col items-center gap-4 text-center"
-        style={{ background: '#fff', border: '2px dashed #C7A44C' }}
+        className="w-80 rounded-3xl overflow-hidden flex flex-col items-center text-center"
+        style={{ background: '#ffffff', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}
       >
-        <div>
-          <p
-            className="text-xs uppercase tracking-widest font-aloevera"
-            style={{ color: '#8B5D3D' }}
-          >
-            Confirmación de asistencia
+        {/* Gold accent bar */}
+        <div className="w-full h-1.5" style={{ background: 'linear-gradient(90deg, #C7A44C, #E8D5A0, #C7A44C)' }} />
+
+        <div className="px-8 py-7 flex flex-col items-center gap-4 w-full">
+          {/* Brand mark */}
+          <div className="flex items-center gap-1.5">
+            <EventiAppMark className="h-3.5 w-auto text-[#C7A44C]" />
+            <span
+              className="text-[10px] uppercase tracking-[0.2em] font-aloevera font-medium"
+              style={{ color: '#C7A44C' }}
+            >
+              eventiapp
+            </span>
+          </div>
+
+          {/* Header */}
+          <div>
+            <p
+              className="text-xs uppercase tracking-[0.15em] font-aloevera"
+              style={{ color: '#8B5D3D' }}
+            >
+              Confirmacion de asistencia
+            </p>
+            {eventName && (
+              <h3 className="text-xl font-astralaga mt-1.5" style={{ color: '#07293A' }}>
+                {eventName}
+              </h3>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 w-full px-4">
+            <div className="flex-1 h-px" style={{ backgroundColor: '#E8D5A0' }} />
+            <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: '#C7A44C' }} />
+            <div className="flex-1 h-px" style={{ backgroundColor: '#E8D5A0' }} />
+          </div>
+
+          {/* Guest name */}
+          <p className="text-2xl font-astralaga leading-tight" style={{ color: '#07293A' }}>
+            {invData.guestName}
           </p>
-          {eventName && (
-            <h3 className="text-xl font-astralaga mt-1" style={{ color: '#07293A' }}>
-              {eventName}
-            </h3>
-          )}
-        </div>
 
-        <div className="w-12 h-px" style={{ backgroundColor: '#C7A44C' }} />
+          {/* Date */}
+          <p className="text-sm font-aloevera capitalize" style={{ color: '#8B5D3D' }}>
+            {formattedDate}
+          </p>
 
-        <p className="text-2xl font-astralaga" style={{ color: '#07293A' }}>
-          {invData.guestName}
-        </p>
-
-        <p className="text-sm font-aloevera capitalize" style={{ color: '#8B5D3D' }}>
-          {formattedDate}
-        </p>
-
-        {/* QR Code */}
-        <div className="p-3 rounded-xl" style={{ border: '1px solid #e5e7eb' }}>
-          <Suspense
-            fallback={<div className="w-24 h-24 bg-gray-100 animate-pulse rounded" />}
+          {/* QR Code with branded frame */}
+          <div
+            className="p-4 rounded-2xl mt-1"
+            style={{
+              background: '#FAFAF8',
+              border: '1.5px solid #E8D5A0',
+            }}
           >
-            <QRCodeSVG
-              value={eventUrl}
-              size={96}
-              fgColor="#07293A"
-              bgColor="#ffffff"
-              level="M"
-            />
-          </Suspense>
+            <Suspense
+              fallback={<div className="w-28 h-28 bg-gray-100 animate-pulse rounded-lg" />}
+            >
+              <QRCodeSVG
+                value={eventUrl}
+                size={112}
+                fgColor="#07293A"
+                bgColor="#FAFAF8"
+                level="M"
+                imageSettings={{
+                  src: 'data:image/svg+xml,' + encodeURIComponent(
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 26 22" fill="%23C7A44C"><path fill-rule="evenodd" clip-rule="evenodd" d="M6.999.5L6.57.743.57 10.743v.514l6 10 .429.243H19l.353-.854L16.853 18.146 16.499 18H9.274L4.841 11l4.433-7H16.499l.354-.146 2.5-2.5L19 .5H6.999Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M20.793 4.219l-2.427 2.427-.069.621 2.364 3.732-2.364 3.733.069.621 2.427 2.427.783-.096 3.856-6.427v-.514l-3.856-6.427-.783-.097Z"/></svg>'
+                  ),
+                  height: 16,
+                  width: 20,
+                  excavate: true,
+                }}
+              />
+            </Suspense>
+          </div>
+
+          {/* Hint */}
+          <p className="text-[11px] font-aloevera" style={{ color: '#9ca3af' }}>
+            Presenta este codigo QR en la entrada
+          </p>
         </div>
 
-        <p className="text-xs font-aloevera" style={{ color: '#9ca3af' }}>
-          Presenta este QR en la entrada
-        </p>
+        {/* Bottom gold accent */}
+        <div className="w-full h-1" style={{ background: 'linear-gradient(90deg, #C7A44C, #E8D5A0, #C7A44C)' }} />
       </div>
 
       {/* Action buttons */}
-      <div className="flex flex-col sm:flex-row gap-3 w-72">
+      <div className="flex flex-col sm:flex-row gap-3 w-80">
         <a
           href={`https://wa.me/?text=${whatsappText}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-aloevera text-sm"
+          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl font-aloevera text-sm shadow-sm"
           style={{ backgroundColor: '#25D366', color: '#fff' }}
         >
           <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current" aria-hidden="true">
@@ -126,13 +186,16 @@ export default function RSVPConfirmationCard({ invData, token, EVENTS_URL }: Pro
         <button
           type="button"
           onClick={handleSaveImage}
-          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-aloevera text-sm border-2 border-dashed"
-          style={{ borderColor: '#C7A44C', color: '#8B5D3D' }}
+          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl font-aloevera text-sm shadow-sm transition-colors"
+          style={{
+            background: 'linear-gradient(135deg, #07293A, #0D3D56)',
+            color: '#E8D5A0',
+          }}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
-          Guardar
+          Guardar imagen
         </button>
       </div>
     </motion.div>
