@@ -14,7 +14,7 @@ export default defineConfig({
   output: 'server',
   adapter: cloudflare(),
 
-  site: 'https://eventiapp.com.mx',
+  site: 'https://www.eventiapp.com.mx',
 
   integrations: [react(), tailwind()],
 
