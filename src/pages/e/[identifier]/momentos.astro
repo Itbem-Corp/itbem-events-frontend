@@ -1,0 +1,45 @@
+---
+export const prerender = false
+
+import TemplateLayout from '../../../layouts/template.astro'
+import MomentsGallery from '../../../components/moments/MomentsGallery'
+import { fetchEventOgData, buildOgImageUrl } from '../../../lib/og'
+
+const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string ?? 'http://localhost:8080/'
+const { identifier } = Astro.params
+
+let ogTitle = 'Momentos del evento'
+let ogDesc  = 'Las mejores fotos y videos del evento. Revive cada momento.'
+let ogImage = ''
+const ogUrl = Astro.url.href
+
+if (identifier) {
+  const ev = await fetchEventOgData(EVENTS_URL, identifier)
+  if (ev) {
+    ogTitle = ev.name ? `Momentos — ${ev.name}` : ogTitle
+
+    if (ev.organizer_name) {
+      ogDesc = `Galeria de fotos y videos de ${ev.name}. Revive los mejores momentos.`
+    }
+
+    ogImage = buildOgImageUrl({
+      title: `Momentos — ${ev.name}`,
+      cover: ev.cover_image_url,
+      type: ev.event_type,
+    })
+  }
+}
+---
+
+<TemplateLayout
+  title={ogTitle}
+  ogTitle={ogTitle}
+  ogDescription={ogDesc}
+  ogImage={ogImage}
+  ogUrl={ogUrl}
+>
+  <MomentsGallery
+    client:only="react"
+    EVENTS_URL={EVENTS_URL}
+  />
+</TemplateLayout>

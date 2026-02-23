@@ -1,0 +1,55 @@
+---
+export const prerender = false;
+
+/**
+ * Public event preview page — /e/{identifier}
+ * Loads the SDUI PageSpec by event identifier (no invitation token required).
+ * Used by the dashboard "Vista previa" button and shareable public links.
+ */
+import TemplateLayout from '../../../layouts/template.astro';
+import EventPage from '../../../components/engine/EventPage';
+import { fetchEventOgData, buildOgImageUrl } from '../../../lib/og';
+
+const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string;
+const { identifier } = Astro.params;
+
+let ogTitle = 'Estás invitado';
+let ogDesc  = 'Abre tu invitación y descubre todos los detalles del evento.';
+let ogImage = '';
+const ogUrl = Astro.url.href;
+
+if (identifier) {
+  const ev = await fetchEventOgData(EVENTS_URL, identifier);
+  if (ev) {
+    ogTitle = ev.name || ogTitle;
+
+    if (ev.description) {
+      ogDesc = ev.description.slice(0, 160);
+    } else if (ev.organizer_name) {
+      ogDesc = `${ev.organizer_name} te invita. Abre para ver fecha, lugar y confirmar asistencia.`;
+    }
+
+    ogImage = buildOgImageUrl({
+      title: ev.name,
+      date: ev.event_date_time,
+      address: ev.address,
+      cover: ev.cover_image_url,
+      type: ev.event_type,
+    });
+  }
+}
+---
+
+<TemplateLayout
+  title={ogTitle}
+  ogTitle={ogTitle}
+  ogDescription={ogDesc}
+  ogImage={ogImage}
+  ogUrl={ogUrl}
+>
+  <EventPage
+    client:only="react"
+    EVENTS_URL={EVENTS_URL}
+    identifier={identifier}
+  />
+</TemplateLayout>

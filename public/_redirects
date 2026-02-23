@@ -4,3 +4,4 @@
 # The React component reads the original pathname from window.location.pathname
 # to extract the event identifier.
 /events/*/upload  /events/upload  200
+/e/*/momentos  /e/momentos  200

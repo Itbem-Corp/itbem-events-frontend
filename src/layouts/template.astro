@@ -26,9 +26,9 @@ const {
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- Preload critical fonts -->
     <link rel="preload" href="/fonts/Bigilla.otf" as="font" type="font/otf" crossorigin>
-    <link rel="preload" href="/fonts/Quicksand-VariableFont_wght.ttf" as="font" type="font/truetype" crossorigin>
+    <link rel="preload" href="/fonts/Quicksand-VariableFont_wght.ttf" as="font" type="font/ttf" crossorigin>
     <link rel="preload" href="/fonts/Aloevera-Regular.otf" as="font" type="font/otf" crossorigin>
-    <link rel="preload" href="/fonts/Astralaga SemiBold.ttf" as="font" type="font/truetype" crossorigin>
+    <link rel="preload" href="/fonts/Astralaga SemiBold.ttf" as="font" type="font/ttf" crossorigin>
 
     <!-- Preconnect to AWS S3 -->
     <link rel="preconnect" href="https://itbem-events-bucket-prod.s3.us-east-2.amazonaws.com" crossorigin>
@@ -43,14 +43,20 @@ const {
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
 
+    <!-- SEO -->
+    <meta name="description" content={ogDescription} />
+
     <!-- Open Graph -->
     <meta property="og:title" content={ogTitle} />
     <meta property="og:description" content={ogDescription} />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="EventiApp" />
+    <meta property="og:locale" content="es_MX" />
     {ogUrl   && <meta property="og:url"            content={ogUrl} />}
     {ogImage && <meta property="og:image"          content={ogImage} />}
     {ogImage && <meta property="og:image:width"    content="1200" />}
     {ogImage && <meta property="og:image:height"   content="630" />}
+    {ogImage && <meta property="og:image:type"     content="image/png" />}
 
     <!-- Twitter Card -->
     <meta name="twitter:card"        content={ogImage ? 'summary_large_image' : 'summary'} />

@@ -8,32 +8,32 @@ export const prerender = false;
  */
 import TemplateLayout from '../../layouts/template.astro';
 import EventPage from '../../components/engine/EventPage';
+import { fetchEventOgData, buildOgImageUrl } from '../../lib/og';
 
 const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string;
 const { identifier } = Astro.params;
 
-// Best-effort OG tags via server-side fetch
-let ogTitle = 'Eventiapp | Confirma tu asistencia';
-let ogDesc  = 'Confirma tu asistencia al evento.';
+let ogTitle = 'Confirma tu asistencia';
+let ogDesc  = 'Te esperamos. Confirma en un tap y no te pierdas ningún detalle.';
 let ogImage = '';
 const ogUrl = Astro.url.href;
 
 if (identifier) {
-  try {
-    const res = await fetch(
-      `${EVENTS_URL}api/events/${encodeURIComponent(identifier)}/page-spec`,
-      { signal: AbortSignal.timeout(3000) }
-    );
-    if (res.ok) {
-      const json = await res.json() as {
-        data?: { meta?: { pageTitle?: string; contact?: { name?: string } } }
-      };
-      const meta = json?.data?.meta;
-      if (meta?.pageTitle) ogTitle = `Confirma | ${meta.pageTitle}`;
-      if (meta?.contact?.name) ogDesc = `Confirma tu asistencia — organizado por ${meta.contact.name}`;
+  const ev = await fetchEventOgData(EVENTS_URL, identifier);
+  if (ev) {
+    ogTitle = ev.name ? `Confirma | ${ev.name}` : ogTitle;
+
+    if (ev.organizer_name) {
+      ogDesc = `${ev.organizer_name} te espera. Confirma tu asistencia en segundos.`;
     }
-  } catch {
-    // Fail silently — page works fine without OG tags
+
+    ogImage = buildOgImageUrl({
+      title: ev.name,
+      date: ev.event_date_time,
+      address: ev.address,
+      cover: ev.cover_image_url,
+      type: ev.event_type,
+    });
   }
 }
 ---

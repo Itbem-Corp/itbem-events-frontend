@@ -8,6 +8,7 @@ export const prerender = false;
  */
 import TemplateLayout from '../layouts/template.astro';
 import EventPage from '../components/engine/EventPage';
+import { buildOgImageUrl } from '../lib/og';
 
 const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string;
 
@@ -15,8 +16,8 @@ const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string;
 const token = Astro.url.searchParams.get('token') ?? '';
 
 // Fetch invitation data server-side for OG meta (best-effort, 3s timeout)
-let ogTitle   = 'Eventiapp | Tu invitación';
-let ogDesc    = 'Estás invitado a un evento especial.';
+let ogTitle   = 'Estás invitado';
+let ogDesc    = 'Abre tu invitación y descubre todos los detalles del evento.';
 let ogImage   = '';
 const ogUrl   = Astro.url.href;
 
@@ -27,15 +28,22 @@ if (token) {
       signal: AbortSignal.timeout(3000),
     });
     if (res.ok) {
-      const json = await res.json() as { data?: { event?: { name?: string; description?: string; cover_image_url?: string; organizer_name?: string; location_name?: string } } };
+      const json = await res.json() as { data?: { event?: { name?: string; description?: string; cover_image_url?: string; organizer_name?: string; location_name?: string; event_date_time?: string; address?: string; event_type?: string } } };
       const ev = json?.data?.event;
       if (ev) {
         if (ev.name) ogTitle = ev.name;
-        if (ev.description)  ogDesc = ev.description.slice(0, 160);
-        else if (ev.organizer_name || ev.location_name) {
-          ogDesc = [ev.organizer_name ? `Organizado por ${ev.organizer_name}` : '', ev.location_name ?? ''].filter(Boolean).join(' · ');
+        if (ev.description) {
+          ogDesc = ev.description.slice(0, 160);
+        } else if (ev.organizer_name || ev.location_name) {
+          ogDesc = [ev.organizer_name ? `${ev.organizer_name} te invita` : '', ev.location_name ?? ''].filter(Boolean).join(' · ');
         }
-        if (ev.cover_image_url) ogImage = ev.cover_image_url;
+        ogImage = buildOgImageUrl({
+          title: ev.name || ogTitle,
+          date: ev.event_date_time,
+          address: ev.address || ev.location_name,
+          cover: ev.cover_image_url,
+          type: ev.event_type,
+        });
       }
     }
   } catch {

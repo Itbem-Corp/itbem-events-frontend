@@ -1,0 +1,49 @@
+---
+/**
+ * Dynamic upload page — /events/{identifier}/upload
+ * Now fetches event data server-side for rich OG previews when shared.
+ */
+export const prerender = false
+
+import TemplateLayout from '../../../layouts/template.astro'
+import SharedUploadPage from '../../../components/SharedUploadPage'
+import { fetchEventOgData, buildOgImageUrl } from '../../../lib/og'
+
+const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string ?? 'http://localhost:8080/'
+const { identifier } = Astro.params
+
+let ogTitle = 'Comparte tu momento'
+let ogDesc  = 'Sube tus fotos y videos del evento. Tus recuerdos son parte de la historia.'
+let ogImage = ''
+const ogUrl = Astro.url.href
+
+if (identifier) {
+  const ev = await fetchEventOgData(EVENTS_URL, identifier)
+  if (ev) {
+    ogTitle = ev.name ? `Sube tus fotos — ${ev.name}` : ogTitle
+
+    if (ev.organizer_name) {
+      ogDesc = `Comparte tus mejores fotos y videos de ${ev.name}. Solo toma un segundo.`
+    }
+
+    ogImage = buildOgImageUrl({
+      title: ev.name,
+      cover: ev.cover_image_url,
+      type: ev.event_type,
+    })
+  }
+}
+---
+
+<TemplateLayout
+  title={ogTitle}
+  ogTitle={ogTitle}
+  ogDescription={ogDesc}
+  ogImage={ogImage}
+  ogUrl={ogUrl}
+>
+  <SharedUploadPage
+    client:only="react"
+    EVENTS_URL={EVENTS_URL}
+  />
+</TemplateLayout>

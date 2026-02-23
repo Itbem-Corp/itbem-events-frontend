@@ -27,10 +27,8 @@ const ogUrl       = Astro.url.href;
   ogDescription={ogDescription}
   ogUrl={ogUrl}
 >
-  <body>
-    <SharedUploadPage
-      client:only="react"
-      EVENTS_URL={EVENTS_URL}
-    />
-  </body>
+  <SharedUploadPage
+    client:only="react"
+    EVENTS_URL={EVENTS_URL}
+  />
 </TemplateLayout>

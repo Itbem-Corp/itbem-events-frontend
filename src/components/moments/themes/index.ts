@@ -1,0 +1,110 @@
+export interface MomentsTheme {
+  headingFont: string
+  bodyFont: string
+  heroBg: string
+  accent: string
+  accentSoft: string
+  decorationType: 'botanical' | 'confetti' | 'geometric' | 'sparkles' | 'minimal'
+  footerMessage: string
+  lightboxBg: string
+  statsIconColor: string
+  cardOverlay: string
+}
+
+const WEDDING: MomentsTheme = {
+  headingFont: 'font-bigilla',
+  bodyFont: 'font-quicksand',
+  heroBg: 'bg-gradient-to-br from-amber-50 via-yellow-50/80 to-orange-50/60',
+  accent: 'text-amber-700',
+  accentSoft: 'bg-amber-100/80',
+  decorationType: 'botanical',
+  footerMessage: 'Gracias por ser parte de este día tan especial',
+  lightboxBg: 'bg-black/90',
+  statsIconColor: 'text-amber-600',
+  cardOverlay: 'bg-gradient-to-t from-black/60 via-black/20 to-transparent',
+}
+
+const GRADUATION: MomentsTheme = {
+  headingFont: 'font-quicksand font-bold',
+  bodyFont: 'font-quicksand',
+  heroBg: 'bg-gradient-to-br from-blue-950 via-indigo-950 to-slate-900',
+  accent: 'text-blue-400',
+  accentSoft: 'bg-blue-500/10',
+  decorationType: 'confetti',
+  footerMessage: 'Felicidades por este gran logro',
+  lightboxBg: 'bg-black/90',
+  statsIconColor: 'text-blue-400',
+  cardOverlay: 'bg-gradient-to-t from-black/60 via-black/20 to-transparent',
+}
+
+const BIRTHDAY: MomentsTheme = {
+  headingFont: 'font-quicksand font-bold',
+  bodyFont: 'font-quicksand',
+  heroBg: 'bg-gradient-to-br from-fuchsia-50 via-pink-50 to-orange-50',
+  accent: 'text-fuchsia-600',
+  accentSoft: 'bg-fuchsia-100/80',
+  decorationType: 'confetti',
+  footerMessage: 'Gracias por celebrar con nosotros',
+  lightboxBg: 'bg-black/90',
+  statsIconColor: 'text-fuchsia-500',
+  cardOverlay: 'bg-gradient-to-t from-black/60 via-black/20 to-transparent',
+}
+
+const QUINCEANERA: MomentsTheme = {
+  headingFont: 'font-astralaga',
+  bodyFont: 'font-quicksand',
+  heroBg: 'bg-gradient-to-br from-pink-50 via-rose-50/80 to-amber-50/60',
+  accent: 'text-rose-600',
+  accentSoft: 'bg-rose-100/80',
+  decorationType: 'sparkles',
+  footerMessage: 'Gracias por acompañarnos en esta noche tan especial',
+  lightboxBg: 'bg-black/90',
+  statsIconColor: 'text-rose-500',
+  cardOverlay: 'bg-gradient-to-t from-black/60 via-black/20 to-transparent',
+}
+
+const CORPORATE: MomentsTheme = {
+  headingFont: 'font-quicksand font-semibold',
+  bodyFont: 'font-quicksand',
+  heroBg: 'bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-100',
+  accent: 'text-slate-700',
+  accentSoft: 'bg-slate-100',
+  decorationType: 'geometric',
+  footerMessage: 'Gracias por ser parte de este evento',
+  lightboxBg: 'bg-black/90',
+  statsIconColor: 'text-slate-600',
+  cardOverlay: 'bg-gradient-to-t from-black/60 via-black/20 to-transparent',
+}
+
+const DEFAULT_THEME: MomentsTheme = {
+  headingFont: 'font-quicksand font-bold',
+  bodyFont: 'font-quicksand',
+  heroBg: 'bg-gradient-to-br from-violet-50 via-indigo-50/80 to-sky-50/60',
+  accent: 'text-indigo-600',
+  accentSoft: 'bg-indigo-100/80',
+  decorationType: 'minimal',
+  footerMessage: 'Gracias por compartir estos momentos',
+  lightboxBg: 'bg-black/90',
+  statsIconColor: 'text-indigo-500',
+  cardOverlay: 'bg-gradient-to-t from-black/60 via-black/20 to-transparent',
+}
+
+const THEME_MAP: Record<string, MomentsTheme> = {
+  wedding: WEDDING,
+  boda: WEDDING,
+  graduation: GRADUATION,
+  graduacion: GRADUATION,
+  birthday: BIRTHDAY,
+  cumpleanos: BIRTHDAY,
+  quinceanera: QUINCEANERA,
+  'quinceañera': QUINCEANERA,
+  corporate: CORPORATE,
+  corporativo: CORPORATE,
+  conference: CORPORATE,
+  conferencia: CORPORATE,
+}
+
+export function getTheme(eventType?: string): MomentsTheme {
+  if (!eventType) return DEFAULT_THEME
+  return THEME_MAP[eventType.toLowerCase().trim()] ?? DEFAULT_THEME
+}
