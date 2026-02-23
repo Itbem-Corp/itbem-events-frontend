@@ -14,7 +14,7 @@ import { resolve } from 'node:path';
 const ROUTES_PATH = resolve('dist', '_routes.json');
 
 // SSR routes that MUST go through the Cloudflare worker
-const SSR_ROUTES = ['/e/*', '/rsvp/*', '/evento', '/events/*/upload', '/e/*/momentos'];
+const SSR_ROUTES = ['/e/*', '/rsvp/*', '/evento', '/events/*/upload'];
 
 // Patterns to remove from exclude (they conflict with SSR routes)
 const EXCLUDE_REMOVE = ['/e/*', '/events/*'];
