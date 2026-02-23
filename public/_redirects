@@ -1,7 +1,7 @@
 # Cloudflare Pages routing rules
 #
-# Rewrite /events/{identifier}/upload → /events/upload (200 = serve without redirect)
-# The React component reads the original pathname from window.location.pathname
-# to extract the event identifier.
-/events/*/upload  /events/upload  200
-/e/*/momentos  /e/momentos  200
+# Dynamic routes /e/{identifier}, /e/{identifier}/momentos, /events/{identifier}/upload,
+# /rsvp/{identifier}, and /evento are handled by SSR (Cloudflare Pages Functions).
+# No rewrite rules needed — the _worker.js handles them directly.
+#
+# Only add rewrites here for static fallback routes that are NOT handled by SSR.
