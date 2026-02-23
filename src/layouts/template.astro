@@ -57,6 +57,9 @@ const {
     <meta name="twitter:title"       content={ogTitle} />
     <meta name="twitter:description" content={ogDescription} />
     {ogImage && <meta name="twitter:image" content={ogImage} />}
+    <!-- Cloudflare Web Analytics -->
+    <script defer src="https://static.cloudflareinsights.com/beacon.min.js"
+            data-cf-beacon='{"token": "07475d5be6a94add96c6e02ec0fab176"}'></script>
   </head>
   <body>
     <slot />
