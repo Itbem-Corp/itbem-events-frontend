@@ -11,7 +11,7 @@ import Critters from 'critters';
 // All interactivity is handled by client:only React islands that call
 // PUBLIC_EVENTS_URL (the Go backend) directly from the browser.
 export default defineConfig({
-  output: 'static',
+  output: 'server',
   adapter: cloudflare(),
 
   site: 'https://eventiapp.com.mx',
