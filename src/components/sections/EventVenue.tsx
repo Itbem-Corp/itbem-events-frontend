@@ -55,7 +55,7 @@ export default function EventVenue({ sectionId, config, EVENTS_URL }: SectionCom
               ))}
             </div>
 
-            <p className="text-2xl font-semibold font-bigilla leading-snug text-[#07293A]">{text}</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold font-bigilla leading-snug text-[#07293A]">{text}</p>
 
             {section.sectionResources[2]?.view_url && (
               <div className="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-100 rounded shadow-md overflow-hidden">
@@ -66,11 +66,11 @@ export default function EventVenue({ sectionId, config, EVENTS_URL }: SectionCom
               </div>
             )}
 
-            <p className="text-2xl font-semibold font-bigilla text-[#8B5D3D]">{date}</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold font-bigilla text-[#8B5D3D]">{date}</p>
 
             <div className="flex flex-col sm:flex-row">
               <div className="sm:basis-2/3 place-content-center sm:pe-4 pb-4 sm:pb-0">
-                <p className="text-sm sm:text-base md:text-2xl leading-relaxed font-quicksand text-[#07293A]">
+                <p className="text-sm sm:text-base md:text-lg lg:text-xl leading-relaxed font-quicksand text-[#07293A]">
                   {venueText}
                 </p>
               </div>

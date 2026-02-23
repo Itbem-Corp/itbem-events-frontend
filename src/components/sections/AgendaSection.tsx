@@ -51,7 +51,7 @@ function AgendaItemRow({ item, index, isLast }: AgendaItemRowProps) {
       className="flex gap-0 relative"
     >
       {/* Time column */}
-      <div className="w-16 flex-shrink-0 pt-1 text-right pr-4">
+      <div className="w-12 sm:w-16 flex-shrink-0 pt-1 text-right pr-2 sm:pr-4">
         <span
           className="text-sm font-aloevera font-semibold"
           style={{ color: '#C7A44C' }}
@@ -79,7 +79,7 @@ function AgendaItemRow({ item, index, isLast }: AgendaItemRowProps) {
       {/* Content column */}
       <div className="flex-1 pl-4 pb-8">
         <p
-          className="text-lg font-astralaga leading-tight"
+          className="text-base sm:text-lg font-astralaga leading-tight"
           style={{ color: '#07293A' }}
         >
           {item.title}
@@ -114,7 +114,7 @@ export default function AgendaSection({ config }: SectionComponentProps) {
           transition={{ duration: 0.5 }}
           className="text-center mb-12"
         >
-          <h2 className="text-4xl font-astralaga" style={{ color: '#07293A' }}>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-astralaga" style={{ color: '#07293A' }}>
             {title}
           </h2>
           {subtitle && (

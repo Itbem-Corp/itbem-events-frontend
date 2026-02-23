@@ -110,7 +110,7 @@ export default function GraduatesList({ sectionId, config, EVENTS_URL }: Section
             </motion.ul>
 
             {section.sectionResources[0]?.view_url && (
-              <div className="mx-auto w-[100%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[5/2] bg-gray-100 rounded shadow-md overflow-hidden my-6">
+              <div className="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[5/2] bg-gray-100 rounded shadow-md overflow-hidden my-6">
                 <ImageWithLoader
                   src={section.sectionResources[0].view_url}
                   alt={section.sectionResources[0].title || ''}

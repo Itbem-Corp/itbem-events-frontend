@@ -360,7 +360,7 @@ export default function EventPage({ EVENTS_URL: rawEventsUrl, identifier: identi
 
       <ShareWidget eventTitle={spec.meta.pageTitle} />
 
-      <main className="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20">
+      <main className="max-w-screen-md lg:max-w-[1024px] mx-auto px-3 sm:px-4 py-2 space-y-12 sm:space-y-20 overflow-x-hidden">
         {sorted.map(section => (
           <SectionRenderer
             key={section.sectionId || `${section.type}-${section.order}`}

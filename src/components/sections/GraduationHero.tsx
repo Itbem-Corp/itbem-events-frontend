@@ -9,9 +9,9 @@ import type { SectionComponentProps, GraduationHeroConfig } from '../engine/type
 function Skeleton({ title, years, school }: GraduationHeroConfig) {
   return (
     <section className="text-center space-y-6 pb-4 relative z-10 animate-pulse pt-10">
-      <h2 className="text-5xl font-bold text-gray-300">{title}</h2>
+      <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-300">{title}</h2>
       <div className="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-200 rounded shadow-md" />
-      <div className="text-4xl font-bold text-gray-300"><h3>{years}</h3></div>
+      <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-300"><h3>{years}</h3></div>
       <div className="flex flex-row items-center justify-center gap-4 md:gap-6 max-w-4xl mx-auto">
         <div className="w-24 h-24 md:w-32 md:h-32 bg-gray-200 rounded" />
         <div className="h-10 w-48 md:w-64 bg-gray-200 rounded" />
@@ -69,7 +69,7 @@ export default function GraduationHero({ sectionId, config, EVENTS_URL }: Sectio
                   />
                 )}
               </div>
-              <h3 className="text-3xl sm:text-4xl md:text-5xl font-semibold font-bigilla text-[#8B5D3D] text-center md:text-start mt-4 md:mt-0">
+              <h3 className="text-xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold font-bigilla text-[#8B5D3D] text-center md:text-start mt-4 md:mt-0">
                 {school}
               </h3>
             </div>

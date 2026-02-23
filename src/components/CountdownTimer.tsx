@@ -63,7 +63,7 @@ export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
     }, [targetDate]);
 
     return (
-        <div className="flex justify-center gap-8 sm:gap-12 md:gap-16 text-[#07293A]">
+        <div className="flex justify-center gap-4 sm:gap-8 md:gap-12 lg:gap-16 text-[#07293A]">
             <div className="text-center">
                 <div className="text-2xl sm:text-3xl font-bold text-blue">
                     <AnimatedDigit value={timeLeft.days} />

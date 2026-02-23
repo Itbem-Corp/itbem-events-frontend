@@ -112,7 +112,7 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
       />
 
       {invError && (
-        <p className="font-aloevera text-red-600 text-2xl mt-6">{invError}</p>
+        <p className="font-aloevera text-red-600 text-lg sm:text-2xl mt-6">{invError}</p>
       )}
 
       {!invError && !invData && (
@@ -123,7 +123,7 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
         <>
           {invData.rsvpStatus === 'confirmed' ? (
             <div className="flex flex-col items-center">
-              <p className="text-xl font-aloevera text-dark mb-4 border-2 border-dashed border-gold rounded-xl px-6 py-3 inline-block text-center">
+              <p className="text-base sm:text-xl font-aloevera text-dark mb-4 border-2 border-dashed border-gold rounded-xl px-4 sm:px-6 py-3 inline-block text-center">
                 Gracias por confirmar tu asistencia
                 <br />
                 Nos vemos el{' '}
@@ -132,7 +132,7 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
                 })}
               </p>
               {imgSi?.view_url && (
-                <div className="w-40 md:w-52 lg:w-60 xl:w-64 rounded-3xl border-2 border-dashed border-gold shadow-lg overflow-hidden">
+                <div className="w-32 sm:w-40 md:w-52 lg:w-60 xl:w-64 rounded-3xl border-2 border-dashed border-gold shadow-lg overflow-hidden">
                   <ImageWithLoader src={imgSi.view_url} alt={imgSi.title || ''} />
                 </div>
               )}
@@ -160,27 +160,27 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
             </div>
           ) : invData.rsvpStatus === 'declined' ? (
             <div>
-              <p className="text-xl font-aloevera text-dark mb-4 border-2 border-dashed border-gold rounded-xl px-6 py-3 inline-block">
+              <p className="text-base sm:text-xl font-aloevera text-dark mb-4 border-2 border-dashed border-gold rounded-xl px-4 sm:px-6 py-3 inline-block">
                 Lamentamos que no nos puedas acompañar esta vez
               </p>
               {imgNo?.view_url && (
-                <div className="w-40 md:w-52 lg:w-60 xl:w-64 rounded-3xl border-2 border-dashed border-gold shadow-lg overflow-hidden mx-auto">
+                <div className="w-32 sm:w-40 md:w-52 lg:w-60 xl:w-64 rounded-3xl border-2 border-dashed border-gold shadow-lg overflow-hidden mx-auto">
                   <ImageWithLoader src={imgNo.view_url} alt={imgNo.title || ''} />
                 </div>
               )}
             </div>
           ) : message ? (
             <div>
-              <p className="text-xl font-aloevera text-dark whitespace-pre-line border-2 border-dashed border-gold rounded-xl px-6 py-3 inline-block">
+              <p className="text-base sm:text-xl font-aloevera text-dark whitespace-pre-line border-2 border-dashed border-gold rounded-xl px-4 sm:px-6 py-3 inline-block">
                 {message}
               </p>
               {respuesta === 'yes' && imgSi?.view_url && (
-                <div className="w-40 md:w-52 lg:w-60 xl:w-64 rounded-3xl border-2 border-dashed border-gold shadow-lg overflow-hidden mx-auto mt-4">
+                <div className="w-32 sm:w-40 md:w-52 lg:w-60 xl:w-64 rounded-3xl border-2 border-dashed border-gold shadow-lg overflow-hidden mx-auto mt-4">
                   <ImageWithLoader src={imgSi.view_url} alt={imgSi.title || ''} />
                 </div>
               )}
               {respuesta === 'no' && imgNo?.view_url && (
-                <div className="w-40 md:w-52 lg:w-60 xl:w-64 rounded-3xl border-2 border-dashed border-gold shadow-lg overflow-hidden mx-auto mt-4">
+                <div className="w-32 sm:w-40 md:w-52 lg:w-60 xl:w-64 rounded-3xl border-2 border-dashed border-gold shadow-lg overflow-hidden mx-auto mt-4">
                   <ImageWithLoader src={imgNo.view_url} alt={imgNo.title || ''} />
                 </div>
               )}
@@ -196,21 +196,21 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
             </div>
           ) : (
             <>
-              <h3 className="text-2xl sm:text-3xl md:text-4xl font-astralaga text-dark">{invData.guestName}</h3>
-              <p className="text-2xl font-aloevera text-gold">
+              <h3 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-astralaga text-dark">{invData.guestName}</h3>
+              <p className="text-lg sm:text-2xl font-aloevera text-gold">
                 No. personas: <span className="font-semibold">{invData.maxGuests}</span>
               </p>
 
-              <h2 className="text-3xl font-astralaga text-dark mt-4 border-2 border-dashed border-gold rounded-full px-8 py-2 inline-block">
+              <h2 className="text-2xl sm:text-3xl font-astralaga text-dark mt-4 border-2 border-dashed border-gold rounded-full px-5 sm:px-8 py-2 inline-block">
                 ¿Nos acompañas?
               </h2>
 
-              <div className="flex flex-row justify-center gap-6 mt-6">
+              <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-6 mt-6 px-4 sm:px-0">
                 <button
                   type="button"
                   onClick={() => setRespuesta('yes')}
                   className={cn(
-                    'px-6 py-3 rounded-2xl font-aloevera border-2 border-dashed border-gold',
+                    'px-5 sm:px-6 py-3 rounded-2xl font-aloevera border-2 border-dashed border-gold text-sm sm:text-base',
                     respuesta === 'yes' ? 'bg-gold text-dark' : 'bg-white text-dark',
                   )}
                 >
@@ -220,7 +220,7 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
                   type="button"
                   onClick={() => setRespuesta('no')}
                   className={cn(
-                    'px-6 py-3 rounded-2xl font-aloevera border-2 border-dashed border-gold',
+                    'px-5 sm:px-6 py-3 rounded-2xl font-aloevera border-2 border-dashed border-gold text-sm sm:text-base',
                     respuesta === 'no' ? 'bg-gold text-dark' : 'bg-white text-dark',
                   )}
                 >
@@ -229,12 +229,12 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
               </div>
 
               {respuesta === 'yes' && (
-                <div className="mt-6 flex items-center justify-center gap-2">
-                  <p className="text-2xl font-aloevera text-gold">No. personas confirmadas:</p>
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-2">
+                  <p className="text-lg sm:text-2xl font-aloevera text-gold">No. personas confirmadas:</p>
                   <select
                     value={numPersonas}
                     onChange={e => setNumPersonas(Number(e.target.value))}
-                    className="border-2 border-dashed border-gold rounded px-3 py-2 font-aloevera text-dark text-xl"
+                    className="border-2 border-dashed border-gold rounded px-3 py-2 font-aloevera text-dark text-base sm:text-xl"
                   >
                     {Array.from({ length: invData.maxGuests }, (_, i) => i + 1).map(n => (
                       <option key={n} value={n}>{n}</option>
@@ -245,7 +245,7 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
 
               {respuesta === 'yes' && (
                 <div className="mt-4 flex flex-col items-center gap-3">
-                  <p className="text-xl font-aloevera text-dark">¿Alguna restricción alimentaria?</p>
+                  <p className="text-base sm:text-xl font-aloevera text-dark">¿Alguna restricción alimentaria?</p>
                   <div className="flex flex-wrap justify-center gap-2">
                     {([
                       { value: 'none', label: 'Ninguna' },
@@ -285,7 +285,7 @@ export default function RSVPConfirmation({ sectionId, EVENTS_URL }: SectionCompo
                   type="button"
                   onClick={handleConfirm}
                   disabled={loading || !respuesta}
-                  className="bg-gold text-dark text-3xl px-12 py-3 rounded-full font-astralaga disabled:opacity-50"
+                  className="bg-gold text-dark text-xl sm:text-3xl px-8 sm:px-12 py-3 rounded-full font-astralaga disabled:opacity-50"
                 >
                   {loading ? 'Enviando...' : 'Enviar'}
                 </button>

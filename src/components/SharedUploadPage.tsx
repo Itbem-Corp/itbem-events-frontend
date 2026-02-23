@@ -507,7 +507,7 @@ export default function SharedUploadPage({ EVENTS_URL }: UploadPageProps) {
       </AnimatePresence>
 
       {/* Header */}
-      <header className="px-6 pt-12 pb-6 text-center">
+      <header className="px-4 sm:px-6 pt-8 sm:pt-12 pb-6 text-center">
         <motion.div
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -549,7 +549,7 @@ export default function SharedUploadPage({ EVENTS_URL }: UploadPageProps) {
       </header>
 
       {/* Main content */}
-      <main className="flex-1 px-5 pb-10 max-w-md mx-auto w-full space-y-4">
+      <main className="flex-1 px-3 sm:px-5 pb-10 max-w-md mx-auto w-full space-y-4">
 
         {/* Thumbnails grid */}
         <AnimatePresence>

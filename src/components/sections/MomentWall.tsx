@@ -192,7 +192,7 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-10">
-          <h2 className="text-3xl font-bold">{title}</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold">{title}</h2>
           {subtitle && <p className="mt-2 text-gray-500">{subtitle}</p>}
         </div>
 
