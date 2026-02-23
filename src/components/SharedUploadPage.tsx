@@ -62,26 +62,20 @@ export default function SharedUploadPage({ EVENTS_URL }: UploadPageProps) {
 
   // Clean up object URLs
   useEffect(() => {
-    return () => { if (preview && preview !== "video") URL.revokeObjectURL(preview); };
+    return () => { if (preview && preview !== "video" && preview !== "heic") URL.revokeObjectURL(preview); };
   }, [preview]);
 
   const applyFile = (f: File) => {
     setError("");
 
-    // HEIC detection (iOS camera format — not supported by Lambda)
-    if (
-      f.type === "image/heic" || f.type === "image/heif" ||
-      f.name.toLowerCase().endsWith(".heic") || f.name.toLowerCase().endsWith(".heif")
-    ) {
-      setError("Los archivos HEIC de iPhone no son soportados aún. Ve a Ajustes > Cámara > Formatos y selecciona 'Más compatible' para capturar en JPG.");
-      return;
-    }
-
     const MAX_IMAGE_BYTES = 25 * 1024 * 1024;  // 25 MB
     const MAX_VIDEO_BYTES = 200 * 1024 * 1024; // 200 MB
     const ALLOWED_TYPES = [
+      // Images — iOS, Android, Desktop
       "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif",
-      "video/mp4", "video/webm", "video/quicktime", "video/x-m4v",
+      "image/heic", "image/heif", "image/avif",
+      // Videos — iOS (MOV/M4V), Android (MP4/3GP), Desktop (WebM)
+      "video/mp4", "video/webm", "video/quicktime", "video/x-m4v", "video/3gpp",
     ];
 
     const isVideo = f.type.startsWith("video/");
@@ -92,15 +86,24 @@ export default function SharedUploadPage({ EVENTS_URL }: UploadPageProps) {
       return;
     }
 
-    if (!ALLOWED_TYPES.includes(f.type)) {
-      setError("Formato no soportado. Acepta: JPG, PNG, WebP, MP4, MOV o WebM.");
+    // Fallback: detect HEIC/HEIF by extension (some browsers report empty MIME)
+    const ext = f.name.toLowerCase().split('.').pop() ?? '';
+    const ALLOWED_EXTENSIONS = [
+      'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'avif',
+      'mp4', 'mov', 'webm', 'm4v', '3gp',
+    ];
+    if (!ALLOWED_TYPES.includes(f.type) && !ALLOWED_EXTENSIONS.includes(ext)) {
+      setError("Formato no soportado. Acepta: JPG, PNG, WebP, HEIC, MP4, MOV o WebM.");
       return;
     }
 
     setFile(f);
-    if (f.type.startsWith("image/")) {
+    const isImage = f.type.startsWith("image/") || ['heic', 'heif', 'avif'].includes(ext);
+    const isHeic = ext === 'heic' || ext === 'heif';
+    if (isImage) {
       setIsPreviewVideo(false);
-      setPreview(URL.createObjectURL(f));
+      // HEIC/HEIF may not render in browsers — show file name as fallback
+      setPreview(isHeic ? "heic" : URL.createObjectURL(f));
     } else {
       setIsPreviewVideo(true);
       setPreview("video");
@@ -108,7 +111,7 @@ export default function SharedUploadPage({ EVENTS_URL }: UploadPageProps) {
   };
 
   const clearFile = () => {
-    if (preview && preview !== "video") URL.revokeObjectURL(preview);
+    if (preview && preview !== "video" && preview !== "heic") URL.revokeObjectURL(preview);
     setFile(null);
     setPreview("");
     setIsPreviewVideo(false);
@@ -262,7 +265,7 @@ export default function SharedUploadPage({ EVENTS_URL }: UploadPageProps) {
                 <p className="text-sm font-semibold text-gray-700">
                   {dragOver ? "Suelta aquí" : "Toca para seleccionar"}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5">Foto o video · Hasta 200 MB</p>
+                <p className="text-xs text-gray-400 mt-0.5">Foto o video · JPG, HEIC, PNG, MP4, MOV</p>
               </div>
             </motion.div>
           ) : (
@@ -273,12 +276,18 @@ export default function SharedUploadPage({ EVENTS_URL }: UploadPageProps) {
               exit={{ opacity: 0, scale: 0.95 }}
               className="relative rounded-2xl overflow-hidden bg-gray-900 aspect-video"
             >
-              {isPreviewVideo ? (
+              {isPreviewVideo || preview === "heic" ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-800">
                   <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
-                    <svg className="w-7 h-7 text-white/80 ml-1" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-                    </svg>
+                    {isPreviewVideo ? (
+                      <svg className="w-7 h-7 text-white/80 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-7 h-7 text-white/80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                      </svg>
+                    )}
                   </div>
                   <div className="text-center">
                     <p className="text-white/80 text-sm font-medium truncate max-w-[180px]">{file.name}</p>

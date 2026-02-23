@@ -24,11 +24,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (static)
+      - name: Build (static + SSR Functions)
         run: npm run build
         env:
-          # Use production URL for build verification.
-          # The actual deploy step overrides this via Cloudflare Pages env vars.
+          # Used at build time for OG-tag server-side fetches and client-side API calls.
           PUBLIC_EVENTS_URL: https://api.eventiapp.com.mx
 
       - name: Upload dist artifact
