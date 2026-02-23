@@ -8,6 +8,7 @@ import type { SectionComponentProps, MomentWallConfig } from "../engine/types";
 interface Moment {
   id: string;
   content_url: string;
+  thumbnail_url?: string; // WebP poster extracted by video Lambda; empty for images
   description?: string;
   created_at: string;
   processing_status?: string;
@@ -255,13 +256,19 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
                 >
                   {video ? (
                     <div className="relative">
-                      <video
-                        src={src}
-                        className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        preload="metadata"
-                        muted
-                        playsInline
-                      />
+                      {m.thumbnail_url ? (
+                        /* Thumbnail extracted by Lambda — single image request, no video preload */
+                        <img
+                          src={getMediaUrl(m.thumbnail_url, EVENTS_URL)}
+                          alt={m.description || "Video del evento"}
+                          className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        /* Fallback for legacy videos without a thumbnail (processed before this feature) */
+                        <div className="aspect-video bg-gray-900 w-full group-hover:brightness-110 transition-[filter] duration-300" />
+                      )}
                       {/* Play icon overlay */}
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="w-10 h-10 rounded-full bg-black/50 flex items-center justify-center">
@@ -277,6 +284,7 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
                       alt={m.description || "Momento del evento"}
                       className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
                       loading="lazy"
+                      decoding="async"
                     />
                   )}
                 </button>

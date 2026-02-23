@@ -175,12 +175,14 @@ export const MOMENT_EVENT_IDENTIFIER = 'test-momento-event';
 export function makeMoment(overrides: Partial<{
   id: string;
   content_url: string;
+  thumbnail_url: string;
   description: string;
   created_at: string;
 }> = {}) {
   return {
     id: overrides.id ?? 'moment-test-001',
     content_url: overrides.content_url ?? 'moments/test-momento-event/img-001.webp',
+    thumbnail_url: overrides.thumbnail_url ?? '',
     description: overrides.description ?? 'Un momento especial',
     created_at: overrides.created_at ?? '2026-02-21T12:00:00Z',
     processing_status: 'done',
