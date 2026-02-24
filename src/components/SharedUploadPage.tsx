@@ -365,42 +365,67 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
       setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "uploading" as const } : e));
 
-      const fd = new FormData();
-      fd.append("file", entry.file);
-      if (isFirst && description.trim()) fd.append("description", description.trim());
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60_000);
+      // Resolve content type — fall back to extension sniffing for HEIC/unknown types
+      const ext = entry.file.name.toLowerCase().split(".").pop() ?? "";
+      const contentType = entry.file.type ||
+        (ext === "heic" || ext === "heif" ? "image/heic" :
+         ext === "mp4" ? "video/mp4" :
+         ext === "mov" ? "video/quicktime" :
+         "application/octet-stream");
 
       try {
-        const res = await fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared`, {
+        // ── Step 1: Request a presigned PUT URL from the backend ──────────────
+        const urlRes = await fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/upload-url`, {
           method: "POST",
-          body: fd,
-          signal: controller.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content_type: contentType, filename: entry.file.name }),
         });
-        clearTimeout(timeoutId);
 
-        if (res.status === 403) { uploadsDisabled = true; return; }
+        if (urlRes.status === 403) { uploadsDisabled = true; return; }
+        if (!urlRes.ok) {
+          const json = await urlRes.json().catch(() => ({}));
+          throw new Error(json.message ?? `Error obteniendo URL (${urlRes.status})`);
+        }
 
-        if (!res.ok) {
-          const json = await res.json().catch(() => ({}));
-          const msg = ({
-            400: "Archivo no válido.",
-            401: "Sin permiso.",
-            403: "Subidas deshabilitadas.",
-            413: "Archivo demasiado grande.",
-            422: "Archivo dañado.",
-            500: "Error del servidor.",
-            503: "Servicio no disponible.",
-          } as Record<number, string>)[res.status] ?? json.message ?? `Error (${res.status})`;
-          throw new Error(msg);
+        const { data } = await urlRes.json();
+        const uploadUrl: string = data.upload_url;
+        const s3Key: string = data.s3_key;
+
+        // ── Step 2: PUT file bytes directly to S3 (no backend relay) ─────────
+        const s3Controller = new AbortController();
+        const s3Timeout = setTimeout(() => s3Controller.abort(), 120_000); // 2 min for large videos
+        try {
+          const s3Res = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: { "Content-Type": contentType },
+            body: entry.file,
+            signal: s3Controller.signal,
+          });
+          if (!s3Res.ok) throw new Error(`Error subiendo archivo a S3 (${s3Res.status})`);
+        } finally {
+          clearTimeout(s3Timeout);
+        }
+
+        // ── Step 3: Confirm with backend — save DB record + queue Lambda ──────
+        const confirmRes = await fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/confirm`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            s3_key: s3Key,
+            content_type: contentType,
+            description: isFirst && description.trim() ? description.trim() : "",
+          }),
+        });
+
+        if (!confirmRes.ok) {
+          const json = await confirmRes.json().catch(() => ({}));
+          throw new Error(json.message ?? `Error confirmando subida (${confirmRes.status})`);
         }
 
         setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "done" as const } : e));
         uploaded++;
         setUploadedCount(uploaded);
       } catch (err) {
-        clearTimeout(timeoutId);
         let msg: string;
         if (err instanceof Error && err.name === "AbortError") {
           msg = "La subida tardó demasiado. Revisa tu conexión.";
