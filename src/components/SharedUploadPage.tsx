@@ -239,10 +239,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
   const [description, setDescription] = useState("");
   const [uploading, setUploading] = useState(false);
   const [allDone, setAllDone] = useState(false);
-  const [limitReached, setLimitReached] = useState(false);
-  const [limitMessage, setLimitMessage] = useState("");
   const [error, setError] = useState("");
-  const [uploadsRemaining, setUploadsRemaining] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploadedCount, setUploadedCount] = useState(0);
   const [previewEntry, setPreviewEntry] = useState<FileEntry | null>(null);
@@ -263,14 +260,6 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       const res = await fetch(`${EVENTS_URL}api/events/${id}/moments?page=1&limit=1`);
       if (!res.ok) return;
       const json = await res.json();
-      const remaining = json.data?.uploads_remaining;
-      if (remaining !== undefined) {
-        setUploadsRemaining(remaining);
-        if (remaining === 0) {
-          setLimitReached(true);
-          setLimitMessage("Ya has compartido todos los momentos permitidos. ¡Muchas gracias!");
-        }
-      }
       // Check if shared uploads are enabled
       const shareEnabled = json.data?.share_uploads_enabled;
       if (shareEnabled === false) {
@@ -363,17 +352,22 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
     if (files.length === 0 || !identifier || uploading) return;
     setUploading(true);
     setError("");
-    let uploaded = 0;
 
-    for (let i = 0; i < files.length; i++) {
-      const entry = files[i];
-      if (entry.status === "done") { uploaded++; continue; }
+    // Upload up to 3 files concurrently — 3x faster than sequential without
+    // overwhelming the server or the user's connection.
+    const CONCURRENCY = 3;
+    let uploaded = 0;
+    let connectionError = false;
+    let uploadsDisabled = false;
+
+    const uploadOne = async (entry: FileEntry, isFirst: boolean): Promise<void> => {
+      if (entry.status === "done") { uploaded++; return; }
 
       setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "uploading" as const } : e));
 
       const fd = new FormData();
       fd.append("file", entry.file);
-      if (i === 0 && description.trim()) fd.append("description", description.trim());
+      if (isFirst && description.trim()) fd.append("description", description.trim());
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60_000);
@@ -386,19 +380,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
         });
         clearTimeout(timeoutId);
 
-        if (res.status === 429) {
-          const json = await res.json();
-          setLimitReached(true);
-          setLimitMessage(json.message ?? "Ya alcanzaste el límite de subidas para este evento.");
-          setUploading(false);
-          return;
-        }
-
-        if (res.status === 403) {
-          setUploadsNotEnabled(true);
-          setUploading(false);
-          return;
-        }
+        if (res.status === 403) { uploadsDisabled = true; return; }
 
         if (!res.ok) {
           const json = await res.json().catch(() => ({}));
@@ -414,10 +396,6 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           throw new Error(msg);
         }
 
-        const json = await res.json().catch(() => ({}));
-        const rem = json.data?.uploads_remaining;
-        if (rem !== undefined) setUploadsRemaining(rem);
-
         setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "done" as const } : e));
         uploaded++;
         setUploadedCount(uploaded);
@@ -428,19 +406,26 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           msg = "La subida tardó demasiado. Revisa tu conexión.";
         } else if (err instanceof TypeError) {
           msg = "No se pudo conectar al servidor. Verifica tu conexión a internet.";
+          connectionError = true;
         } else if (err instanceof Error) {
           msg = err.message;
         } else {
           msg = "Ocurrió un error inesperado. Intenta de nuevo.";
         }
         setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "error" as const, errorMsg: msg } : e));
-        // If it's a connection error, stop trying the rest — they'll all fail
-        if (err instanceof TypeError) {
-          setError("No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.");
-          break;
-        }
       }
+    };
+
+    // Process in batches of CONCURRENCY; stop early on connection/access errors
+    const pending = files.filter((e) => e.status !== "done");
+    for (let i = 0; i < pending.length; i += CONCURRENCY) {
+      if (connectionError || uploadsDisabled) break;
+      const batch = pending.slice(i, i + CONCURRENCY);
+      await Promise.all(batch.map((entry, batchIdx) => uploadOne(entry, i === 0 && batchIdx === 0)));
     }
+
+    if (connectionError) setError("No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.");
+    if (uploadsDisabled) { setUploadsNotEnabled(true); setUploading(false); return; }
 
     setUploading(false);
     setFiles((prev) => {
@@ -480,13 +465,11 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
     return <ThankYouScreen eventName={wallEventName} identifier={identifier} />;
   }
 
-  if (limitReached) return <LimitReachedScreen message={limitMessage} />;
   if (allDone) {
     return (
       <SuccessScreen
         count={uploadedCount}
-        uploadsRemaining={uploadsRemaining}
-        onUploadMore={uploadsRemaining === null || uploadsRemaining > 0 ? handleUploadAnother : undefined}
+        onUploadMore={handleUploadAnother}
       />
     );
   }
@@ -535,18 +518,6 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
         >
           Sube hasta {MAX_FILES} fotos o videos para la galería del evento
         </motion.p>
-        {uploadsRemaining !== null && uploadsRemaining > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1"
-          >
-            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-            <span className="text-xs font-medium text-indigo-600">
-              {uploadsRemaining} {uploadsRemaining === 1 ? "restante" : "restantes"}
-            </span>
-          </motion.div>
-        )}
       </header>
 
       {/* Main content */}
@@ -848,11 +819,9 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
 function SuccessScreen({
   count,
-  uploadsRemaining,
   onUploadMore,
 }: {
   count: number;
-  uploadsRemaining: number | null;
   onUploadMore?: () => void;
 }) {
   return (
@@ -908,20 +877,6 @@ function SuccessScreen({
           ¡Gracias por ser parte de este momento especial!
         </motion.p>
 
-        {uploadsRemaining !== null && uploadsRemaining > 0 && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.3 }}
-            className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1.5"
-          >
-            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-            <span className="text-xs font-medium text-indigo-600">
-              Puedes compartir {uploadsRemaining} {uploadsRemaining === 1 ? "momento más" : "momentos más"}
-            </span>
-          </motion.div>
-        )}
-
         {onUploadMore && (
           <motion.button
             initial={{ opacity: 0, y: 8 }}
@@ -933,32 +888,6 @@ function SuccessScreen({
             Subir más fotos o videos
           </motion.button>
         )}
-      </motion.div>
-    </div>
-  );
-}
-
-function LimitReachedScreen({ message }: { message: string }) {
-  return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6 text-center">
-      <motion.div
-        initial={{ scale: 0.3, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 300, damping: 20 }}
-        className="w-24 h-24 rounded-full bg-gradient-to-br from-amber-400 to-orange-400 flex items-center justify-center mb-6 shadow-lg shadow-amber-500/30"
-      >
-        <svg className="w-12 h-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-        </svg>
-      </motion.div>
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.12 }}
-        className="space-y-3"
-      >
-        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">¡Gracias por participar!</h2>
-        <p className="text-gray-400 text-sm max-w-xs mx-auto leading-relaxed">{message}</p>
       </motion.div>
     </div>
   );

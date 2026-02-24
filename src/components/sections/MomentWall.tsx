@@ -21,8 +21,6 @@ interface PaginatedMoments {
   limit: number;
   has_more: boolean;
   published: number;
-  uploads_remaining: number;
-  uploads_used: number;
 }
 
 function isVideoUrl(url: string): boolean {
@@ -46,7 +44,6 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
   const [loadingMore, setLoadingMore]     = useState(false);
   const [hasMore, setHasMore]             = useState(false);
   const [page, setPage]                   = useState(1);
-  const [uploadsRemaining, setUploadsRemaining] = useState<number>(3);
 
   const [lightbox, setLightbox]           = useState<Moment | null>(null);
   const [lightboxIdx, setLightboxIdx]     = useState(0);
@@ -79,7 +76,6 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
       setMoments(prev => append ? [...prev, ...items] : items);
       setHasMore(data?.has_more ?? false);
       setPage(pageNum);
-      if (data?.uploads_remaining !== undefined) setUploadsRemaining(data.uploads_remaining);
     } catch {
       if (append) setLoadMoreError(true);
     } finally {
@@ -158,17 +154,10 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
         method: "POST",
         body: fd,
       });
-      if (res.status === 429) {
-        const err = await res.json();
-        setUploadError(err.message ?? "Ya alcanzaste el límite de subidas para este evento.");
-        return;
-      }
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.message ?? "Error al subir");
       }
-      const json = await res.json();
-      if (json.data?.uploads_remaining !== undefined) setUploadsRemaining(json.data.uploads_remaining);
       setUploadSuccess(true);
       setShowUpload(false);
       form.reset();
@@ -182,7 +171,7 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
   };
 
   const prettyToken = invData?.prettyToken;
-  const canUpload   = !!prettyToken && !!identifier && uploadsRemaining > 0;
+  const canUpload   = !!prettyToken && !!identifier;
 
   return (
     <section className="py-16 px-4">
@@ -222,11 +211,6 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
               </svg>
               Subir foto o video
-              {uploadsRemaining < 3 && (
-                <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">
-                  {uploadsRemaining} restante{uploadsRemaining !== 1 ? "s" : ""}
-                </span>
-              )}
             </button>
           </div>
         )}
