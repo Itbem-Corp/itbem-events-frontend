@@ -361,6 +361,11 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
     let connectionError = false;
     let uploadsDisabled = false;
 
+    // Track in-flight S3 XHRs so we can abort them immediately on connection failure,
+    // instead of waiting up to 2 minutes for each video timeout.
+    const activeXHRs = new Set<XMLHttpRequest>();
+    const abortActiveXHRs = () => { activeXHRs.forEach((x) => x.abort()); activeXHRs.clear(); };
+
     const uploadOne = async (entry: FileEntry, isFirst: boolean): Promise<void> => {
       if (entry.status === "done") { uploaded++; return; }
 
@@ -393,25 +398,31 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
         const s3Key: string = data.s3_key;
 
         // ── Step 2: PUT file bytes directly to S3 with XHR for progress ─────
-        await new Promise<void>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open("PUT", uploadUrl);
-          xhr.setRequestHeader("Content-Type", contentType);
-          xhr.timeout = 120_000; // 2 min for large videos
-          xhr.upload.onprogress = (ev) => {
-            if (ev.lengthComputable) {
-              const pct = Math.round((ev.loaded / ev.total) * 90); // reserve last 10% for confirm
-              setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, progress: pct } : e));
-            }
-          };
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) resolve();
-            else reject(new Error(`Error subiendo archivo a S3 (${xhr.status})`));
-          };
-          xhr.onerror = () => reject(new Error("Error de conexión al subir el archivo"));
-          xhr.ontimeout = () => reject(new Error("La subida tardó demasiado. Revisa tu conexión."));
-          xhr.send(entry.file);
-        });
+        const xhr = new XMLHttpRequest();
+        activeXHRs.add(xhr);
+        try {
+          await new Promise<void>((resolve, reject) => {
+            xhr.open("PUT", uploadUrl);
+            xhr.setRequestHeader("Content-Type", contentType);
+            xhr.timeout = 120_000; // 2 min for large videos
+            xhr.upload.onprogress = (ev) => {
+              if (ev.lengthComputable) {
+                const pct = Math.round((ev.loaded / ev.total) * 90); // reserve last 10% for confirm
+                setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, progress: pct } : e));
+              }
+            };
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) resolve();
+              else reject(new Error(`Error subiendo archivo a S3 (${xhr.status})`));
+            };
+            xhr.onerror = () => reject(new Error("Error de conexión al subir el archivo"));
+            xhr.ontimeout = () => reject(new Error("La subida tardó demasiado. Revisa tu conexión."));
+            xhr.onabort = () => reject(Object.assign(new Error("abort"), { silent: true }));
+            xhr.send(entry.file);
+          });
+        } finally {
+          activeXHRs.delete(xhr);
+        }
 
         // ── Step 3: Confirm with backend — save DB record + queue Lambda ──────
         setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, progress: 95 } : e));
@@ -434,12 +445,14 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
         uploaded++;
         setUploadedCount(uploaded);
       } catch (err) {
+        if ((err as { silent?: boolean }).silent) return; // silently dropped by abortActiveXHRs()
         let msg: string;
         if (err instanceof Error && err.name === "AbortError") {
           msg = "La subida tardó demasiado. Revisa tu conexión.";
         } else if (err instanceof TypeError) {
           msg = "No se pudo conectar al servidor. Verifica tu conexión a internet.";
           connectionError = true;
+          abortActiveXHRs(); // kill other in-flight S3 uploads immediately
         } else if (err instanceof Error) {
           msg = err.message;
         } else {
