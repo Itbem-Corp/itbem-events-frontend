@@ -231,7 +231,8 @@ interface UploadPageProps {
   EVENTS_URL: string;
 }
 
-export default function SharedUploadPage({ EVENTS_URL }: UploadPageProps) {
+export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPageProps) {
+  const EVENTS_URL = rawEventsUrl.endsWith('/') ? rawEventsUrl : rawEventsUrl + '/';
   const [identifier, setIdentifier] = useState("");
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [videoThumbs, setVideoThumbs] = useState<Map<string, string>>(new Map());
