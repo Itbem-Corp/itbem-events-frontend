@@ -37,6 +37,7 @@ interface FileEntry {
   isHeic: boolean;
   status: "pending" | "uploading" | "done" | "error";
   errorMsg?: string;
+  progress?: number; // 0-100 during upload
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -391,22 +392,29 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
         const uploadUrl: string = data.upload_url;
         const s3Key: string = data.s3_key;
 
-        // ── Step 2: PUT file bytes directly to S3 (no backend relay) ─────────
-        const s3Controller = new AbortController();
-        const s3Timeout = setTimeout(() => s3Controller.abort(), 120_000); // 2 min for large videos
-        try {
-          const s3Res = await fetch(uploadUrl, {
-            method: "PUT",
-            headers: { "Content-Type": contentType },
-            body: entry.file,
-            signal: s3Controller.signal,
-          });
-          if (!s3Res.ok) throw new Error(`Error subiendo archivo a S3 (${s3Res.status})`);
-        } finally {
-          clearTimeout(s3Timeout);
-        }
+        // ── Step 2: PUT file bytes directly to S3 with XHR for progress ─────
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", uploadUrl);
+          xhr.setRequestHeader("Content-Type", contentType);
+          xhr.timeout = 120_000; // 2 min for large videos
+          xhr.upload.onprogress = (ev) => {
+            if (ev.lengthComputable) {
+              const pct = Math.round((ev.loaded / ev.total) * 90); // reserve last 10% for confirm
+              setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, progress: pct } : e));
+            }
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve();
+            else reject(new Error(`Error subiendo archivo a S3 (${xhr.status})`));
+          };
+          xhr.onerror = () => reject(new Error("Error de conexión al subir el archivo"));
+          xhr.ontimeout = () => reject(new Error("La subida tardó demasiado. Revisa tu conexión."));
+          xhr.send(entry.file);
+        });
 
         // ── Step 3: Confirm with backend — save DB record + queue Lambda ──────
+        setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, progress: 95 } : e));
         const confirmRes = await fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/confirm`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -422,7 +430,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           throw new Error(json.message ?? `Error confirmando subida (${confirmRes.status})`);
         }
 
-        setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "done" as const } : e));
+        setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "done" as const, progress: 100 } : e));
         uploaded++;
         setUploadedCount(uploaded);
       } catch (err) {
@@ -599,8 +607,20 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
                     {/* Status overlays */}
                     {entry.status === "uploading" && (
-                      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center">
-                        <Spinner className="w-7 h-7 text-white" />
+                      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2">
+                        {(entry.progress ?? 0) > 0 ? (
+                          <>
+                            <span className="text-white text-xs font-semibold">{entry.progress}%</span>
+                            <div className="w-3/4 h-1 rounded-full bg-white/30 overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-white transition-all duration-300"
+                                style={{ width: `${entry.progress}%` }}
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <Spinner className="w-7 h-7 text-white" />
+                        )}
                       </div>
                     )}
                     {entry.status === "done" && (

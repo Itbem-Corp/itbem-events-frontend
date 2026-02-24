@@ -135,6 +135,8 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
     }
   };
 
+  const [uploadProgress, setUploadProgress] = useState(0);
+
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!invData?.prettyToken || !identifier) return;
@@ -145,19 +147,53 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
     if (!file) return;
     setUploading(true);
     setUploadError("");
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("pretty_token", invData.prettyToken);
-    fd.append("description", descInput.value);
+    setUploadProgress(0);
+
+    const ext = file.name.toLowerCase().split(".").pop() ?? "";
+    const contentType = file.type ||
+      (ext === "heic" || ext === "heif" ? "image/heic" :
+       ext === "mp4" ? "video/mp4" :
+       ext === "mov" ? "video/quicktime" : "application/octet-stream");
+
     try {
-      const res = await fetch(`${EVENTS_URL}api/events/${identifier}/moments`, {
+      // Step 1 — get presigned PUT URL
+      const urlRes = await fetch(`${EVENTS_URL}api/events/${identifier}/moments/upload-url`, {
         method: "POST",
-        body: fd,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pretty_token: invData.prettyToken, content_type: contentType, filename: file.name }),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message ?? "Error al subir");
+      if (!urlRes.ok) {
+        const err = await urlRes.json().catch(() => ({}));
+        throw new Error(err.message ?? "Error al preparar la subida");
       }
+      const { data } = await urlRes.json();
+
+      // Step 2 — PUT file directly to S3 with XHR so we get progress events
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", data.upload_url);
+        xhr.setRequestHeader("Content-Type", contentType);
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) setUploadProgress(Math.round((ev.loaded / ev.total) * 90));
+        };
+        xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`S3 error ${xhr.status}`));
+        xhr.onerror = () => reject(new Error("Error de conexión al subir el archivo"));
+        xhr.send(file);
+      });
+      setUploadProgress(95);
+
+      // Step 3 — confirm with backend
+      const confirmRes = await fetch(`${EVENTS_URL}api/events/${identifier}/moments/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pretty_token: invData.prettyToken, s3_key: data.s3_key, description: descInput.value }),
+      });
+      if (!confirmRes.ok) {
+        const err = await confirmRes.json().catch(() => ({}));
+        throw new Error(err.message ?? "Error al confirmar la subida");
+      }
+
+      setUploadProgress(100);
       setUploadSuccess(true);
       setShowUpload(false);
       form.reset();
@@ -167,6 +203,7 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
       setUploadError(err instanceof Error ? err.message : "Error al subir el archivo");
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -429,6 +466,20 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
                 </div>
                 {uploadError && (
                   <p className="text-sm text-red-600">{uploadError}</p>
+                )}
+                {uploading && uploadProgress > 0 && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>{uploadProgress < 95 ? "Subiendo archivo…" : uploadProgress < 100 ? "Procesando…" : "¡Listo!"}</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-black transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
                 )}
                 <div className="flex gap-3">
                   <button
