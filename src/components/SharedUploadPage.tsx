@@ -123,7 +123,7 @@ function extractVideoThumbnail(blobUrl: string): Promise<string> {
     }, { once: true });
 
     video.addEventListener("error", fallback, { once: true });
-    setTimeout(fallback, 5000);
+    setTimeout(fallback, 2000);
   });
 }
 
@@ -273,6 +273,9 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
   const [wallEventName, setWallEventName] = useState("");
   const [uploadsNotEnabled, setUploadsNotEnabled] = useState(false);
 
+  const [isPreparing, setIsPreparing] = useState(false)
+  const pickerOpenRef = useRef(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -311,6 +314,18 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       });
     };
   }, []);
+
+  // Detect iOS gallery picker close → show "preparing" overlay until onChange fires
+  useEffect(() => {
+    const onFocus = () => {
+      if (pickerOpenRef.current) {
+        setIsPreparing(true)
+        pickerOpenRef.current = false
+      }
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [])
 
   // Generate video thumbnails in background
   const generateVideoThumb = useCallback(async (entry: FileEntry) => {
@@ -581,6 +596,36 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
         )}
       </AnimatePresence>
 
+      {/* iOS gallery preparation overlay */}
+      <AnimatePresence>
+        {isPreparing && (
+          <motion.div
+            key="preparing"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl px-5 py-3 shadow-xl backdrop-blur-md"
+            style={{
+              background: 'rgba(24,24,27,0.92)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            <svg
+              className="w-4 h-4 text-pink-400 animate-spin shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span className="text-sm text-white/90 font-medium whitespace-nowrap">
+              Preparando archivos de tu galería…
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <header className="px-4 sm:px-6 pt-8 sm:pt-12 pb-6 text-center">
         <motion.div
@@ -759,7 +804,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
                 onDrop={handleDrop}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => { pickerOpenRef.current = true; fileInputRef.current?.click(); }}
                 className={`cursor-pointer border-2 border-dashed rounded-3xl aspect-[4/3] flex flex-col items-center justify-center gap-4 transition-all duration-200 ${
                   dragOver
                     ? theme === 'dark'
@@ -797,7 +842,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
                 onDrop={handleDrop}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => { pickerOpenRef.current = true; fileInputRef.current?.click(); }}
                 className={`cursor-pointer border-2 border-dashed rounded-2xl py-4 flex items-center justify-center gap-2 transition-all ${
                   dragOver
                     ? theme === 'dark' ? 'border-violet-400/70 bg-violet-500/[0.08]' : 'border-indigo-400 bg-indigo-50'
@@ -816,7 +861,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
             {/* Camera button */}
             <button
               type="button"
-              onClick={() => cameraInputRef.current?.click()}
+              onClick={() => { pickerOpenRef.current = true; cameraInputRef.current?.click(); }}
               className={`mt-2 w-full flex items-center justify-center gap-2.5 rounded-2xl border py-3.5 text-sm font-medium transition-colors ${
                 theme === 'dark'
                   ? 'border-white/10 text-gray-400 hover:bg-white/[0.04] hover:text-gray-200'
@@ -837,6 +882,8 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           multiple
           className="sr-only"
           onChange={(e) => {
+            setIsPreparing(false)
+            pickerOpenRef.current = false
             const selected = Array.from(e.target.files ?? []);
             if (selected.length > 0) addFiles(selected);
             e.target.value = "";
@@ -849,6 +896,8 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           multiple
           className="sr-only"
           onChange={(e) => {
+            setIsPreparing(false)
+            pickerOpenRef.current = false
             const selected = Array.from(e.target.files ?? []);
             if (selected.length > 0) addFiles(selected);
             e.target.value = "";
