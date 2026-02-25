@@ -70,10 +70,12 @@ function useLazyImage(src: string, eager = false): {
   const [loaded, setLoaded] = React.useState(false)
 
   React.useEffect(() => {
-    if (eager) {
-      setImgSrc(src)
-      return
-    }
+    // Reset state when src changes (handles card recycling / pagination)
+    setLoaded(false)
+    setImgSrc(eager ? src : null)
+
+    if (eager) return
+
     const el = ref.current
     if (!el) return
     const observer = new IntersectionObserver(
@@ -435,12 +437,15 @@ function MomentCard({
       style={{ contentVisibility: 'auto', containIntrinsicSize: '0 300px' } as React.CSSProperties}
       onClick={onClick}
     >
-      <div ref={ref} className="relative rounded-2xl overflow-hidden bg-gray-100">
-        {/* Shimmer placeholder */}
+      <div
+        ref={ref}
+        className="relative rounded-2xl overflow-hidden bg-gray-100"
+        style={!loaded ? { minHeight: '160px' } : undefined}
+      >
+        {/* Shimmer placeholder — minHeight is on the parent so the absolute div is visible */}
         {!loaded && (
           <div
             className="absolute inset-0 bg-gradient-to-r from-gray-100 via-gray-50 to-gray-100 bg-[length:200%_100%] animate-shimmer"
-            style={{ minHeight: '160px' }}
             aria-hidden="true"
           />
         )}
