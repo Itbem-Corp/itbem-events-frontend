@@ -641,7 +641,17 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.85 }}
                     transition={{ type: "spring", damping: 20, stiffness: 300 }}
-                    className="relative aspect-square rounded-2xl overflow-hidden bg-gray-100 group cursor-pointer"
+                    className={`relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-all duration-200 ${
+                      entry.status === 'uploading'
+                        ? 'ring-2 ring-amber-400/60 shadow-[0_0_14px_rgba(251,191,36,0.35)]'
+                        : entry.status === 'done'
+                        ? 'ring-2 ring-green-400/60 shadow-[0_0_14px_rgba(52,211,153,0.45)]'
+                        : entry.status === 'error'
+                        ? 'ring-2 ring-red-400/60 shadow-[0_0_14px_rgba(248,113,113,0.45)]'
+                        : theme === 'dark'
+                        ? 'ring-1 ring-white/10 hover:ring-white/25 hover:scale-[1.02] bg-gray-800'
+                        : 'ring-1 ring-gray-200 hover:ring-gray-300 hover:scale-[1.02] bg-gray-100'
+                    }`}
                     onClick={() => { if (!uploading) setPreviewEntry(entry); }}
                   >
                     {/* Thumbnail image */}
@@ -654,11 +664,15 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
                         </div>
                       )
                     ) : entry.previewUrl === "heic" ? (
-                      <div className="absolute inset-0 bg-gradient-to-br from-gray-200 to-gray-300 flex flex-col items-center justify-center gap-1">
-                        <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <div className={`absolute inset-0 flex flex-col items-center justify-center gap-1 ${
+                        theme === 'dark'
+                          ? 'bg-gradient-to-br from-gray-700 to-gray-800'
+                          : 'bg-gradient-to-br from-gray-200 to-gray-300'
+                      }`}>
+                        <svg className={`w-6 h-6 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
                         </svg>
-                        <p className="text-[9px] text-gray-500 font-medium">HEIC</p>
+                        <p className={`text-[9px] font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>HEIC</p>
                       </div>
                     ) : (
                       <img src={entry.previewUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -850,7 +864,11 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
               placeholder="Escribe un mensaje (opcional)"
               rows={2}
               maxLength={300}
-              className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-300 resize-none transition-all"
+              className={`w-full rounded-2xl border px-4 py-3 text-sm resize-none transition-all focus:outline-none focus:ring-2 ${
+                theme === 'dark'
+                  ? 'border-white/10 bg-white/[0.04] text-white placeholder:text-gray-600 focus:ring-violet-500/25 focus:border-violet-500/40'
+                  : 'border-gray-200 bg-white text-gray-800 placeholder:text-gray-300 focus:ring-indigo-500/30 focus:border-indigo-300'
+              }`}
             />
           </motion.div>
         )}
