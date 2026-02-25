@@ -371,6 +371,8 @@ export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: Section
                   src={getMediaUrl(lightbox.content_url, EVENTS_URL)}
                   controls
                   autoPlay
+                  playsInline
+                  preload="metadata"
                   className="w-full max-h-[80vh] rounded-xl"
                 />
               ) : (
