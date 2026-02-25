@@ -616,7 +616,12 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       </header>
 
       {/* Main content */}
-      <main className="flex-1 px-3 sm:px-5 pb-10 max-w-md mx-auto w-full space-y-4">
+      <main className="flex-1 px-3 sm:px-5 pb-10 pt-2 max-w-md mx-auto w-full">
+        <div className={`space-y-4 rounded-3xl p-4 sm:p-6 transition-all ${
+          theme === 'dark'
+            ? 'bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] shadow-2xl shadow-black/50'
+            : 'bg-white border border-gray-100 shadow-sm'
+        }`}>
 
         {/* Thumbnails grid */}
         <AnimatePresence>
@@ -916,6 +921,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
                   : `Compartir ${files.length} momentos`}
           </motion.button>
         )}
+        </div>
       </main>
     </div>
     </ThemeCtx.Provider>
