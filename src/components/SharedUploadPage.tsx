@@ -497,8 +497,9 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
   if (!identifier) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white px-6">
-        <p className="text-gray-400 text-sm text-center">Enlace inválido. Escanea el código QR de nuevo.</p>
+      <div className="min-h-screen flex items-center justify-center px-6 relative">
+        <DarkBackground />
+        <p className="text-gray-500 text-sm text-center">Enlace inválido. Escanea el código QR de nuevo.</p>
       </div>
     );
   }
@@ -528,7 +529,8 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
   // ── Main UI ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen flex flex-col relative">
+      <DarkBackground />
       {/* Preview lightbox */}
       <AnimatePresence>
         {previewEntry && (
@@ -1094,6 +1096,33 @@ function ThankYouScreen({ eventName, identifier }: { eventName: string; identifi
           </svg>
         </motion.a>
       </motion.div>
+    </div>
+  );
+}
+
+// ── Dark background with ambient light blobs ──────────────────────────────────
+
+function DarkBackground() {
+  return (
+    <div className="fixed inset-0 -z-10 overflow-hidden bg-gray-950 pointer-events-none">
+      {/* Blob 1 — violet, top-left */}
+      <motion.div
+        animate={{ y: [0, -24, 0] }}
+        transition={{ repeat: Infinity, duration: 10, ease: "easeInOut" }}
+        className="absolute -top-20 -left-20 w-[420px] h-[420px] rounded-full bg-violet-600/20 blur-[120px]"
+      />
+      {/* Blob 2 — indigo, top-right */}
+      <motion.div
+        animate={{ y: [0, 20, 0] }}
+        transition={{ repeat: Infinity, duration: 13, ease: "easeInOut", delay: 2 }}
+        className="absolute top-10 -right-16 w-[320px] h-[320px] rounded-full bg-indigo-500/15 blur-[100px]"
+      />
+      {/* Blob 3 — blue, bottom-center */}
+      <motion.div
+        animate={{ y: [0, -16, 0] }}
+        transition={{ repeat: Infinity, duration: 11, ease: "easeInOut", delay: 4 }}
+        className="absolute -bottom-24 left-1/2 -translate-x-1/2 w-[380px] h-[380px] rounded-full bg-blue-600/10 blur-[140px]"
+      />
     </div>
   );
 }
