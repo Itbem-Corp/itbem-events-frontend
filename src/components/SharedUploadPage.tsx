@@ -1163,12 +1163,13 @@ function ThankYouScreen({ eventName, identifier }: { eventName: string; identifi
   const { theme } = useContext(ThemeCtx);
   return (
     <div className={`min-h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden${theme === 'light' ? ' bg-white' : ''}`}>
+      <DarkBackground />
       {Array.from({ length: 8 }).map((_, i) => (
         <motion.div
           key={i}
-          className="absolute text-amber-300/40 text-lg pointer-events-none"
+          className={`absolute text-lg pointer-events-none ${theme === 'dark' ? 'text-amber-300/60' : 'text-amber-300/40'}`}
           style={{ left: `${10 + i * 11}%`, top: `${15 + (i % 3) * 25}%` }}
-          animate={{ y: [0, -12, 0], opacity: [0.2, 0.5, 0.2], scale: [1, 1.2, 1] }}
+          animate={{ y: [0, -12, 0], opacity: [0.3, 0.7, 0.3], scale: [1, 1.2, 1] }}
           transition={{ repeat: Infinity, duration: 2.5 + i * 0.3, delay: i * 0.3, ease: "easeInOut" }}
         >
           ✦
@@ -1179,7 +1180,11 @@ function ThankYouScreen({ eventName, identifier }: { eventName: string; identifi
         initial={{ scale: 0.3, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
-        className="w-24 h-24 rounded-full bg-gradient-to-br from-amber-400 to-orange-400 flex items-center justify-center mb-8 shadow-lg shadow-amber-500/20"
+        className={`w-24 h-24 rounded-full flex items-center justify-center mb-8 bg-gradient-to-br from-amber-400 to-orange-400 ${
+          theme === 'dark'
+            ? 'shadow-[0_0_50px_rgba(251,146,60,0.45)]'
+            : 'shadow-lg shadow-amber-500/20'
+        }`}
       >
         <svg className="w-12 h-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
@@ -1187,15 +1192,15 @@ function ThankYouScreen({ eventName, identifier }: { eventName: string; identifi
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="space-y-4">
-        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">
+        <h2 className={`text-2xl font-bold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
           Gracias por compartir tus<br />mejores momentos
         </h2>
         {eventName && (
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="text-lg font-medium text-gray-600">
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className={`text-lg font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
             {eventName}
           </motion.p>
         )}
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="text-gray-400 text-sm max-w-[300px] mx-auto leading-relaxed">
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className={`text-sm max-w-[300px] mx-auto leading-relaxed ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
           Estamos muy agradecidos de que hayas sido parte de este día tan especial
         </motion.p>
         <motion.a
@@ -1203,7 +1208,11 @@ function ThankYouScreen({ eventName, identifier }: { eventName: string; identifi
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
           href={`/e/${identifier}/momentos`}
-          className="inline-flex items-center gap-2 mt-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-amber-500/25 hover:shadow-xl active:scale-[0.98] transition-all"
+          className={`inline-flex items-center gap-2 mt-4 rounded-2xl px-5 py-2.5 text-sm font-medium transition-all ${
+            theme === 'dark'
+              ? 'bg-white/10 border border-white/15 text-gray-200 hover:bg-white/20'
+              : 'bg-gray-100 border border-gray-200 text-gray-600 hover:bg-gray-200'
+          }`}
         >
           Ver el muro de momentos
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
