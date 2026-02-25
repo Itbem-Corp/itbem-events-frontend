@@ -250,6 +250,29 @@ function PreviewLightbox({
   );
 }
 
+// ── Upload worker pool ─────────────────────────────────────────────────────────
+
+const POOL_SIZE = 8
+
+/**
+ * Worker pool: starts up to POOL_SIZE workers, each draining the shared queue
+ * immediately when they finish — no waiting for other workers to complete.
+ */
+async function runPool(tasks: Array<() => Promise<void>>): Promise<void> {
+  if (tasks.length === 0) return
+  const queue = [...tasks]
+  const workers = Array.from(
+    { length: Math.min(POOL_SIZE, queue.length) },
+    async () => {
+      while (queue.length > 0) {
+        const task = queue.shift()!
+        await task()
+      }
+    }
+  )
+  await Promise.all(workers)
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 interface UploadPageProps {
@@ -408,9 +431,6 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
     setUploading(true);
     setError("");
 
-    // Upload up to 3 files concurrently — 3x faster than sequential without
-    // overwhelming the server or the user's connection.
-    const CONCURRENCY = 3;
     let uploaded = 0;
     let connectionError = false;
     let uploadsDisabled = false;
@@ -516,13 +536,9 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       }
     };
 
-    // Process in batches of CONCURRENCY; stop early on connection/access errors
-    const pending = files.filter((e) => e.status !== "done");
-    for (let i = 0; i < pending.length; i += CONCURRENCY) {
-      if (connectionError || uploadsDisabled) break;
-      const batch = pending.slice(i, i + CONCURRENCY);
-      await Promise.all(batch.map((entry, batchIdx) => uploadOne(entry, i === 0 && batchIdx === 0)));
-    }
+    const pendingEntries = files.filter((e) => e.status !== "done");
+    const uploadTasks = pendingEntries.map((entry, idx) => () => uploadOne(entry, idx === 0));
+    await runPool(uploadTasks);
 
     if (connectionError) setError("No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.");
     if (uploadsDisabled) { setUploadsNotEnabled(true); setUploading(false); return; }
