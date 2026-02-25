@@ -952,7 +952,11 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
             type="button"
             disabled={files.length === 0 || uploading || files.every((e) => e.status === "done")}
             onClick={handleUpload}
-            className="w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 py-4 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 disabled:shadow-none"
+            className={`w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 py-4 text-sm font-semibold text-white active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 disabled:shadow-none ${
+              theme === 'dark'
+                ? 'shadow-[0_8px_32px_rgba(99,102,241,0.35)] hover:shadow-[0_8px_40px_rgba(99,102,241,0.55)]'
+                : 'shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30'
+            }`}
           >
             {uploading
               ? `Subiendo ${Math.min(uploadedCount + 1, files.length)} de ${files.length}…`
