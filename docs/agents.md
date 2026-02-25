@@ -4,6 +4,28 @@ This file defines the purpose and workflow for specialized Claude Code agents us
 
 ---
 
+## Subagentes reales (`/task <nombre>`)
+
+Estos están en `.claude/agents/` y se pueden invocar directamente con `/task`:
+
+| Agent | Use when |
+|---|---|
+| `/task feature-planner` | Antes de empezar cualquier feature — genera plan cross-project para los 3 proyectos |
+| `/task agent-improver` | Audita todos los agentes de los 3 proyectos, detecta paths rotos y endpoints stale |
+| `/task backend-integrator` | Valida contratos backend: rutas, response shapes, UUIDs de secciones |
+| `/task release-coordinator` | Antes de hacer deploy de un feature que toca más de un proyecto |
+| `/task orchestrator` | Al inicio de cualquier sesión multi-proyecto — lee memoria, retoma o inicia sprint |
+
+---
+
+## Token Cache Rule
+
+**Read docs/ before source files.** Docs are shorter, more stable, and more likely to be cached.
+Never re-read a file already in context — pass content forward to subagents instead.
+The orchestrator enforces this on every dispatch: it sends already-read content to subagents rather than instructing them to re-read.
+
+---
+
 ## Agent: `template-builder`
 
 **Purpose:** Create a complete new event template from scratch.

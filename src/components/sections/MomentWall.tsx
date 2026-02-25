@@ -33,11 +33,14 @@ function getMediaUrl(contentUrl: string, EVENTS_URL: string): string {
   return EVENTS_URL + "storage/" + contentUrl;
 }
 
-export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps) {
+export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: SectionComponentProps) {
+  // Normalize: ensure trailing slash so `${EVENTS_URL}api/...` always produces a valid URL.
+  const EVENTS_URL = rawEventsUrl.endsWith('/') ? rawEventsUrl : rawEventsUrl + '/';
   const cfg = config as unknown as MomentWallConfig;
-  const title      = cfg.title ?? "Momentos";
-  const subtitle   = cfg.subtitle;
-  const identifier = cfg.identifier;
+  const title          = cfg.title ?? "Momentos";
+  const subtitle       = cfg.subtitle;
+  const identifier     = cfg.identifier;
+  const allowMessages  = cfg.allow_messages ?? false;
 
   const [moments, setMoments]             = useState<Moment[]>([]);
   const [loading, setLoading]             = useState(true);
@@ -378,7 +381,7 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
                 />
               )}
               {lightbox.description && (
-                <p className="mt-3 text-center text-white/70 text-sm">{lightbox.description}</p>
+                <p className="mt-3 text-center text-white/70 text-sm whitespace-pre-wrap break-words">{lightbox.description}</p>
               )}
               {/* Close */}
               <button
@@ -453,17 +456,20 @@ export default function MomentWall({ config, EVENTS_URL }: SectionComponentProps
                     className="w-full text-sm text-gray-500 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-gray-200"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Descripción (opcional)
-                  </label>
-                  <input
-                    name="description"
-                    type="text"
-                    placeholder="Un momento especial…"
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
-                  />
-                </div>
+                {allowMessages && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nota (opcional)
+                    </label>
+                    <textarea
+                      name="description"
+                      placeholder="Un momento especial… 🎉"
+                      rows={2}
+                      maxLength={300}
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black resize-none"
+                    />
+                  </div>
+                )}
                 {uploadError && (
                   <p className="text-sm text-red-600">{uploadError}</p>
                 )}

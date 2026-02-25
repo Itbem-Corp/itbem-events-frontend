@@ -65,6 +65,14 @@ export interface MomentWallConfig {
   identifier: string;
   title?: string;
   subtitle?: string;
+  /** Injected by backend PageSpecService — guests can upload photos/videos */
+  allow_uploads?: boolean;
+  /** Injected by backend PageSpecService — guests can leave a text note with their upload */
+  allow_messages?: boolean;
+  /** Injected by backend PageSpecService — wall is publicly visible */
+  published?: boolean;
+  /** Injected by backend PageSpecService — shared QR uploads enabled (no personal token needed) */
+  share_uploads_enabled?: boolean;
 }
 
 // ── Page spec ─────────────────────────────────────────────────────────────────
