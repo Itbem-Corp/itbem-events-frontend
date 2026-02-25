@@ -57,6 +57,7 @@ function resolveFullUrl(m: Moment, EVENTS_URL: string): string {
 }
 
 const PAGE_SIZE = 30
+const MAX_PAGES = 4
 
 // ── Lazy image hook — only fires HTTP request when card is 200px from viewport ──
 function useLazyImage(src: string, eager = false): {
@@ -163,6 +164,8 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [phrases, setPhrases] = useState<string[]>([])
 
+  const sentinelRef = React.useRef<HTMLDivElement>(null)
+
   const MOMENTS_PER_GROUP = 9
 
   const groupedItems = React.useMemo(() => {
@@ -255,6 +258,22 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
     setPage(nextPage)
     setLoadingMore(false)
   }, [loadingMore, hasMore, identifier, page, fetchMoments])
+
+  // Auto-load next page when sentinel enters viewport
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && hasMore && !loadingMore && page < MAX_PAGES) {
+          loadMore()
+        }
+      },
+      { rootMargin: '300px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasMore, loadingMore, page, loadMore])
 
   const theme = getTheme(eventType)
 
@@ -387,16 +406,44 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
           })}
         </div>
 
-        {hasMore && (
-          <div className="flex justify-center mt-10">
-            <button
-              onClick={loadMore}
-              disabled={loadingMore}
-              className={`px-8 py-3 rounded-full text-sm font-medium transition-all ${theme.accentSoft} ${theme.accent} hover:opacity-80 disabled:opacity-50`}
-            >
-              {loadingMore ? "Cargando..." : "Cargar mas momentos"}
-            </button>
+        {/* Infinite scroll sentinel — watched by IntersectionObserver */}
+        {hasMore && page < MAX_PAGES && (
+          <div ref={sentinelRef} className="h-16 flex items-center justify-center mt-4">
+            {loadingMore && (
+              <div className="flex gap-1.5">
+                {[0, 1, 2].map(i => (
+                  <motion.div
+                    key={i}
+                    animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1, 0.8] }}
+                    transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+                    className="w-2 h-2 rounded-full bg-gray-400"
+                  />
+                ))}
+              </div>
+            )}
           </div>
+        )}
+
+        {/* End card — shown when all moments loaded or page cap reached */}
+        {(!hasMore || page >= MAX_PAGES) && moments.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="py-12 text-center"
+          >
+            <motion.div
+              animate={{ scale: [1, 1.1, 1] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+              className="text-2xl mb-3"
+              aria-hidden="true"
+            >
+              {theme.microIcon}
+            </motion.div>
+            <p className="text-sm text-gray-400 tracking-wide">
+              Estos son todos los momentos compartidos
+            </p>
+          </motion.div>
         )}
       </div>
 
