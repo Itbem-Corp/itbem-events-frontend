@@ -102,6 +102,7 @@ function useTypewriter(text: string, charDelayMs = 18): {
   const ref = React.useRef<HTMLDivElement>(null)
   const [displayed, setDisplayed] = React.useState('')
   const started = React.useRef(false)
+  const intervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
 
   React.useEffect(() => {
     const el = ref.current
@@ -112,17 +113,26 @@ function useTypewriter(text: string, charDelayMs = 18): {
           started.current = true
           observer.disconnect()
           let i = 0
-          const interval = setInterval(() => {
+          intervalRef.current = setInterval(() => {
             i++
             setDisplayed(text.slice(0, i))
-            if (i >= text.length) clearInterval(interval)
+            if (i >= text.length) {
+              clearInterval(intervalRef.current as ReturnType<typeof setInterval>)
+              intervalRef.current = null
+            }
           }, charDelayMs)
         }
       },
       { rootMargin: '50px' }
     )
     observer.observe(el)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
   }, [text, charDelayMs])
 
   return { ref, displayed }
@@ -329,12 +339,11 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
           {groupedItems.map((group, groupIdx) => {
             const indexOffset = groupIdx * MOMENTS_PER_GROUP
             return (
-              <React.Fragment key={groupIdx}>
+              <React.Fragment key={group.moments[0]?.id ?? groupIdx}>
                 {/* Photo grid group */}
                 <div className="columns-2 sm:columns-3 gap-3 sm:gap-4">
                   {group.moments.map((moment, i) => {
                     const globalIndex = indexOffset + i
-                    const galleryIndex = moments.indexOf(moment)
                     return (
                       <MomentCard
                         key={moment.id}
@@ -342,7 +351,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
                         index={globalIndex}
                         EVENTS_URL={EVENTS_URL}
                         theme={theme}
-                        onClick={() => setLightboxIndex(galleryIndex)}
+                        onClick={() => setLightboxIndex(globalIndex)}
                       />
                     )
                   })}
