@@ -9,6 +9,10 @@ export interface MomentsTheme {
   lightboxBg: string
   statsIconColor: string
   cardOverlay: string
+  microIcon: string
+  cardGradient: string
+  cardBorder: string
+  cardTextColor: string
 }
 
 const WEDDING: MomentsTheme = {
@@ -22,6 +26,10 @@ const WEDDING: MomentsTheme = {
   lightboxBg: 'bg-black/90',
   statsIconColor: 'text-amber-600',
   cardOverlay: 'bg-gradient-to-t from-black/60 via-black/20 to-transparent',
+  microIcon: '🌿',
+  cardGradient: 'from-amber-50 to-orange-50',
+  cardBorder: 'border-amber-200/40',
+  cardTextColor: 'text-amber-900',
 }
 
 const GRADUATION: MomentsTheme = {
@@ -35,6 +43,10 @@ const GRADUATION: MomentsTheme = {
   lightboxBg: 'bg-black/90',
   statsIconColor: 'text-blue-400',
   cardOverlay: 'bg-gradient-to-t from-black/60 via-black/20 to-transparent',
+  microIcon: '🎓',
+  cardGradient: 'from-blue-50 to-indigo-50',
+  cardBorder: 'border-blue-200/40',
+  cardTextColor: 'text-blue-900',
 }
 
 const BIRTHDAY: MomentsTheme = {
@@ -48,6 +60,10 @@ const BIRTHDAY: MomentsTheme = {
   lightboxBg: 'bg-black/90',
   statsIconColor: 'text-fuchsia-500',
   cardOverlay: 'bg-gradient-to-t from-black/60 via-black/20 to-transparent',
+  microIcon: '🎉',
+  cardGradient: 'from-fuchsia-50 to-orange-50',
+  cardBorder: 'border-fuchsia-200/40',
+  cardTextColor: 'text-fuchsia-900',
 }
 
 const QUINCEANERA: MomentsTheme = {
@@ -61,6 +77,10 @@ const QUINCEANERA: MomentsTheme = {
   lightboxBg: 'bg-black/90',
   statsIconColor: 'text-rose-500',
   cardOverlay: 'bg-gradient-to-t from-black/60 via-black/20 to-transparent',
+  microIcon: '✦',
+  cardGradient: 'from-rose-50 to-pink-50',
+  cardBorder: 'border-rose-200/40',
+  cardTextColor: 'text-rose-900',
 }
 
 const CORPORATE: MomentsTheme = {
@@ -74,6 +94,10 @@ const CORPORATE: MomentsTheme = {
   lightboxBg: 'bg-black/90',
   statsIconColor: 'text-slate-600',
   cardOverlay: 'bg-gradient-to-t from-black/60 via-black/20 to-transparent',
+  microIcon: '◆',
+  cardGradient: 'from-slate-50 to-gray-50',
+  cardBorder: 'border-slate-200/40',
+  cardTextColor: 'text-slate-800',
 }
 
 const DEFAULT_THEME: MomentsTheme = {
@@ -87,6 +111,10 @@ const DEFAULT_THEME: MomentsTheme = {
   lightboxBg: 'bg-black/90',
   statsIconColor: 'text-indigo-500',
   cardOverlay: 'bg-gradient-to-t from-black/60 via-black/20 to-transparent',
+  microIcon: '✦',
+  cardGradient: 'from-violet-50 to-sky-50',
+  cardBorder: 'border-violet-200/40',
+  cardTextColor: 'text-violet-900',
 }
 
 const THEME_MAP: Record<string, MomentsTheme> = {

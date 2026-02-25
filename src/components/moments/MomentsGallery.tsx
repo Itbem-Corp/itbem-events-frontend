@@ -146,10 +146,6 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
 
   const theme = getTheme(eventType)
 
-  const photos = moments.filter(m => !isVideo(resolveFullUrl(m, EVENTS_URL)))
-  const videos = moments.filter(m => isVideo(resolveFullUrl(m, EVENTS_URL)))
-  const comments = moments.filter(m => m.description?.trim())
-
   if (!identifier && typeof window !== "undefined") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -242,13 +238,6 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
       <div className={`min-h-screen bg-white ${isAdminPreview ? 'pt-14' : ''}`}>
       <HeroHeader eventName={eventName} eventDate={eventDate} theme={theme} />
 
-      <StatsBar
-        photoCount={photos.length}
-        videoCount={videos.length}
-        commentCount={comments.length}
-        theme={theme}
-      />
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="columns-2 sm:columns-3 lg:columns-4 gap-3 sm:gap-4">
           {moments.map((m, i) => (
@@ -275,10 +264,6 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
           </div>
         )}
       </div>
-
-      {comments.length >= 3 && (
-        <CommentsMarquee comments={comments.map(m => m.description!)} theme={theme} />
-      )}
 
       <ThemeFooter theme={theme} eventName={eventName} />
 
@@ -348,60 +333,6 @@ function HeroHeader({ eventName, eventDate, theme }: {
       </div>
     </div>
   )
-}
-
-// ── StatsBar ────────────────────────────────────────────────────────────────
-
-function StatsBar({ photoCount, videoCount, commentCount, theme }: {
-  photoCount: number; videoCount: number; commentCount: number; theme: MomentsTheme
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.6 }}
-      className="flex items-center justify-center gap-6 sm:gap-10 py-6 border-b border-gray-100"
-    >
-      <StatItem icon="📸" count={photoCount} label={photoCount === 1 ? "foto" : "fotos"} delay={0.7} />
-      {videoCount > 0 && <StatItem icon="🎬" count={videoCount} label={videoCount === 1 ? "video" : "videos"} delay={0.85} />}
-      {commentCount > 0 && <StatItem icon="💬" count={commentCount} label={commentCount === 1 ? "mensaje" : "mensajes"} delay={1.0} />}
-    </motion.div>
-  )
-}
-
-function StatItem({ icon, count, label, delay }: { icon: string; count: number; label: string; delay: number }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-lg">{icon}</span>
-      <AnimatedCounter value={count} delay={delay} />
-      <span className="text-sm text-gray-400">{label}</span>
-    </div>
-  )
-}
-
-function AnimatedCounter({ value, delay }: { value: number; delay: number }) {
-  const [display, setDisplay] = useState(0)
-  const started = useRef(false)
-
-  useEffect(() => {
-    if (started.current) return
-    started.current = true
-    const timer = setTimeout(() => {
-      const duration = 800
-      const start = Date.now()
-      const tick = () => {
-        const elapsed = Date.now() - start
-        const progress = Math.min(elapsed / duration, 1)
-        const eased = 1 - Math.pow(1 - progress, 3)
-        setDisplay(Math.round(eased * value))
-        if (progress < 1) requestAnimationFrame(tick)
-      }
-      requestAnimationFrame(tick)
-    }, delay * 1000)
-    return () => clearTimeout(timer)
-  }, [value, delay])
-
-  return <span className="text-lg font-bold text-gray-800 tabular-nums">{display}</span>
 }
 
 // ── MomentCard ──────────────────────────────────────────────────────────────
@@ -553,25 +484,6 @@ function GalleryLightbox({ moments, index, EVENTS_URL, theme, onClose, onNext, o
         {index + 1} / {moments.length}
       </div>
     </motion.div>
-  )
-}
-
-// ── CommentsMarquee ─────────────────────────────────────────────────────────
-
-function CommentsMarquee({ comments, theme }: { comments: string[]; theme: MomentsTheme }) {
-  const doubled = [...comments, ...comments]
-
-  return (
-    <div className="overflow-hidden py-10 border-t border-gray-100">
-      <p className="text-center text-xs uppercase tracking-[0.2em] text-gray-300 mb-6">Mensajes de los invitados</p>
-      <div className="relative">
-        <div className="flex gap-8 animate-marquee whitespace-nowrap" style={{ animationDuration: `${comments.length * 4}s` }}>
-          {doubled.map((c, i) => (
-            <span key={i} className={`inline-block text-lg ${theme.headingFont} text-gray-300 italic`}>"{c}"</span>
-          ))}
-        </div>
-      </div>
-    </div>
   )
 }
 
