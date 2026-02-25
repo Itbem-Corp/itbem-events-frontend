@@ -453,7 +453,7 @@ function MomentCard({
             loading={eager ? 'eager' : 'lazy'}
             {...(eager ? { fetchPriority: 'high' as const } : {})}
             decoding="async"
-            className={`w-full h-auto block transition-opacity duration-500 group-hover:scale-105 transition-transform ${
+            className={`w-full h-auto block transition-[opacity,transform] duration-500 group-hover:scale-105 ${
               loaded ? 'opacity-100' : 'opacity-0'
             }`}
             onLoad={() => setLoaded(true)}
