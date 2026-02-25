@@ -94,6 +94,40 @@ function useLazyImage(src: string, eager = false): {
   return { ref, loaded, setLoaded, imgSrc }
 }
 
+// ── Typewriter hook — reveals text char by char when card enters viewport ──
+function useTypewriter(text: string, charDelayMs = 18): {
+  ref: React.RefObject<HTMLDivElement | null>
+  displayed: string
+} {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const [displayed, setDisplayed] = React.useState('')
+  const started = React.useRef(false)
+
+  React.useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !started.current) {
+          started.current = true
+          observer.disconnect()
+          let i = 0
+          const interval = setInterval(() => {
+            i++
+            setDisplayed(text.slice(0, i))
+            if (i >= text.length) clearInterval(interval)
+          }, charDelayMs)
+        }
+      },
+      { rootMargin: '50px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [text, charDelayMs])
+
+  return { ref, displayed }
+}
+
 // ── MomentsGallery ─────────────────────────────────────────────────────────
 
 interface Props {
@@ -117,6 +151,22 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
   const [eventDate, setEventDate] = useState("")
   const [error, setError] = useState("")
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [phrases, setPhrases] = useState<string[]>([])
+
+  const MOMENTS_PER_GROUP = 9
+
+  const groupedItems = React.useMemo(() => {
+    const groups: Array<{ moments: Moment[]; phrase: string | null }> = []
+    for (let i = 0; i < moments.length; i += MOMENTS_PER_GROUP) {
+      const slice = moments.slice(i, i + MOMENTS_PER_GROUP)
+      const phraseIdx = Math.floor(i / MOMENTS_PER_GROUP)
+      // Only show phrase after group if there are more moments after this group
+      const hasMore = i + MOMENTS_PER_GROUP < moments.length
+      const phrase = hasMore && phrases.length > 0 ? (phrases[phraseIdx % phrases.length] ?? null) : null
+      groups.push({ moments: slice, phrase })
+    }
+    return groups
+  }, [moments, phrases])
 
   useEffect(() => {
     setIdentifier(getIdentifier())
@@ -275,17 +325,41 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
       <HeroHeader eventName={eventName} eventDate={eventDate} theme={theme} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="columns-2 sm:columns-3 lg:columns-4 gap-3 sm:gap-4">
-          {moments.map((m, i) => (
-            <MomentCard
-              key={m.id}
-              moment={m}
-              index={i}
-              EVENTS_URL={EVENTS_URL}
-              theme={theme}
-              onClick={() => setLightboxIndex(i)}
-            />
-          ))}
+        <div className="flex flex-col gap-0">
+          {groupedItems.map((group, groupIdx) => {
+            const indexOffset = groupIdx * MOMENTS_PER_GROUP
+            return (
+              <React.Fragment key={groupIdx}>
+                {/* Photo grid group */}
+                <div className="columns-2 sm:columns-3 gap-3 sm:gap-4">
+                  {group.moments.map((moment, i) => {
+                    const globalIndex = indexOffset + i
+                    const galleryIndex = moments.indexOf(moment)
+                    return (
+                      <MomentCard
+                        key={moment.id}
+                        moment={moment}
+                        index={globalIndex}
+                        EVENTS_URL={EVENTS_URL}
+                        theme={theme}
+                        onClick={() => setLightboxIndex(galleryIndex)}
+                      />
+                    )
+                  })}
+                </div>
+                {/* Memory card after this group */}
+                {group.phrase && (
+                  <div className="px-3 sm:px-4 py-2">
+                    <MemoryCard
+                      phrase={group.phrase}
+                      index={groupIdx}
+                      theme={theme}
+                    />
+                  </div>
+                )}
+              </React.Fragment>
+            )
+          })}
         </div>
 
         {hasMore && (
@@ -490,6 +564,59 @@ function PlayIcon() {
     <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
       <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
     </svg>
+  )
+}
+
+// ── MemoryCard ───────────────────────────────────────────────────────────────
+
+function MemoryCard({
+  phrase,
+  index,
+  theme,
+}: {
+  phrase: string
+  index: number
+  theme: MomentsTheme
+}) {
+  const rotations = [-2, 1, -1, 2, 0]
+  const rotation = rotations[index % rotations.length]
+  const { ref, displayed } = useTypewriter(phrase, 18)
+
+  return (
+    <motion.div
+      ref={ref as React.RefObject<HTMLDivElement>}
+      initial={{ opacity: 0, scale: 0.97 }}
+      whileInView={{ opacity: 1, scale: 1 }}
+      viewport={{ once: true, margin: '0px 0px -50px 0px' }}
+      transition={{ type: 'spring', stiffness: 280, damping: 24 }}
+      className="w-full"
+      style={{ transform: `rotate(${rotation}deg)` }}
+    >
+      <div
+        className={`bg-gradient-to-br ${theme.cardGradient} border ${theme.cardBorder} rounded-[20px] px-6 py-7`}
+      >
+        {/* Micro icon — animated */}
+        <motion.div
+          animate={{ scale: [1, 1.15, 1] }}
+          transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+          className="text-xl mb-4 block text-center"
+          aria-hidden="true"
+        >
+          {theme.microIcon}
+        </motion.div>
+
+        {/* Phrase text with typewriter cursor */}
+        <p
+          className={`text-center text-lg sm:text-xl font-semibold leading-snug ${theme.cardTextColor} font-serif`}
+          style={{ minHeight: '2.5rem' }}
+        >
+          {displayed}
+          {displayed.length < phrase.length && (
+            <span className="animate-pulse opacity-60">|</span>
+          )}
+        </p>
+      </div>
+    </motion.div>
   )
 }
 
