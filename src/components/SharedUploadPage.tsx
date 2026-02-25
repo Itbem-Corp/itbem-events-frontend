@@ -275,6 +275,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
   const [isPreparing, setIsPreparing] = useState(false)
   const pickerOpenRef = useRef(false)
+  const preparingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -321,10 +322,23 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       if (pickerOpenRef.current) {
         setIsPreparing(true)
         pickerOpenRef.current = false
+        // Safety valve: auto-dismiss if onChange never fires (e.g. picker cancelled, permission denied)
+        if (preparingTimerRef.current) clearTimeout(preparingTimerRef.current)
+        preparingTimerRef.current = setTimeout(() => setIsPreparing(false), 8000)
+      }
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        onFocus()
       }
     }
     window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      if (preparingTimerRef.current) clearTimeout(preparingTimerRef.current)
+    }
   }, [])
 
   // Generate video thumbnails in background
@@ -601,6 +615,8 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
         {isPreparing && (
           <motion.div
             key="preparing"
+            role="status"
+            aria-live="polite"
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
@@ -882,6 +898,10 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           multiple
           className="sr-only"
           onChange={(e) => {
+            if (preparingTimerRef.current) {
+              clearTimeout(preparingTimerRef.current)
+              preparingTimerRef.current = null
+            }
             setIsPreparing(false)
             pickerOpenRef.current = false
             const selected = Array.from(e.target.files ?? []);
@@ -896,6 +916,10 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           multiple
           className="sr-only"
           onChange={(e) => {
+            if (preparingTimerRef.current) {
+              clearTimeout(preparingTimerRef.current)
+              preparingTimerRef.current = null
+            }
             setIsPreparing(false)
             pickerOpenRef.current = false
             const selected = Array.from(e.target.files ?? []);
