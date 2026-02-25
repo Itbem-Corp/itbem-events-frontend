@@ -1,7 +1,30 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+
+// ── Theme toggle ──────────────────────────────────────────────────────────────
+type Theme = 'dark' | 'light';
+
+function useTheme(): [Theme, () => void] {
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return 'dark';
+    return (localStorage.getItem('upload-theme') as Theme) ?? 'dark';
+  });
+  const toggle = useCallback(() => {
+    setTheme(t => {
+      const next: Theme = t === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('upload-theme', next);
+      return next;
+    });
+  }, []);
+  return [theme, toggle];
+}
+
+const ThemeCtx = createContext<{ theme: Theme; toggle: () => void }>({
+  theme: 'dark',
+  toggle: () => {},
+});
 
 function getIdentifierFromURL(): string {
   if (typeof window === "undefined") return "";
@@ -234,6 +257,7 @@ interface UploadPageProps {
 
 export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPageProps) {
   const EVENTS_URL = rawEventsUrl.endsWith('/') ? rawEventsUrl : rawEventsUrl + '/';
+  const [theme, toggleTheme] = useTheme();
   const [identifier, setIdentifier] = useState("");
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [videoThumbs, setVideoThumbs] = useState<Map<string, string>>(new Map());
@@ -497,27 +521,43 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
   if (!identifier) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6 relative">
-        <DarkBackground />
-        <p className="text-gray-500 text-sm text-center">Enlace inválido. Escanea el código QR de nuevo.</p>
-      </div>
+      <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
+        <ThemeToggleButton />
+        <div className={`min-h-screen flex items-center justify-center px-6 relative${theme === 'light' ? ' bg-gray-50' : ''}`}>
+          <DarkBackground />
+          <p className="text-gray-500 text-sm text-center">Enlace inválido. Escanea el código QR de nuevo.</p>
+        </div>
+      </ThemeCtx.Provider>
     );
   }
 
   if (uploadsNotEnabled) {
-    return <ComingSoonScreen identifier={identifier} />;
+    return (
+      <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
+        <ThemeToggleButton />
+        <ComingSoonScreen identifier={identifier} />
+      </ThemeCtx.Provider>
+    );
   }
 
   if (wallPublished) {
-    return <ThankYouScreen eventName={wallEventName} identifier={identifier} />;
+    return (
+      <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
+        <ThemeToggleButton />
+        <ThankYouScreen eventName={wallEventName} identifier={identifier} />
+      </ThemeCtx.Provider>
+    );
   }
 
   if (allDone) {
     return (
-      <SuccessScreen
-        count={uploadedCount}
-        onUploadMore={handleUploadAnother}
-      />
+      <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
+        <ThemeToggleButton />
+        <SuccessScreen
+          count={uploadedCount}
+          onUploadMore={handleUploadAnother}
+        />
+      </ThemeCtx.Provider>
     );
   }
 
@@ -529,7 +569,9 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
   // ── Main UI ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen flex flex-col relative">
+    <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
+    <ThemeToggleButton />
+    <div className={`min-h-screen flex flex-col relative${theme === 'light' ? ' bg-gray-50' : ''}`}>
       <DarkBackground />
       {/* Preview lightbox */}
       <AnimatePresence>
@@ -871,6 +913,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
         )}
       </main>
     </div>
+    </ThemeCtx.Provider>
   );
 }
 
@@ -883,8 +926,9 @@ function SuccessScreen({
   count: number;
   onUploadMore?: () => void;
 }) {
+  const { theme } = useContext(ThemeCtx);
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6 text-center relative overflow-hidden">
+    <div className={`min-h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden${theme === 'light' ? ' bg-white' : ''}`}>
       {/* Confetti dots */}
       {Array.from({ length: 12 }).map((_, i) => (
         <motion.div
@@ -953,8 +997,9 @@ function SuccessScreen({
 }
 
 function ComingSoonScreen({ identifier }: { identifier: string }) {
+  const { theme } = useContext(ThemeCtx);
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6 text-center relative overflow-hidden">
+    <div className={`min-h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden${theme === 'light' ? ' bg-white' : ''}`}>
       {/* Floating decorative dots */}
       {Array.from({ length: 10 }).map((_, i) => (
         <motion.div
@@ -1046,8 +1091,9 @@ function ComingSoonScreen({ identifier }: { identifier: string }) {
 }
 
 function ThankYouScreen({ eventName, identifier }: { eventName: string; identifier: string }) {
+  const { theme } = useContext(ThemeCtx);
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6 text-center relative overflow-hidden">
+    <div className={`min-h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden${theme === 'light' ? ' bg-white' : ''}`}>
       {Array.from({ length: 8 }).map((_, i) => (
         <motion.div
           key={i}
@@ -1100,9 +1146,42 @@ function ThankYouScreen({ eventName, identifier }: { eventName: string; identifi
   );
 }
 
+// ── Theme toggle button ────────────────────────────────────────────────────────
+function ThemeToggleButton() {
+  const { theme, toggle } = useContext(ThemeCtx);
+  return (
+    <motion.button
+      onClick={toggle}
+      whileTap={{ scale: 0.9 }}
+      className={`fixed top-4 right-4 z-50 flex items-center justify-center w-9 h-9 rounded-full border transition-all ${
+        theme === 'dark'
+          ? 'bg-white/10 border-white/15 text-gray-300 hover:bg-white/20'
+          : 'bg-black/5 border-black/10 text-gray-500 hover:bg-black/10'
+      }`}
+      title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+    >
+      {theme === 'dark' ? (
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <circle cx="12" cy="12" r="5" />
+          <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>
+      ) : (
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      )}
+    </motion.button>
+  );
+}
+
 // ── Dark background with ambient light blobs ──────────────────────────────────
 
 function DarkBackground() {
+  const { theme } = useContext(ThemeCtx);
+  if (theme === 'light') return null;
   return (
     <div className="fixed inset-0 -z-10 overflow-hidden bg-gray-950 pointer-events-none">
       {/* Blob 1 — violet, top-left */}
