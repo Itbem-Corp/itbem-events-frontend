@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import React, { useState, useEffect, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { getTheme, type MomentsTheme } from "./themes"
 
@@ -57,6 +57,40 @@ function resolveFullUrl(m: Moment, EVENTS_URL: string): string {
 }
 
 const PAGE_SIZE = 30
+
+// ── Lazy image hook — only fires HTTP request when card is 200px from viewport ──
+function useLazyImage(src: string, eager = false): {
+  ref: React.RefObject<HTMLDivElement | null>
+  loaded: boolean
+  setLoaded: React.Dispatch<React.SetStateAction<boolean>>
+  imgSrc: string | null
+} {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const [imgSrc, setImgSrc] = React.useState<string | null>(eager ? src : null)
+  const [loaded, setLoaded] = React.useState(false)
+
+  React.useEffect(() => {
+    if (eager) {
+      setImgSrc(src)
+      return
+    }
+    const el = ref.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setImgSrc(src)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [src, eager])
+
+  return { ref, loaded, setLoaded, imgSrc }
+}
 
 // ── MomentsGallery ─────────────────────────────────────────────────────────
 
@@ -367,44 +401,78 @@ function HeroHeader({ eventName, eventDate, theme }: {
 
 // ── MomentCard ──────────────────────────────────────────────────────────────
 
-function MomentCard({ moment, index, EVENTS_URL, theme, onClick }: {
-  moment: Moment; index: number; EVENTS_URL: string; theme: MomentsTheme; onClick: () => void
+function MomentCard({
+  moment,
+  index,
+  EVENTS_URL,
+  theme,
+  onClick,
+}: {
+  moment: Moment
+  index: number
+  EVENTS_URL: string
+  theme: ReturnType<typeof getTheme>
+  onClick: () => void
 }) {
   const thumbUrl = resolveMediaUrl(moment, EVENTS_URL)
   const fullUrl = resolveFullUrl(moment, EVENTS_URL)
-  const video = isVideo(fullUrl)
+  const isVideoMoment = isVideo(fullUrl)
+  const eager = index < 4
+
+  const { ref, loaded, setLoaded, imgSrc } = useLazyImage(thumbUrl, eager)
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: Math.min(index * 0.04, 1.2), type: "spring", stiffness: 300, damping: 25 }}
-      className="break-inside-avoid mb-3 sm:mb-4 group cursor-pointer"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        delay: index < 4 ? 0 : Math.min(index * 0.03, 0.24),
+        type: 'spring',
+        stiffness: 300,
+        damping: 25,
+      }}
+      className="moment-card break-inside-avoid mb-3 sm:mb-4 cursor-pointer group"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 300px' } as React.CSSProperties}
       onClick={onClick}
     >
-      <div className="relative rounded-2xl overflow-hidden bg-gray-100">
-        {video ? (
-          <div className="relative aspect-video">
-            {moment.thumbnail_url ? (
-              <img src={thumbUrl} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" decoding="async" />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center">
-                <PlayIcon />
-              </div>
-            )}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center group-hover:bg-black/60 transition-colors">
-                <PlayIcon />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <img src={thumbUrl} alt={moment.description ?? ""} className="w-full transition-transform duration-500 group-hover:scale-105" loading="lazy" decoding="async" />
+      <div ref={ref} className="relative rounded-2xl overflow-hidden bg-gray-100">
+        {/* Shimmer placeholder */}
+        {!loaded && (
+          <div
+            className="absolute inset-0 bg-gradient-to-r from-gray-100 via-gray-50 to-gray-100 bg-[length:200%_100%] animate-shimmer"
+            style={{ minHeight: '160px' }}
+            aria-hidden="true"
+          />
         )}
 
+        {/* Actual image / video thumbnail */}
+        {imgSrc && (
+          <img
+            src={imgSrc}
+            alt={moment.description || 'Momento del evento'}
+            loading={eager ? 'eager' : 'lazy'}
+            {...(eager ? { fetchPriority: 'high' as const } : {})}
+            decoding="async"
+            className={`w-full h-auto block transition-opacity duration-500 group-hover:scale-105 transition-transform ${
+              loaded ? 'opacity-100' : 'opacity-0'
+            }`}
+            onLoad={() => setLoaded(true)}
+          />
+        )}
+
+        {/* Video play overlay */}
+        {isVideoMoment && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+              <PlayIcon />
+            </div>
+          </div>
+        )}
+
+        {/* Description overlay on hover */}
         {moment.description && (
-          <div className={`absolute inset-0 ${theme.cardOverlay} opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4`}>
-            <p className="text-white text-sm leading-relaxed line-clamp-3 font-light">"{moment.description}"</p>
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+            <p className="text-white text-xs line-clamp-2">{moment.description}</p>
           </div>
         )}
       </div>

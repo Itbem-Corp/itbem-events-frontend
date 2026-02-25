@@ -11,10 +11,10 @@ module.exports = {
     		colors: {
     			background: 'hsl(var(--background))',
     			foreground: 'hsl(var(--foreground))',
-				gold: "#C7A44C",
-				coffee: "#8B5D3D",
-				blue: "#007BC4",
-				navy: "#1B1464",
+			gold: "#C7A44C",
+			coffee: "#8B5D3D",
+			blue: "#007BC4",
+			navy: "#1B1464",
     			card: {
     				DEFAULT: 'hsl(var(--card))',
     				foreground: 'hsl(var(--card-foreground))'
@@ -54,22 +54,27 @@ module.exports = {
     				'5': 'hsl(var(--chart-5))'
     			}
     		},
-			fontFamily: {
-				bigilla: ['Bigilla', 'serif'],
-				quicksand: ['Quicksand', 'sans-serif'],
-				aloevera: ["Aloevera-Regular", "sans-serif"],
-				aloeveraLight: ["Aloevera-Light", "sans-serif"],
-				astralaga: ["Astralaga SemiBold", "serif"],
+		fontFamily: {
+			bigilla: ['Bigilla', 'serif'],
+			quicksand: ['Quicksand', 'sans-serif'],
+			aloevera: ["Aloevera-Regular", "sans-serif"],
+			aloeveraLight: ["Aloevera-Light", "sans-serif"],
+			astralaga: ["Astralaga SemiBold", "serif"],
+		},
+		keyframes: {
+			marquee: {
+				'0%': { transform: 'translateX(0%)' },
+				'100%': { transform: 'translateX(-50%)' },
 			},
-			keyframes: {
-				marquee: {
-					'0%': { transform: 'translateX(0%)' },
-					'100%': { transform: 'translateX(-50%)' },
-				},
+			shimmer: {
+				'0%': { backgroundPosition: '-200% 0' },
+				'100%': { backgroundPosition: '200% 0' },
 			},
-			animation: {
-				marquee: 'marquee linear infinite',
-			},
+		},
+		animation: {
+			marquee: 'marquee linear infinite',
+			shimmer: 'shimmer 1.5s ease-in-out infinite',
+		},
     	}
     },
     plugins: [require("tailwindcss-animate")],
