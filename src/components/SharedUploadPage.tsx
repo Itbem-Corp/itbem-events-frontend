@@ -587,7 +587,11 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 400, damping: 25, delay: 0.1 }}
-          className="inline-flex items-center justify-center w-16 h-16 rounded-[20px] bg-gradient-to-br from-violet-500 to-indigo-600 shadow-lg shadow-indigo-500/25 mb-5"
+          className={`inline-flex items-center justify-center w-16 h-16 rounded-[20px] mb-5 transition-colors ${
+            theme === 'dark'
+              ? 'bg-violet-500/20 border border-violet-500/30 shadow-[0_0_40px_rgba(139,92,246,0.25)]'
+              : 'bg-gradient-to-br from-violet-500 to-indigo-600 shadow-lg shadow-indigo-500/25'
+          }`}
         >
           <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
@@ -597,7 +601,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="text-2xl font-bold text-gray-900 tracking-tight"
+          className={`text-2xl font-bold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}
         >
           Comparte tus momentos
         </motion.h1>
@@ -605,7 +609,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="mt-2 text-gray-400 text-sm max-w-[280px] mx-auto leading-relaxed"
+          className={`mt-2 text-sm max-w-[280px] mx-auto leading-relaxed ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}
         >
           Sube hasta {MAX_FILES} fotos o videos para la galería del evento
         </motion.p>
