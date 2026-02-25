@@ -231,6 +231,22 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
     ]).finally(() => setLoading(false))
   }, [identifier, fetchMoments, fetchPageSpec])
 
+  // Fetch event phrases when eventType is known
+  useEffect(() => {
+    if (!eventType || !EVENTS_URL) return
+    const type = eventType.toUpperCase()
+    fetch(`${EVENTS_URL}api/events/phrases?type=${type}&count=15`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { data?: { phrases?: string[] } } | null) => {
+        if (data?.data?.phrases?.length) {
+          setPhrases(data.data.phrases)
+        }
+      })
+      .catch(() => {
+        // Silently fail — gallery works fine without phrases
+      })
+  }, [eventType, EVENTS_URL])
+
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || !identifier) return
     const nextPage = page + 1
