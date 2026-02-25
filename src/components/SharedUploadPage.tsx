@@ -1075,11 +1075,11 @@ function ComingSoonScreen({ identifier }: { identifier: string }) {
             height: 4 + (i % 3) * 4,
             left: `${8 + i * 9}%`,
             top: `${12 + (i % 4) * 20}%`,
-            backgroundColor: ['#c4b5fd', '#a5b4fc', '#e9d5ff', '#ddd6fe', '#c7d2fe'][i % 5],
+            backgroundColor: ['#a78bfa', '#818cf8', '#c084fc', '#6366f1', '#8b5cf6'][i % 5],
           }}
           animate={{
             y: [0, -8 - (i % 3) * 4, 0],
-            opacity: [0.15, 0.35, 0.15],
+            opacity: [0.25, 0.55, 0.25],
             scale: [1, 1.15, 1],
           }}
           transition={{
@@ -1098,7 +1098,11 @@ function ComingSoonScreen({ identifier }: { identifier: string }) {
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
         className="relative mb-8"
       >
-        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-violet-400 to-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+        <div className={`w-24 h-24 rounded-full flex items-center justify-center ${
+          theme === 'dark'
+            ? 'bg-gradient-to-br from-violet-500 to-indigo-500 shadow-[0_0_50px_rgba(139,92,246,0.45)]'
+            : 'bg-gradient-to-br from-violet-400 to-indigo-500 shadow-lg shadow-indigo-500/25'
+        }`}>
           <svg className="w-12 h-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
             <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
@@ -1106,7 +1110,7 @@ function ComingSoonScreen({ identifier }: { identifier: string }) {
         </div>
         {/* Pulse ring */}
         <motion.div
-          className="absolute inset-0 rounded-full border-2 border-indigo-300"
+          className={`absolute inset-0 rounded-full border-2 ${theme === 'dark' ? 'border-violet-400/60' : 'border-indigo-300'}`}
           animate={{ scale: [1, 1.4], opacity: [0.4, 0] }}
           transition={{ repeat: Infinity, duration: 2, ease: "easeOut" }}
         />
@@ -1119,14 +1123,14 @@ function ComingSoonScreen({ identifier }: { identifier: string }) {
         transition={{ delay: 0.15 }}
         className="space-y-4 max-w-sm"
       >
-        <h2 className="text-2xl font-bold text-gray-900 tracking-tight leading-tight">
+        <h2 className={`text-2xl font-bold tracking-tight leading-tight ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
           Pronto podras compartir tus mejores momentos
         </h2>
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="text-gray-400 text-sm leading-relaxed"
+          className={`text-sm leading-relaxed ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
         >
           El organizador esta preparando todo para que puedas subir tus fotos y videos del evento. Vuelve en un momento.
         </motion.p>
@@ -1143,7 +1147,7 @@ function ComingSoonScreen({ identifier }: { identifier: string }) {
           {[0, 1, 2].map((i) => (
             <motion.div
               key={i}
-              className="w-1.5 h-1.5 rounded-full bg-indigo-400"
+              className={`w-1.5 h-1.5 rounded-full ${theme === 'dark' ? 'bg-violet-400' : 'bg-indigo-400'}`}
               animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.1, 0.8] }}
               transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2, ease: "easeInOut" }}
             />
