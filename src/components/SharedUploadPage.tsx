@@ -9,7 +9,8 @@ type Theme = 'dark' | 'light';
 function useTheme(): [Theme, () => void] {
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === 'undefined') return 'dark';
-    return (localStorage.getItem('upload-theme') as Theme) ?? 'dark';
+    const stored = localStorage.getItem('upload-theme');
+    return (stored === 'dark' || stored === 'light') ? stored : 'dark';
   });
   const toggle = useCallback(() => {
     setTheme(t => {
@@ -1151,6 +1152,7 @@ function ThemeToggleButton() {
   const { theme, toggle } = useContext(ThemeCtx);
   return (
     <motion.button
+      type="button"
       onClick={toggle}
       whileTap={{ scale: 0.9 }}
       className={`fixed top-4 right-4 z-50 flex items-center justify-center w-9 h-9 rounded-full border transition-all ${
