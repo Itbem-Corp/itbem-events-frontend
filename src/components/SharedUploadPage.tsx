@@ -746,23 +746,35 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onClick={() => fileInputRef.current?.click()}
-                className={`cursor-pointer border-2 border-dashed rounded-3xl aspect-[4/3] flex flex-col items-center justify-center gap-4 transition-all ${
+                className={`cursor-pointer border-2 border-dashed rounded-3xl aspect-[4/3] flex flex-col items-center justify-center gap-4 transition-all duration-200 ${
                   dragOver
-                    ? "border-indigo-400 bg-indigo-50 scale-[1.01]"
-                    : "border-gray-200 hover:border-indigo-300 hover:bg-gray-50/50"
+                    ? theme === 'dark'
+                      ? 'border-violet-400/70 bg-violet-500/[0.08] shadow-[inset_0_0_40px_rgba(139,92,246,0.12)] scale-[1.01]'
+                      : 'border-indigo-400 bg-indigo-50 scale-[1.01]'
+                    : theme === 'dark'
+                      ? 'border-white/20 hover:border-violet-400/40 hover:bg-violet-500/[0.04]'
+                      : 'border-gray-200 hover:border-indigo-300 hover:bg-gray-50/50'
                 }`}
               >
                 <motion.div
                   animate={dragOver ? { scale: 1.1 } : { scale: 1 }}
-                  className={`p-4 rounded-2xl transition-colors ${dragOver ? "bg-indigo-100" : "bg-gray-50"}`}
+                  className={`p-4 rounded-2xl transition-colors ${
+                    dragOver
+                      ? theme === 'dark' ? 'bg-violet-500/20' : 'bg-indigo-100'
+                      : theme === 'dark' ? 'bg-gradient-to-br from-violet-500/15 to-indigo-500/15' : 'bg-gray-50'
+                  }`}
                 >
-                  <IconUpload className={`w-8 h-8 ${dragOver ? "text-indigo-500" : "text-gray-300"}`} />
+                  <IconUpload className={`w-8 h-8 ${
+                    dragOver
+                      ? theme === 'dark' ? 'text-violet-300' : 'text-indigo-500'
+                      : theme === 'dark' ? 'text-violet-400/60' : 'text-gray-300'
+                  }`} />
                 </motion.div>
                 <div className="text-center px-6">
-                  <p className="text-[15px] font-semibold text-gray-700">
+                  <p className={`text-[15px] font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-700'}`}>
                     {dragOver ? "Suelta aquí" : "Seleccionar de galería"}
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">Fotos y videos · Máx. 25 MB fotos, 200 MB videos</p>
+                  <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>Fotos y videos · Máx. 25 MB fotos, 200 MB videos</p>
                 </div>
               </div>
             ) : (
@@ -773,13 +785,15 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
                 onDragLeave={() => setDragOver(false)}
                 onClick={() => fileInputRef.current?.click()}
                 className={`cursor-pointer border-2 border-dashed rounded-2xl py-4 flex items-center justify-center gap-2 transition-all ${
-                  dragOver ? "border-indigo-400 bg-indigo-50" : "border-gray-200 hover:border-indigo-300 hover:bg-gray-50/50"
+                  dragOver
+                    ? theme === 'dark' ? 'border-violet-400/70 bg-violet-500/[0.08]' : 'border-indigo-400 bg-indigo-50'
+                    : theme === 'dark' ? 'border-white/15 hover:border-violet-400/40 hover:bg-violet-500/[0.04]' : 'border-gray-200 hover:border-indigo-300 hover:bg-gray-50/50'
                 }`}
               >
-                <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <svg className={`w-5 h-5 ${theme === 'dark' ? 'text-violet-400' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
-                <span className="text-sm font-medium text-gray-500">
+                <span className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
                   Agregar más ({files.length}/{MAX_FILES})
                 </span>
               </div>
@@ -789,7 +803,11 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
             <button
               type="button"
               onClick={() => cameraInputRef.current?.click()}
-              className="mt-2 w-full flex items-center justify-center gap-2.5 rounded-2xl border border-gray-200 py-3.5 text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+              className={`mt-2 w-full flex items-center justify-center gap-2.5 rounded-2xl border py-3.5 text-sm font-medium transition-colors ${
+                theme === 'dark'
+                  ? 'border-white/10 text-gray-400 hover:bg-white/[0.04] hover:text-gray-200'
+                  : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+              }`}
             >
               <IconCamera className="w-5 h-5" />
               Tomar foto o video
