@@ -537,7 +537,10 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
     };
 
     const pendingEntries = files.filter((e) => e.status !== "done");
-    const uploadTasks = pendingEntries.map((entry, idx) => () => uploadOne(entry, idx === 0));
+    const uploadTasks = pendingEntries.map((entry, idx) => async () => {
+      if (connectionError || uploadsDisabled) return
+      await uploadOne(entry, idx === 0)
+    });
     await runPool(uploadTasks);
 
     if (connectionError) setError("No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.");
