@@ -880,12 +880,14 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              className="rounded-xl bg-red-50 px-4 py-3 flex items-start gap-2"
+              className={`rounded-xl px-4 py-3 flex items-start gap-2 ${
+                theme === 'dark' ? 'bg-red-500/10 border border-red-500/20' : 'bg-red-50'
+              }`}
             >
               <svg className="w-4 h-4 text-red-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
               </svg>
-              <p className="text-sm text-red-600 leading-relaxed">{error}</p>
+              <p className={`text-sm leading-relaxed ${theme === 'dark' ? 'text-red-300' : 'text-red-600'}`}>{error}</p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -897,16 +899,20 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              className="rounded-xl bg-amber-50 border border-amber-200/50 px-4 py-3 flex items-start gap-2.5"
+              className={`rounded-xl px-4 py-3 flex items-start gap-2.5 border ${
+                theme === 'dark' ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200/50'
+              }`}
             >
-              <div className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                theme === 'dark' ? 'bg-amber-500/40 border border-amber-400/40' : 'bg-amber-400'
+              }`}>
                 <span className="text-white text-xs font-bold">!</span>
               </div>
               <div>
-                <p className="text-sm font-medium text-amber-800">
+                <p className={`text-sm font-medium ${theme === 'dark' ? 'text-amber-300' : 'text-amber-800'}`}>
                   {doneCount} de {files.length} {doneCount === 1 ? "se subió" : "se subieron"} correctamente
                 </p>
-                <p className="text-xs text-amber-600 mt-0.5">
+                <p className={`text-xs mt-0.5 ${theme === 'dark' ? 'text-amber-400/80' : 'text-amber-600'}`}>
                   Puedes reintentar los que fallaron tocando el botón de abajo.
                 </p>
               </div>
@@ -921,7 +927,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
             animate={{ opacity: 1 }}
             className="space-y-2"
           >
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className={`h-2 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-white/10' : 'bg-gray-100'}`}>
               <motion.div
                 className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
                 initial={{ width: 0 }}
@@ -931,7 +937,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
             </div>
             <div className="flex items-center justify-center gap-2">
               <Spinner className="w-4 h-4 text-indigo-500" />
-              <p className="text-xs text-gray-500 font-medium">
+              <p className={`text-xs font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
                 Subiendo {Math.min(uploadedCount + 1, files.length)} de {files.length}
               </p>
             </div>
