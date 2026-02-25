@@ -288,49 +288,79 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
 // ── HeroHeader ──────────────────────────────────────────────────────────────
 
 function HeroHeader({ eventName, eventDate, theme }: {
-  eventName: string; eventDate: string; theme: MomentsTheme
+  eventName: string
+  eventDate: string
+  theme: ReturnType<typeof getTheme>
 }) {
   const formattedDate = eventDate
-    ? new Date(eventDate).toLocaleDateString("es-MX", { dateStyle: "long" })
-    : ""
+    ? new Date(eventDate + 'T12:00:00').toLocaleDateString('es-ES', {
+        day: 'numeric', month: 'long', year: 'numeric',
+      })
+    : ''
 
   return (
-    <div className={`relative overflow-hidden ${theme.heroBg}`}>
-      <Decorations type={theme.decorationType} />
-      <div className="relative max-w-4xl mx-auto px-6 py-16 sm:py-24 text-center">
+    <div className="relative text-center py-16 sm:py-24 px-6 overflow-hidden">
+      {/* Subtle theme decoration — left */}
+      <motion.div
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 0.35, x: 0 }}
+        transition={{ delay: 0.4, duration: 0.8 }}
+        className="absolute left-4 top-1/2 -translate-y-1/2 text-4xl pointer-events-none select-none"
+        aria-hidden="true"
+      >
+        {theme.microIcon}
+      </motion.div>
+      {/* Subtle theme decoration — right */}
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 0.35, x: 0 }}
+        transition={{ delay: 0.5, duration: 0.8 }}
+        className="absolute right-4 top-1/2 -translate-y-1/2 text-4xl pointer-events-none select-none"
+        aria-hidden="true"
+      >
+        {theme.microIcon}
+      </motion.div>
+
+      {/* Event name */}
+      <motion.h1
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        className={`text-4xl sm:text-5xl font-bold tracking-tight text-gray-900 ${theme.headingFont}`}
+      >
+        {eventName || 'Momentos'}
+      </motion.h1>
+
+      {/* Event date */}
+      {formattedDate && (
         <motion.p
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="text-sm uppercase tracking-[0.2em] text-gray-400 mb-4"
+          transition={{ delay: 0.1, duration: 0.5 }}
+          className="mt-2 text-sm text-gray-400 tracking-wide"
         >
-          Los momentos de
+          {formattedDate}
         </motion.p>
-        <motion.h1
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, type: "spring", stiffness: 200, damping: 20 }}
-          className={`text-4xl sm:text-5xl lg:text-6xl ${theme.headingFont} ${theme.accent} leading-tight`}
-        >
-          {eventName || "Nuestros Momentos"}
-        </motion.h1>
-        {formattedDate && (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="mt-4 text-sm text-gray-400"
-          >
-            {formattedDate}
-          </motion.p>
-        )}
-        <motion.div
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ delay: 0.5, duration: 0.8 }}
-          className="mt-8 mx-auto w-16 h-px bg-gray-300/50"
-        />
-      </div>
+      )}
+
+      {/* Decorative expanding line */}
+      <motion.div
+        initial={{ scaleX: 0 }}
+        animate={{ scaleX: 1 }}
+        transition={{ delay: 0.2, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        className="mt-5 mx-auto h-px w-16 bg-gradient-to-r from-transparent via-gray-300 to-transparent"
+        style={{ transformOrigin: 'center' }}
+      />
+
+      {/* Subtitle */}
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.35, duration: 0.5 }}
+        className="mt-3 text-xs tracking-[0.25em] uppercase text-gray-400"
+      >
+        sus momentos
+      </motion.p>
     </div>
   )
 }
