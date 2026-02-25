@@ -21,7 +21,7 @@ interface MomentsResponse {
   page: number
   limit: number
   has_more: boolean
-  published: number
+  published: boolean | number | undefined
   uploads_remaining: number
   uploads_used: number
   moments_wall_published?: boolean
@@ -62,9 +62,13 @@ const PAGE_SIZE = 30
 
 interface Props {
   EVENTS_URL: string
+  previewToken?: string
 }
 
-export default function MomentsGallery({ EVENTS_URL }: Props) {
+export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken = '' }: Props) {
+  // Normalize: ensure trailing slash so `${EVENTS_URL}api/...` always produces a valid URL.
+  const EVENTS_URL = rawEventsUrl.endsWith('/') ? rawEventsUrl : rawEventsUrl + '/'
+  const isAdminPreview = previewToken.length > 0
   const [identifier, setIdentifier] = useState("")
   const [moments, setMoments] = useState<Moment[]>([])
   const [hasMore, setHasMore] = useState(false)
@@ -84,11 +88,13 @@ export default function MomentsGallery({ EVENTS_URL }: Props) {
 
   const fetchMoments = useCallback(async (id: string, pageNum: number, append: boolean) => {
     try {
+      const tokenParam = previewToken ? `&preview_token=${encodeURIComponent(previewToken)}` : ''
       const res = await fetch(
-        `${EVENTS_URL}api/events/${encodeURIComponent(id)}/moments?page=${pageNum}&limit=${PAGE_SIZE}`
+        `${EVENTS_URL}api/events/${encodeURIComponent(id)}/moments?page=${pageNum}&limit=${PAGE_SIZE}${tokenParam}`
       )
       if (!res.ok) {
         if (res.status === 404) { setError("Evento no encontrado"); return }
+        if (res.status === 403) { setError("Token de vista previa inválido o expirado"); return }
         throw new Error(`HTTP ${res.status}`)
       }
       const json = await res.json()
@@ -96,7 +102,7 @@ export default function MomentsGallery({ EVENTS_URL }: Props) {
 
       setMoments(prev => append ? [...prev, ...(data.items ?? [])] : (data.items ?? []))
       setHasMore(data.has_more ?? false)
-      setPublished(data.moments_wall_published ?? true)
+      setPublished(data.published !== false)
 
       if (data.event_name) setEventName(data.event_name)
       if (data.event_type) setEventType(data.event_type)
@@ -104,7 +110,7 @@ export default function MomentsGallery({ EVENTS_URL }: Props) {
     } catch {
       setError("No se pudieron cargar los momentos")
     }
-  }, [EVENTS_URL])
+  }, [EVENTS_URL, previewToken])
 
   const fetchPageSpec = useCallback(async (id: string) => {
     try {
@@ -154,33 +160,62 @@ export default function MomentsGallery({ EVENTS_URL }: Props) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-          className="w-8 h-8 border-2 border-gray-200 border-t-gray-600 rounded-full"
-        />
+      <div className="min-h-screen bg-white">
+        {/* Hero skeleton */}
+        <div className="relative overflow-hidden bg-gray-50 py-20 sm:py-28 text-center">
+          <div className="mx-auto space-y-4 flex flex-col items-center">
+            <div className="h-3 w-24 bg-gray-200 rounded-full animate-pulse" />
+            <div className="h-10 w-64 sm:w-80 bg-gray-200 rounded-full animate-pulse" style={{ animationDelay: '0.1s' }} />
+            <div className="h-3 w-32 bg-gray-100 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+          </div>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 1.4, ease: "linear" }}
+            className="mt-10 mx-auto w-7 h-7 border-2 border-gray-200 border-t-gray-400 rounded-full"
+          />
+        </div>
+        {/* Grid skeleton */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="columns-2 sm:columns-3 lg:columns-4 gap-3 sm:gap-4">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div
+                key={i}
+                className="break-inside-avoid mb-3 sm:mb-4 rounded-2xl bg-gray-100 animate-pulse"
+                style={{ height: `${[180, 240, 160, 200, 280, 150, 220, 190, 260, 170, 230, 200][i]}px`, animationDelay: `${i * 0.05}s` }}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white px-6">
-        <div className="text-center space-y-3">
-          <p className="text-gray-400 text-sm">{error}</p>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center space-y-5 max-w-xs"
+        >
+          <div className="text-4xl">📷</div>
+          <div className="space-y-2">
+            <p className="text-gray-700 font-medium text-sm">No pudimos cargar los momentos</p>
+            <p className="text-gray-400 text-xs">Verifica tu conexión o intenta de nuevo.</p>
+          </div>
           <button
             onClick={() => window.location.reload()}
-            className="text-sm text-indigo-500 hover:text-indigo-600 font-medium"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gray-900 text-white text-sm font-medium hover:bg-gray-700 transition-colors"
           >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             Reintentar
           </button>
-        </div>
+        </motion.div>
       </div>
     )
   }
 
-  if (published === false) {
+  if (published === false && !isAdminPreview) {
     return <ComingSoonScreen eventName={eventName} theme={theme} />
   }
 
@@ -202,7 +237,9 @@ export default function MomentsGallery({ EVENTS_URL }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <>
+      {isAdminPreview && <AdminPreviewBanner onClose={() => {/* dismisses UI only */}} />}
+      <div className={`min-h-screen bg-white ${isAdminPreview ? 'pt-14' : ''}`}>
       <HeroHeader eventName={eventName} eventDate={eventDate} theme={theme} />
 
       <StatsBar
@@ -259,6 +296,7 @@ export default function MomentsGallery({ EVENTS_URL }: Props) {
         )}
       </AnimatePresence>
     </div>
+    </>
   )
 }
 
@@ -560,15 +598,101 @@ function ThemeFooter({ theme, eventName }: { theme: MomentsTheme; eventName: str
 
 function ComingSoonScreen({ eventName, theme }: { eventName: string; theme: MomentsTheme }) {
   return (
-    <div className={`min-h-screen flex items-center justify-center px-6 ${theme.heroBg} relative overflow-hidden`}>
+    <div className={`min-h-screen flex flex-col items-center justify-center px-6 ${theme.heroBg} relative overflow-hidden`}>
       <Decorations type={theme.decorationType} />
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative z-10 text-center space-y-6">
-        <motion.div animate={{ y: [0, -6, 0] }} transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }} className="text-5xl">✨</motion.div>
-        <h1 className={`text-3xl sm:text-4xl ${theme.headingFont} ${theme.accent}`}>Proximamente</h1>
-        <p className="text-gray-400 text-sm max-w-xs mx-auto">
-          El muro de momentos de <span className="font-medium text-gray-600">{eventName || "este evento"}</span> se esta preparando.
-        </p>
-      </motion.div>
+
+      {/* Floating ambient circles */}
+      <motion.div
+        className="absolute w-72 h-72 rounded-full opacity-[0.06] bg-current pointer-events-none"
+        style={{ top: '15%', left: '5%' }}
+        animate={{ scale: [1, 1.15, 1], x: [0, 12, 0] }}
+        transition={{ repeat: Infinity, duration: 8, ease: "easeInOut" }}
+      />
+      <motion.div
+        className="absolute w-48 h-48 rounded-full opacity-[0.05] bg-current pointer-events-none"
+        style={{ bottom: '10%', right: '8%' }}
+        animate={{ scale: [1, 1.2, 1], x: [0, -10, 0] }}
+        transition={{ repeat: Infinity, duration: 6, ease: "easeInOut", delay: 1 }}
+      />
+
+      <div className="relative z-10 text-center max-w-sm mx-auto space-y-8">
+        {/* Animated icon */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.6 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: "spring", stiffness: 200, damping: 15 }}
+          className="flex justify-center"
+        >
+          <motion.div
+            animate={{ y: [0, -8, 0] }}
+            transition={{ repeat: Infinity, duration: 3.5, ease: "easeInOut" }}
+            className="relative"
+          >
+            <span className="text-6xl sm:text-7xl select-none">✨</span>
+            <motion.span
+              className="absolute -top-2 -right-3 text-2xl"
+              animate={{ rotate: [0, 15, -10, 0], scale: [1, 1.2, 0.9, 1] }}
+              transition={{ repeat: Infinity, duration: 4, ease: "easeInOut", delay: 0.5 }}
+            >📸</motion.span>
+          </motion.div>
+        </motion.div>
+
+        {/* Text */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, type: "spring", stiffness: 200, damping: 20 }}
+          className="space-y-3"
+        >
+          <p className="text-xs uppercase tracking-[0.25em] text-gray-400">Próximamente</p>
+          <h1 className={`text-3xl sm:text-4xl ${theme.headingFont} ${theme.accent} leading-tight`}>
+            {eventName ? `Los momentos de\n${eventName}` : "El muro de momentos"}
+          </h1>
+        </motion.div>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="text-gray-400 text-sm leading-relaxed max-w-[260px] mx-auto"
+        >
+          Estamos preparando algo especial. Vuelve pronto para revivir cada instante.
+        </motion.p>
+
+        {/* Animated dots loader */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className="flex items-center justify-center gap-2 pt-2"
+        >
+          {[0, 1, 2].map(i => (
+            <motion.div
+              key={i}
+              className={`w-2 h-2 rounded-full ${theme.accentSoft} opacity-60`}
+              animate={{ scale: [1, 1.5, 1], opacity: [0.4, 1, 0.4] }}
+              transition={{ repeat: Infinity, duration: 1.5, delay: i * 0.25, ease: "easeInOut" }}
+            />
+          ))}
+        </motion.div>
+
+        {/* Subtle divider */}
+        <motion.div
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ delay: 0.7, duration: 0.8 }}
+          className="mx-auto w-12 h-px bg-gray-300/50"
+        />
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.9 }}
+          className="text-[11px] text-gray-300 tracking-wide"
+        >
+          Eventiapp · Galería de momentos
+        </motion.p>
+      </div>
     </div>
   )
 }
@@ -633,4 +757,63 @@ function Decorations({ type }: { type: MomentsTheme['decorationType'] }) {
     )
   }
   return null
+}
+
+// ── AdminPreviewBanner ────────────────────────────────────────────────────────
+
+function AdminPreviewBanner({ onClose }: { onClose: () => void }) {
+  const [visible, setVisible] = useState(true)
+
+  const handleClose = () => {
+    setVisible(false)
+    onClose()
+  }
+
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={{ y: -64, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -64, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+          className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-3 px-4 sm:px-6 h-14 bg-gray-950/95 backdrop-blur-md border-b border-white/10 shadow-2xl shadow-black/40"
+        >
+          {/* Left: label */}
+          <div className="flex items-center gap-3 min-w-0">
+            <motion.div
+              animate={{ scale: [1, 1.15, 1] }}
+              transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+              className="flex-shrink-0 w-7 h-7 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center"
+            >
+              <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.573-3.007-9.963-7.178z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </motion.div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-white">Vista previa de administrador</span>
+                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide bg-violet-500/20 text-violet-300 border border-violet-500/30 uppercase">
+                  Solo tú ves esto
+                </span>
+              </div>
+              <p className="hidden sm:block text-xs text-gray-400 truncate">El muro aún no es público — los invitados ven la pantalla de &quot;Próximamente&quot;</p>
+            </div>
+          </div>
+
+          {/* Right: close */}
+          <button
+            onClick={handleClose}
+            className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+            aria-label="Cerrar aviso de vista previa"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
 }

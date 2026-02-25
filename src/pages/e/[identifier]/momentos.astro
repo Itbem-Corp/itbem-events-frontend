@@ -7,6 +7,8 @@ import { fetchEventOgData, buildOgImageUrl } from '../../../lib/og'
 
 const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string ?? 'http://localhost:8080/'
 const { identifier } = Astro.params
+// Admin preview token — passed from dashboard, validated by backend on each request.
+const previewToken = Astro.url.searchParams.get('preview_token') ?? ''
 
 let ogTitle = 'Momentos del evento'
 let ogDesc  = 'Las mejores fotos y videos del evento. Revive cada momento.'
@@ -41,5 +43,6 @@ if (identifier) {
   <MomentsGallery
     client:only="react"
     EVENTS_URL={EVENTS_URL}
+    previewToken={previewToken}
   />
 </TemplateLayout>
