@@ -987,7 +987,7 @@ function SuccessScreen({
   return (
     <div className={`min-h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden${theme === 'light' ? ' bg-white' : ''}`}>
       {/* Confetti dots */}
-      {Array.from({ length: 12 }).map((_, i) => (
+      {Array.from({ length: 16 }).map((_, i) => (
         <motion.div
           key={i}
           initial={{ opacity: 0, y: -20, x: 0 }}
@@ -999,7 +999,7 @@ function SuccessScreen({
           transition={{ duration: 1.5 + Math.random(), delay: 0.1 + Math.random() * 0.4, ease: "easeOut" }}
           className="absolute top-1/4 left-1/2 w-2 h-2 rounded-full"
           style={{
-            backgroundColor: ["#818cf8", "#34d399", "#fbbf24", "#f472b6", "#60a5fa", "#a78bfa"][i % 6],
+            backgroundColor: ["#818cf8", "#34d399", "#fbbf24", "#f472b6", "#60a5fa", "#a78bfa", "#fb923c", "#e879f9"][i % 8],
           }}
         />
       ))}
@@ -1008,7 +1008,11 @@ function SuccessScreen({
         initial={{ scale: 0.3, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
-        className="w-24 h-24 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center mb-8 shadow-lg shadow-green-500/30"
+        className={`w-24 h-24 rounded-full flex items-center justify-center mb-8 ${
+          theme === 'dark'
+            ? 'bg-gradient-to-br from-violet-500 to-indigo-500 shadow-[0_0_60px_rgba(139,92,246,0.55)]'
+            : 'bg-gradient-to-br from-green-400 to-emerald-500 shadow-lg shadow-green-500/30'
+        }`}
       >
         <IconCheck className="w-12 h-12 text-white" />
       </motion.div>
@@ -1019,10 +1023,10 @@ function SuccessScreen({
         transition={{ delay: 0.15 }}
         className="space-y-4"
       >
-        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">
+        <h2 className={`text-2xl font-bold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
           {count === 1 ? "¡Momento compartido!" : `¡${count} momentos compartidos!`}
         </h2>
-        <p className="text-gray-500 text-sm max-w-[280px] mx-auto leading-relaxed">
+        <p className={`text-sm max-w-[280px] mx-auto leading-relaxed ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
           {count === 1
             ? "Tu foto aparecerá en la galería del evento una vez que el organizador la apruebe."
             : `Tus ${count} archivos aparecerán en la galería del evento una vez que el organizador los apruebe.`}
@@ -1032,7 +1036,7 @@ function SuccessScreen({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="text-gray-400 text-xs italic"
+          className={`text-xs italic ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}
         >
           ¡Gracias por ser parte de este momento especial!
         </motion.p>
@@ -1043,7 +1047,11 @@ function SuccessScreen({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
             onClick={onUploadMore}
-            className="mt-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 hover:shadow-xl active:scale-[0.98] transition-all"
+            className={`mt-2 inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-3 text-sm font-semibold text-white transition-all active:scale-[0.98] ${
+              theme === 'dark'
+                ? 'shadow-[0_8px_32px_rgba(99,102,241,0.35)] hover:shadow-[0_8px_40px_rgba(99,102,241,0.55)]'
+                : 'shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30'
+            }`}
           >
             Subir más fotos o videos
           </motion.button>
