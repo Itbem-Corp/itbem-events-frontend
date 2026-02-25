@@ -5,6 +5,7 @@ import SectionRenderer from './SectionRenderer';
 import MusicWidget from '../MusicWidget';
 import ShareWidget from '../ShareWidget';
 import Footer from '../common/Footer';
+import InstallPrompt from '../InstallPrompt';
 import type { PageSpec } from './types';
 
 interface Props {
@@ -373,6 +374,8 @@ export default function EventPage({ EVENTS_URL: rawEventsUrl, identifier: identi
           <Footer contact={spec.meta.contact} />
         </div>
       </main>
+
+      <InstallPrompt />
     </>
   );
 }
