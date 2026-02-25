@@ -102,7 +102,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
 
       setMoments(prev => append ? [...prev, ...(data.items ?? [])] : (data.items ?? []))
       setHasMore(data.has_more ?? false)
-      setPublished(data.published !== false)
+      setPublished(data.published === true)
 
       if (data.event_name) setEventName(data.event_name)
       if (data.event_type) setEventType(data.event_type)
@@ -502,7 +502,7 @@ function GalleryLightbox({ moments, index, EVENTS_URL, theme, onClose, onNext, o
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className={`fixed inset-0 z-50 ${theme.lightboxBg} backdrop-blur-sm flex flex-col items-center justify-center`}
+      className={`fixed inset-0 z-[60] ${theme.lightboxBg} backdrop-blur-sm flex flex-col items-center justify-center`}
       onClick={onClose}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
