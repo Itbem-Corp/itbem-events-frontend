@@ -162,24 +162,34 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
   const [eventDate, setEventDate] = useState("")
   const [error, setError] = useState("")
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [videoLightboxIndex, setVideoLightboxIndex] = useState<number | null>(null)
   const [phrases, setPhrases] = useState<string[]>([])
 
   const sentinelRef = React.useRef<HTMLDivElement>(null)
 
   const MOMENTS_PER_GROUP = 9
 
+  const videoMoments = React.useMemo(
+    () => moments.filter(m => isVideo(resolveFullUrl(m, EVENTS_URL))),
+    [moments, EVENTS_URL]
+  )
+  const photoMoments = React.useMemo(
+    () => moments.filter(m => !isVideo(resolveFullUrl(m, EVENTS_URL))),
+    [moments, EVENTS_URL]
+  )
+
   const groupedItems = React.useMemo(() => {
     const groups: Array<{ moments: Moment[]; phrase: string | null }> = []
-    for (let i = 0; i < moments.length; i += MOMENTS_PER_GROUP) {
-      const slice = moments.slice(i, i + MOMENTS_PER_GROUP)
+    for (let i = 0; i < photoMoments.length; i += MOMENTS_PER_GROUP) {
+      const slice = photoMoments.slice(i, i + MOMENTS_PER_GROUP)
       const phraseIdx = Math.floor(i / MOMENTS_PER_GROUP)
       // Only show phrase after group if there are more moments after this group
-      const hasMore = i + MOMENTS_PER_GROUP < moments.length
+      const hasMore = i + MOMENTS_PER_GROUP < photoMoments.length
       const phrase = hasMore && phrases.length > 0 ? (phrases[phraseIdx % phrases.length] ?? null) : null
       groups.push({ moments: slice, phrase })
     }
     return groups
-  }, [moments, phrases])
+  }, [photoMoments, phrases])
 
   useEffect(() => {
     setIdentifier(getIdentifier())
@@ -369,6 +379,15 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
       <div className={`min-h-screen bg-white ${isAdminPreview ? 'pt-14' : ''}`}>
       <HeroHeader eventName={eventName} eventDate={eventDate} theme={theme} />
 
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-0">
+        <VideoHighlights
+          videoMoments={videoMoments}
+          EVENTS_URL={EVENTS_URL}
+          theme={theme}
+          onOpen={(i) => setVideoLightboxIndex(i)}
+        />
+      </div>
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col gap-0">
           {groupedItems.map((group, groupIdx) => {
@@ -452,13 +471,26 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
       <AnimatePresence>
         {lightboxIndex !== null && (
           <GalleryLightbox
-            moments={moments}
+            moments={photoMoments}
             index={lightboxIndex}
             EVENTS_URL={EVENTS_URL}
             theme={theme}
             onClose={() => setLightboxIndex(null)}
-            onNext={() => setLightboxIndex(i => i !== null ? Math.min(i + 1, moments.length - 1) : null)}
+            onNext={() => setLightboxIndex(i => i !== null ? Math.min(i + 1, photoMoments.length - 1) : null)}
             onPrev={() => setLightboxIndex(i => i !== null ? Math.max(i - 1, 0) : null)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {videoLightboxIndex !== null && (
+          <GalleryLightbox
+            moments={videoMoments}
+            index={videoLightboxIndex}
+            EVENTS_URL={EVENTS_URL}
+            theme={theme}
+            onClose={() => setVideoLightboxIndex(null)}
+            onNext={() => setVideoLightboxIndex(i => i !== null ? Math.min(i + 1, videoMoments.length - 1) : null)}
+            onPrev={() => setVideoLightboxIndex(i => i !== null ? Math.max(i - 1, 0) : null)}
           />
         )}
       </AnimatePresence>
@@ -636,6 +668,97 @@ function PlayIcon() {
     <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
       <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
     </svg>
+  )
+}
+
+// ── VideoHighlights ──────────────────────────────────────────────────────────
+
+function VideoHighlights({
+  videoMoments,
+  EVENTS_URL,
+  theme,
+  onOpen,
+}: {
+  videoMoments: Moment[]
+  EVENTS_URL: string
+  theme: ReturnType<typeof getTheme>
+  onOpen: (index: number) => void
+}) {
+  if (videoMoments.length === 0) return null
+
+  return (
+    <div className="mb-10">
+      {/* Section header */}
+      <div className="flex items-center gap-3 mb-4 px-1">
+        <div className={`w-6 h-0.5 rounded-full ${theme.accentSoft}`} />
+        <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${theme.accent}`}>
+          Momentos en video
+        </p>
+        <div className={`flex-1 h-px ${theme.accentSoft} opacity-30`} />
+      </div>
+
+      {/* Responsive grid: 1 col mobile, 2 col sm+ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {videoMoments.map((moment, i) => {
+          const thumbUrl = moment.thumbnail_url
+            ? (moment.thumbnail_url.startsWith('http')
+                ? moment.thumbnail_url
+                : `${EVENTS_URL}${moment.thumbnail_url.startsWith('/') ? moment.thumbnail_url.slice(1) : moment.thumbnail_url}`)
+            : null
+          return (
+            <motion.button
+              key={moment.id}
+              type="button"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.07, type: 'spring', stiffness: 280, damping: 24 }}
+              onClick={() => onOpen(i)}
+              className="group relative w-full overflow-hidden rounded-2xl bg-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+              style={{ aspectRatio: '16/9' }}
+            >
+              {/* Thumbnail or dark placeholder */}
+              {thumbUrl ? (
+                <img
+                  src={thumbUrl}
+                  alt={moment.description || 'Video del evento'}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  loading="lazy"
+                  decoding="async"
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
+                  <svg className="w-10 h-10 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                  </svg>
+                </div>
+              )}
+
+              {/* Dark scrim for play button visibility */}
+              <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors duration-300" />
+
+              {/* Play button */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <motion.div
+                  whileHover={{ scale: 1.1 }}
+                  className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center shadow-xl"
+                >
+                  <svg className="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                  </svg>
+                </motion.div>
+              </div>
+
+              {/* Description overlay */}
+              {moment.description && (
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-4 py-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+                  <p className="text-white text-xs line-clamp-1">{moment.description}</p>
+                </div>
+              )}
+            </motion.button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
