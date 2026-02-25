@@ -760,7 +760,6 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           ref={cameraInputRef}
           type="file"
           accept="image/*,video/*"
-          capture="environment"
           multiple
           className="sr-only"
           onChange={(e) => {
