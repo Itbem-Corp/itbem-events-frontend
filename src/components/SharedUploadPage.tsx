@@ -257,17 +257,18 @@ function PreviewLightbox({
 
 // ── Upload worker pool ─────────────────────────────────────────────────────────
 
-const POOL_SIZE = 8
+const POOL_SIZE       = 8;
+const PART_CONCURRENCY = 4;
 
 /**
- * Worker pool: starts up to POOL_SIZE workers, each draining the shared queue
+ * Worker pool: starts up to `concurrency` workers, each draining the shared queue
  * immediately when they finish — no waiting for other workers to complete.
  */
-async function runPool(tasks: Array<() => Promise<void>>): Promise<void> {
+async function runPool(tasks: Array<() => Promise<void>>, concurrency = POOL_SIZE): Promise<void> {
   if (tasks.length === 0) return
   const queue = [...tasks]
   const workers = Array.from(
-    { length: Math.min(POOL_SIZE, queue.length) },
+    { length: Math.min(concurrency, queue.length) },
     async () => {
       while (queue.length > 0) {
         const task = queue.shift()!
@@ -528,7 +529,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       };
 
       const partTasks = parts.map(p => () => uploadPart(p));
-      await runPool(partTasks);
+      await runPool(partTasks, PART_CONCURRENCY);
 
       // ── Step 3: complete ────────────────────────────────────────────────
       setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, progress: 90, subtitle: undefined } : e));
