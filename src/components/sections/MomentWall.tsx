@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import InvitationLoader, { type InvitationData } from "../InvitationDataLoader";
 import type { SectionComponentProps, MomentWallConfig } from "../engine/types";
+import { addPendingMoment } from "../moments/MomentsGallery";
 
 interface Moment {
   id: string;
@@ -200,6 +201,12 @@ export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: Section
       setUploadSuccess(true);
       setShowUpload(false);
       form.reset();
+      // Store a pending stub so the /momentos wall can show a processing card
+      // while Lambda optimizes the file.
+      if (identifier) {
+        const isVideoUpload = contentType.startsWith("video/");
+        addPendingMoment(identifier, isVideoUpload ? "video" : "image");
+      }
       fetchMoments(1, false);
       setTimeout(() => setUploadSuccess(false), 5000);
     } catch (err: unknown) {

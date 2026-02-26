@@ -58,6 +58,59 @@ function resolveFullUrl(m: Moment, EVENTS_URL: string): string {
 
 const PAGE_SIZE = 30
 const MAX_PAGES = 4
+const PROCESSING_POLL_MS = 12_000
+
+// ── Pending-moments helpers (sessionStorage) ─────────────────────────────────
+// After a guest uploads a file, the moment enters processing and is hidden from
+// the wall API.  We persist a lightweight stub in sessionStorage so the gallery
+// can show a "Optimizando…" card until Lambda finishes.
+
+interface PendingMoment {
+  /** Synthetic local ID (UUID v4 generated on upload) */
+  localId: string
+  /** "video" or "image" — used to pick where to render the card */
+  mediaType: "video" | "image"
+  /** ISO timestamp of upload — so we can expire stale stubs */
+  uploadedAt: string
+}
+
+function pendingKey(identifier: string) {
+  return `pending_moments:${identifier}`
+}
+
+function readPending(identifier: string): PendingMoment[] {
+  try {
+    const raw = sessionStorage.getItem(pendingKey(identifier))
+    if (!raw) return []
+    const parsed: PendingMoment[] = JSON.parse(raw)
+    // Drop stubs older than 15 minutes — Lambda won't take that long
+    const cutoff = Date.now() - 15 * 60 * 1000
+    return parsed.filter(p => new Date(p.uploadedAt).getTime() > cutoff)
+  } catch {
+    return []
+  }
+}
+
+function writePending(identifier: string, items: PendingMoment[]) {
+  try {
+    if (items.length === 0) {
+      sessionStorage.removeItem(pendingKey(identifier))
+    } else {
+      sessionStorage.setItem(pendingKey(identifier), JSON.stringify(items))
+    }
+  } catch { /* sessionStorage may be blocked in private mode */ }
+}
+
+/** Add one pending stub to sessionStorage for a given event. */
+export function addPendingMoment(identifier: string, mediaType: "video" | "image") {
+  const existing = readPending(identifier)
+  const entry: PendingMoment = {
+    localId: crypto.randomUUID(),
+    mediaType,
+    uploadedAt: new Date().toISOString(),
+  }
+  writePending(identifier, [...existing, entry])
+}
 
 // ── Lazy image hook — only fires HTTP request when card is 200px from viewport ──
 function useLazyImage(src: string, eager = false): {
@@ -164,6 +217,9 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [videoLightboxIndex, setVideoLightboxIndex] = useState<number | null>(null)
   const [phrases, setPhrases] = useState<string[]>([])
+  // Processing-state cards: moments that were just uploaded and are still being
+  // optimized by Lambda (not yet returned by the wall API).
+  const [pendingMoments, setPendingMoments] = useState<PendingMoment[]>([])
 
   const sentinelRef = React.useRef<HTMLDivElement>(null)
 
@@ -177,6 +233,10 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
     () => moments.filter(m => !isVideo(resolveFullUrl(m, EVENTS_URL))),
     [moments, EVENTS_URL]
   )
+
+  // Count of pending stubs by media type for rendering processing cards
+  const pendingVideoCount = pendingMoments.filter(p => p.mediaType === 'video').length
+  const pendingImageCount = pendingMoments.filter(p => p.mediaType === 'image').length
 
   const groupedItems = React.useMemo(() => {
     const groups: Array<{ moments: Moment[]; phrase: string | null }> = []
@@ -259,6 +319,61 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
         // Silently fail — gallery works fine without phrases
       })
   }, [eventType, EVENTS_URL])
+
+  // Load pending-moment stubs from sessionStorage when identifier is resolved
+  useEffect(() => {
+    if (!identifier) return
+    const stubs = readPending(identifier)
+    setPendingMoments(stubs)
+    // Persist cleaned list (expired stubs removed by readPending)
+    writePending(identifier, stubs)
+  }, [identifier])
+
+  // Poll the wall API every 12 s while there are processing stubs.
+  // When the total number of *approved+done* moments grows, we assume at
+  // least one pending stub has finished and remove the oldest one.
+  // This is intentionally conservative: we don't have the moment's real ID
+  // from sessionStorage, so we compare snapshot counts.
+  const prevMomentCountRef = React.useRef<number>(0)
+  useEffect(() => {
+    if (!identifier || pendingMoments.length === 0) return
+
+    // Capture current count at the time the effect runs
+    prevMomentCountRef.current = moments.length
+
+    const poll = setInterval(async () => {
+      try {
+        const tokenParam = previewToken ? `&preview_token=${encodeURIComponent(previewToken)}` : ''
+        const res = await fetch(
+          `${EVENTS_URL}api/events/${encodeURIComponent(identifier)}/moments?page=1&limit=${PAGE_SIZE}${tokenParam}`
+        )
+        if (!res.ok) return
+        const json = await res.json()
+        const data: MomentsResponse = json.data ?? json
+        const freshItems: Moment[] = data.items ?? []
+        const freshCount = freshItems.length
+        const prev = prevMomentCountRef.current
+
+        if (freshCount > prev) {
+          // At least one pending moment became visible — update the wall
+          setMoments(freshItems)
+          setHasMore(data.has_more ?? false)
+          const gained = freshCount - prev
+          prevMomentCountRef.current = freshCount
+
+          // Remove one stub per newly-appeared moment
+          setPendingMoments(stubs => {
+            const next = stubs.slice(Math.max(0, gained))
+            writePending(identifier, next)
+            return next
+          })
+        }
+      } catch { /* silent — polling failure is non-critical */ }
+    }, PROCESSING_POLL_MS)
+
+    return () => clearInterval(poll)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identifier, pendingMoments.length, EVENTS_URL, previewToken])
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || !identifier) return
@@ -356,7 +471,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
     return <ComingSoonScreen eventName={eventName} theme={theme} />
   }
 
-  if (moments.length === 0) {
+  if (moments.length === 0 && pendingMoments.length === 0) {
     return (
       <div className={`min-h-screen flex items-center justify-center px-6 ${theme.heroBg}`}>
         <motion.div
@@ -382,6 +497,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-0">
         <VideoHighlights
           videoMoments={videoMoments}
+          processingVideoCount={pendingVideoCount}
           EVENTS_URL={EVENTS_URL}
           theme={theme}
           onOpen={(i) => setVideoLightboxIndex(i)}
@@ -390,6 +506,14 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col gap-0">
+          {/* Processing image stubs — shown at the top of the photo grid */}
+          {pendingImageCount > 0 && (
+            <div className="columns-2 sm:columns-3 gap-3 sm:gap-4 mb-0">
+              {Array.from({ length: pendingImageCount }).map((_, i) => (
+                <ProcessingCard key={`proc-img-${i}`} index={i} />
+              ))}
+            </div>
+          )}
           {groupedItems.map((group, groupIdx) => {
             const indexOffset = groupIdx * MOMENTS_PER_GROUP
             return (
@@ -671,20 +795,93 @@ function PlayIcon() {
   )
 }
 
+// ── ProcessingCard ────────────────────────────────────────────────────────────
+// Shown while Lambda is still optimizing the just-uploaded moment.
+
+function ProcessingCard({ index }: { index: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        delay: index * 0.06,
+        type: 'spring',
+        stiffness: 300,
+        damping: 25,
+      }}
+      className="break-inside-avoid mb-3 sm:mb-4"
+    >
+      <div className="relative rounded-2xl overflow-hidden bg-gray-100" style={{ minHeight: '160px' }}>
+        {/* Shimmer base */}
+        <div className="absolute inset-0 bg-gradient-to-r from-gray-100 via-gray-50 to-gray-100 bg-[length:200%_100%] animate-shimmer" aria-hidden="true" />
+        {/* Centered spinner + label */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}
+            className="w-6 h-6 border-2 border-gray-300 border-t-gray-500 rounded-full"
+            aria-hidden="true"
+          />
+          <span className="text-[11px] font-medium text-gray-400 tracking-wide select-none">
+            Optimizando…
+          </span>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── ProcessingVideoCard ───────────────────────────────────────────────────────
+// Wide-format (16/9) processing placeholder used in the VideoHighlights section.
+
+function ProcessingVideoCard({ index }: { index: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.07, type: 'spring', stiffness: 280, damping: 24 }}
+      className="relative w-full rounded-2xl overflow-hidden bg-zinc-900"
+      style={{ aspectRatio: '16/9' }}
+    >
+      {/* Dark gradient placeholder */}
+      <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900" />
+      {/* Shimmer sweep */}
+      <div
+        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent bg-[length:200%_100%] animate-shimmer"
+        aria-hidden="true"
+      />
+      {/* Centered spinner + label */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}
+          className="w-8 h-8 border-2 border-zinc-600 border-t-zinc-300 rounded-full"
+          aria-hidden="true"
+        />
+        <span className="text-xs font-medium text-zinc-400 tracking-wide select-none">
+          Optimizando video…
+        </span>
+      </div>
+    </motion.div>
+  )
+}
+
 // ── VideoHighlights ──────────────────────────────────────────────────────────
 
 function VideoHighlights({
   videoMoments,
+  processingVideoCount,
   EVENTS_URL,
   theme,
   onOpen,
 }: {
   videoMoments: Moment[]
+  processingVideoCount: number
   EVENTS_URL: string
   theme: ReturnType<typeof getTheme>
   onOpen: (index: number) => void
 }) {
-  if (videoMoments.length === 0) return null
+  if (videoMoments.length === 0 && processingVideoCount === 0) return null
 
   return (
     <div className="mb-10">
@@ -757,6 +954,10 @@ function VideoHighlights({
             </motion.button>
           )
         })}
+        {/* Processing video stubs — one card per pending video */}
+        {Array.from({ length: processingVideoCount }).map((_, i) => (
+          <ProcessingVideoCard key={`proc-video-${i}`} index={videoMoments.length + i} />
+        ))}
       </div>
     </div>
   )
