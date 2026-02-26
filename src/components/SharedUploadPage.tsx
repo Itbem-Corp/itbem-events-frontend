@@ -491,6 +491,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
         const blob = file.slice(start, end);
         let attempt = 0;
         while (true) {
+          bytesUploaded[partNumber - 1] = 0; // reset before each attempt to avoid stale progress
           try {
             const etag = await new Promise<string>((resolve, reject) => {
               const xhr = new XMLHttpRequest();
@@ -663,6 +664,8 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       try {
         if (entry.isVideo && entry.file.size > MULTIPART_THRESHOLD) {
           await uploadMultipart(entry, idx === 0);
+          uploaded++;
+          setUploadedCount(uploaded);
         } else {
           await uploadOne(entry, idx === 0);
         }
