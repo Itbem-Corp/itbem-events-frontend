@@ -51,6 +51,10 @@ const ALLOWED_EXTENSIONS = [
 ];
 const FILE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,image/avif,video/mp4,video/webm,video/quicktime,video/x-m4v,video/3gpp,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif,.avif,.mp4,.mov,.webm,.m4v,.3gp";
 
+// ── Multipart upload constants ─────────────────────────────────────────────
+const MULTIPART_THRESHOLD = 10 * 1024 * 1024;  // 10 MB — below this, use single PUT
+const PART_SIZE           = 8 * 1024 * 1024;   // 8 MB per part (S3 minimum is 5 MB)
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface FileEntry {
@@ -273,6 +277,29 @@ async function runPool(tasks: Array<() => Promise<void>>): Promise<void> {
   await Promise.all(workers)
 }
 
+// ── Multipart helpers ─────────────────────────────────────────────────────────
+
+/** Split a file into part descriptors for S3 multipart upload. */
+function calcParts(fileSize: number, partSize: number): Array<{ partNumber: number; start: number; end: number }> {
+  const parts: Array<{ partNumber: number; start: number; end: number }> = [];
+  let offset = 0;
+  let partNumber = 1;
+  while (offset < fileSize) {
+    const end = Math.min(offset + partSize, fileSize);
+    parts.push({ partNumber, start: offset, end });
+    offset = end;
+    partNumber++;
+  }
+  return parts;
+}
+
+/** Compute overall 0-90 progress from per-part byte counters. */
+function calcProgress(bytesPerPart: number[], totalBytes: number): number {
+  if (totalBytes === 0) return 0;
+  const uploaded = bytesPerPart.reduce((a, b) => a + b, 0);
+  return Math.min(90, Math.round((uploaded / totalBytes) * 90));
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 interface UploadPageProps {
@@ -426,6 +453,100 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
     if (dropped.length > 0) addFiles(dropped);
   };
 
+  const uploadMultipart = useCallback(async (entry: FileEntry, isFirst: boolean): Promise<void> => {
+    const { file } = entry;
+    const ext = file.name.toLowerCase().split(".").pop() ?? "";
+    const contentType = file.type ||
+      (ext === "mp4" ? "video/mp4" : ext === "mov" ? "video/quicktime" : ext === "webm" ? "video/webm" : "video/mp4");
+
+    // ── Step 1: start multipart upload ──────────────────────────────────────
+    const startRes = await fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/multipart/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content_type: contentType, filename: file.name, file_size: file.size }),
+    });
+    if (startRes.status === 403) throw Object.assign(new Error("uploads-disabled"), { uploadsDisabled: true });
+    if (!startRes.ok) {
+      const json = await startRes.json().catch(() => ({}));
+      throw new Error(json.message ?? `Error iniciando subida (${startRes.status})`);
+    }
+    const { data: startData } = await startRes.json();
+    const uploadId: string = startData.upload_id;
+    const s3Key: string = startData.s3_key;
+    const partUrls: Array<{ part_number: number; url: string }> = startData.part_urls;
+
+    const doAbort = () => fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/multipart/abort`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ upload_id: uploadId, s3_key: s3Key }),
+    }).catch(() => {});
+
+    try {
+      // ── Step 2: upload parts in parallel ────────────────────────────────
+      const parts = calcParts(file.size, PART_SIZE);
+      const bytesUploaded = new Array<number>(parts.length).fill(0);
+      const etags = new Array<{ part_number: number; etag: string }>(parts.length);
+
+      const uploadPart = async ({ partNumber, start, end }: { partNumber: number; start: number; end: number }): Promise<void> => {
+        const urlEntry = partUrls.find(u => u.part_number === partNumber)!;
+        const blob = file.slice(start, end);
+        let attempt = 0;
+        while (true) {
+          try {
+            const etag = await new Promise<string>((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              xhr.open("PUT", urlEntry.url);
+              xhr.timeout = 10 * 60 * 1000; // 10 minutes per part
+              xhr.upload.onprogress = (ev) => {
+                if (ev.lengthComputable) {
+                  bytesUploaded[partNumber - 1] = ev.loaded;
+                  const pct = calcProgress(bytesUploaded, file.size);
+                  setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, progress: pct } : e));
+                }
+              };
+              xhr.onload = () => xhr.status >= 200 && xhr.status < 300
+                ? resolve(xhr.getResponseHeader("ETag") ?? xhr.getResponseHeader("etag") ?? "")
+                : reject(new Error(`Part ${partNumber} failed (${xhr.status})`));
+              xhr.onerror = () => reject(new Error(`Part ${partNumber}: connection error`));
+              xhr.ontimeout = () => reject(new Error(`Part ${partNumber}: timeout`));
+              xhr.send(blob);
+            });
+            bytesUploaded[partNumber - 1] = end - start;
+            etags[partNumber - 1] = { part_number: partNumber, etag };
+            return;
+          } catch (err) {
+            if (++attempt >= 3) throw err;
+            await new Promise(r => setTimeout(r, attempt * 1000));
+          }
+        }
+      };
+
+      const partTasks = parts.map(p => () => uploadPart(p));
+      await runPool(partTasks);
+
+      // ── Step 3: complete ────────────────────────────────────────────────
+      setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, progress: 90 } : e));
+      const completeRes = await fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/multipart/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          upload_id: uploadId,
+          s3_key: s3Key,
+          parts: etags,
+          description: isFirst && description.trim() ? description.trim() : "",
+        }),
+      });
+      if (!completeRes.ok) {
+        const json = await completeRes.json().catch(() => ({}));
+        throw new Error(json.message ?? `Error completando subida (${completeRes.status})`);
+      }
+      setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, status: "done" as const, progress: 100 } : e));
+
+    } catch (err) {
+      doAbort(); // best-effort cleanup — fire and forget
+      throw err;
+    }
+  }, [EVENTS_URL, identifier, description]);
+
   const handleUpload = async () => {
     if (files.length === 0 || !identifier || uploading) return;
     setUploading(true);
@@ -538,8 +659,25 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
     const pendingEntries = files.filter((e) => e.status !== "done");
     const uploadTasks = pendingEntries.map((entry, idx) => async () => {
-      if (connectionError || uploadsDisabled) return
-      await uploadOne(entry, idx === 0)
+      if (connectionError || uploadsDisabled) return;
+      try {
+        if (entry.isVideo && entry.file.size > MULTIPART_THRESHOLD) {
+          await uploadMultipart(entry, idx === 0);
+        } else {
+          await uploadOne(entry, idx === 0);
+        }
+      } catch (err) {
+        if ((err as { uploadsDisabled?: boolean }).uploadsDisabled) {
+          uploadsDisabled = true;
+          return;
+        }
+        // uploadOne handles its own errors internally via setFiles.
+        // multipart errors bubble up here — map them to the entry's error state.
+        if (entry.isVideo && entry.file.size > MULTIPART_THRESHOLD) {
+          const msg = err instanceof Error ? err.message : "Ocurrió un error inesperado.";
+          setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, status: "error" as const, errorMsg: msg } : e));
+        }
+      }
     });
     await runPool(uploadTasks);
 

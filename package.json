@@ -49,6 +49,7 @@
     "@types/react-dom": "^19.1.2",
     "@types/react-howler": "^5.2.3",
     "critters": "^0.0.23",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "vitest": "^4.0.18"
   }
 }
