@@ -454,6 +454,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
   };
 
   const uploadMultipart = useCallback(async (entry: FileEntry, isFirst: boolean): Promise<void> => {
+    setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "uploading" as const } : e));
     const { file } = entry;
     const ext = file.name.toLowerCase().split(".").pop() ?? "";
     const contentType = file.type ||
