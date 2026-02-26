@@ -66,6 +66,7 @@ interface FileEntry {
   status: "pending" | "uploading" | "done" | "error";
   errorMsg?: string;
   progress?: number; // 0-100 during upload
+  subtitle?: string; // e.g. "Subiendo parte 3/12..." during multipart uploads
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -491,6 +492,10 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
         const urlEntry = partUrls.find(u => u.part_number === partNumber)!;
         const blob = file.slice(start, end);
         let attempt = 0;
+        // Show which part is being uploaded
+        setFiles(prev => prev.map(e => e.id === entry.id
+          ? { ...e, subtitle: `Subiendo parte ${partNumber}/${parts.length}...` }
+          : e));
         while (true) {
           bytesUploaded[partNumber - 1] = 0; // reset before each attempt to avoid stale progress
           try {
@@ -526,8 +531,9 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       await runPool(partTasks);
 
       // ── Step 3: complete ────────────────────────────────────────────────
-      setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, progress: 90 } : e));
-      const completeRes = await fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/multipart/complete`, {
+      setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, progress: 90, subtitle: undefined } : e));
+      const completeUrl = `${EVENTS_URL}api/events/${identifier}/moments/shared/multipart/complete`;
+      const completeOpts: RequestInit = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -536,8 +542,14 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           parts: etags,
           description: isFirst && description.trim() ? description.trim() : "",
         }),
-      });
+      };
+      let completeRes = await fetch(completeUrl, completeOpts);
       if (!completeRes.ok) {
+        await new Promise(r => setTimeout(r, 2000));
+        completeRes = await fetch(completeUrl, completeOpts); // retry once — CompleteMultipartUpload is idempotent
+      }
+      if (!completeRes.ok) {
+        doAbort();
         const json = await completeRes.json().catch(() => ({}));
         throw new Error(json.message ?? `Error completando subida (${completeRes.status})`);
       }
@@ -920,6 +932,9 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
                                 style={{ width: `${entry.progress}%` }}
                               />
                             </div>
+                            {entry.subtitle && (
+                              <span className="text-white/70 text-[9px] font-medium leading-none px-1 text-center">{entry.subtitle}</span>
+                            )}
                           </>
                         ) : (
                           <Spinner className="w-7 h-7 text-white" />
