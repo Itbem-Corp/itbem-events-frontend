@@ -67,8 +67,8 @@ export default function ImageWithLoader({ src, alt, className = "", priority = f
                     decoding="async"
                     // @ts-ignore — fetchpriority is valid but not yet in all TS libs
                     fetchpriority={priority ? "high" : undefined}
-                    className={`w-full h-full ${dynamicObjectClass} transition-opacity duration-500 ${
-                        loaded ? "opacity-100" : "opacity-0"
+                    className={`w-full h-full ${dynamicObjectClass} transition-[opacity,filter] duration-500 ${
+                        loaded ? "opacity-100 blur-0" : "opacity-0 blur-sm"
                     } ${className}`}
                 />
             )}
