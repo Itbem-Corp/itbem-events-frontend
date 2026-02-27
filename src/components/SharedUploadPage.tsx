@@ -133,6 +133,36 @@ function extractVideoThumbnail(blobUrl: string): Promise<string> {
 }
 
 /**
+ * Attempts to decode a HEIC/HEIF file using createImageBitmap() and re-encode
+ * as JPEG at 2048px / 85%. Returns null if the browser doesn't support HEIC
+ * decode (Safari <17, Firefox) — caller falls back to the existing icon.
+ */
+async function tryConvertHeic(file: File): Promise<File | null> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale  = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width  = Math.round(bitmap.width  * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { bitmap.close(); return null; }
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    return await new Promise<File | null>((resolve) => {
+      canvas.toBlob(
+        (blob) => resolve(blob
+          ? new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" })
+          : null),
+        "image/jpeg",
+        0.85
+      );
+    });
+  } catch {
+    return null; // browser doesn't support HEIC decode — keep icon placeholder
+  }
+}
+
+/**
  * Compress an image File to ≤maxDimension px at JPEG quality before upload.
  * Returns the original File unchanged if: it's a video, GIF, HEIC/HEIF, WebP,
  * AVIF (already compressed), or if Canvas compression makes it bigger.
@@ -560,6 +590,17 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       setFiles((prev) => [...prev, ...entries]);
       // Generate video thumbnails async
       entries.filter((e) => e.isVideo).forEach((e) => generateVideoThumb(e));
+      // Attempt async HEIC → JPEG conversion for preview + compression
+      entries.filter((e) => e.isHeic).forEach(async (e) => {
+        const converted = await tryConvertHeic(e.file);
+        if (!converted) return; // browser unsupported — icon stays
+        const newPreview = URL.createObjectURL(converted);
+        setFiles((prev) => prev.map((x) =>
+          x.id === e.id
+            ? { ...x, file: converted, previewUrl: newPreview, isHeic: false }
+            : x
+        ));
+      });
     }
     if (errors.length > 0) {
       setError(errors.join(" "));
