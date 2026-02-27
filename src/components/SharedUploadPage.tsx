@@ -744,6 +744,8 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
   const handleUpload = async () => {
     if (files.length === 0 || !identifier || uploading) return;
+    // flushSync forces a synchronous paint so the button disables in the same frame as the click (INP fix).
+    // IMPORTANT: must remain before any `await` — flushSync is unsafe inside async continuations.
     flushSync(() => {
       setUploading(true);
       setError("");
