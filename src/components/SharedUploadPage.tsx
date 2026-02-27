@@ -502,6 +502,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
   const [videoThumbs, setVideoThumbs] = useState<Map<string, string>>(new Map());
   const [description, setDescription] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
   const [allDone, setAllDone] = useState(false);
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -1026,7 +1027,18 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
     setUploading(false);
     setFiles((prev) => {
       const allOk = prev.every((e) => e.status === "done");
-      if (allOk && prev.length > 0) setAllDone(true);
+      if (allOk && prev.length > 0) {
+        const hadVideos = prev.some((e) => e.isVideo);
+        if (hadVideos) {
+          setOptimizing(true);
+          setTimeout(() => {
+            setOptimizing(false);
+            setAllDone(true);
+          }, 2000);
+        } else {
+          setAllDone(true);
+        }
+      }
       return prev;
     });
   };
@@ -1071,6 +1083,39 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
         <ThemeToggleButton />
         <ThankYouScreen eventName={wallEventName} identifier={identifier} />
+      </ThemeCtx.Provider>
+    );
+  }
+
+  if (optimizing) {
+    return (
+      <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
+        <ThemeToggleButton />
+        <div className={`min-h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden${theme === 'light' ? ' bg-white' : ''}`}>
+          <DarkBackground />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+            className="flex flex-col items-center gap-4"
+          >
+            <div className={`w-20 h-20 rounded-full flex items-center justify-center ${
+              theme === 'dark'
+                ? 'bg-gradient-to-br from-violet-600/30 to-indigo-600/30 ring-1 ring-violet-500/40'
+                : 'bg-gradient-to-br from-violet-100 to-indigo-100 ring-1 ring-violet-300'
+            }`}>
+              <Spinner className="w-8 h-8 text-violet-500" />
+            </div>
+            <div className="space-y-1.5">
+              <p className={`text-base font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                Optimizando tus archivos…
+              </p>
+              <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                Esto solo toma unos segundos
+              </p>
+            </div>
+          </motion.div>
+        </div>
       </ThemeCtx.Provider>
     );
   }
