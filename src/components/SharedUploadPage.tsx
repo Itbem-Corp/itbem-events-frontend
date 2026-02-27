@@ -132,6 +132,51 @@ function extractVideoThumbnail(blobUrl: string): Promise<string> {
   });
 }
 
+/**
+ * Compress an image File to ≤maxDimension px at JPEG quality before upload.
+ * Returns the original File unchanged if: it's a video, GIF, HEIC/HEIF, WebP,
+ * AVIF (already compressed), or if Canvas compression makes it bigger.
+ */
+async function compressImage(file: File, maxDimension = 2048, quality = 0.85): Promise<File> {
+  const skip =
+    file.type.startsWith("video/") ||
+    file.type === "image/gif" ||
+    file.type === "image/heic" ||
+    file.type === "image/heif" ||
+    file.type === "image/webp" ||
+    file.type === "image/avif";
+  if (skip) return file;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const { naturalWidth: w, naturalHeight: h } = img;
+      const scale = Math.min(1, maxDimension / Math.max(w, h));
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(file); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob || blob.size >= file.size) {
+            resolve(file); // compression didn't help — keep original
+          } else {
+            resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+          }
+        },
+        "image/jpeg",
+        quality
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -594,20 +639,23 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
       setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "uploading" as const } : e));
 
-      // Resolve content type — fall back to extension sniffing for HEIC/unknown types
+      // Compress images before uploading — no-op for videos/HEIC/GIF/WebP/AVIF
+      const fileToUpload = await compressImage(entry.file);
       const ext = entry.file.name.toLowerCase().split(".").pop() ?? "";
-      const contentType = entry.file.type ||
-        (ext === "heic" || ext === "heif" ? "image/heic" :
-         ext === "mp4" ? "video/mp4" :
-         ext === "mov" ? "video/quicktime" :
-         "application/octet-stream");
+      const effectiveContentType = fileToUpload !== entry.file
+        ? "image/jpeg"
+        : (entry.file.type ||
+           (ext === "heic" || ext === "heif" ? "image/heic" :
+            ext === "mp4" ? "video/mp4" :
+            ext === "mov" ? "video/quicktime" :
+            "application/octet-stream"));
 
       try {
         // ── Step 1: Request a presigned PUT URL from the backend ──────────────
         const urlRes = await fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/upload-url`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content_type: contentType, filename: entry.file.name }),
+          body: JSON.stringify({ content_type: effectiveContentType, filename: entry.file.name }),
         });
 
         if (urlRes.status === 403) { uploadsDisabled = true; return; }
@@ -626,7 +674,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
         try {
           await new Promise<void>((resolve, reject) => {
             xhr.open("PUT", uploadUrl);
-            xhr.setRequestHeader("Content-Type", contentType);
+            xhr.setRequestHeader("Content-Type", effectiveContentType);
             xhr.timeout = 120_000; // 2 min for large videos
             xhr.upload.onprogress = (ev) => {
               if (ev.lengthComputable) {
@@ -641,7 +689,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
             xhr.onerror = () => reject(new Error("Error de conexión al subir el archivo"));
             xhr.ontimeout = () => reject(new Error("La subida tardó demasiado. Revisa tu conexión."));
             xhr.onabort = () => reject(Object.assign(new Error("abort"), { silent: true }));
-            xhr.send(entry.file);
+            xhr.send(fileToUpload);
           });
         } finally {
           activeXHRs.delete(xhr);
@@ -654,7 +702,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             s3_key: s3Key,
-            content_type: contentType,
+            content_type: effectiveContentType,
             description: isFirst && description.trim() ? description.trim() : "",
           }),
         });
