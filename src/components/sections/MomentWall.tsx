@@ -108,6 +108,20 @@ export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: Section
     return () => window.removeEventListener("keydown", handler);
   }, [lightbox, lightboxIdx, moments]);
 
+  // Preload the adjacent moments so lightbox navigation feels instant
+  useEffect(() => {
+    if (!lightbox) return;
+    const preload = (m: Moment | undefined) => {
+      if (!m) return;
+      const src = getMediaUrl(m.content_url, EVENTS_URL);
+      if (!src || isVideoUrl(src)) return;
+      const img = new Image();
+      img.src = src;
+    };
+    preload(moments[lightboxIdx - 1]);
+    preload(moments[lightboxIdx + 1]);
+  }, [lightbox, lightboxIdx, moments, EVENTS_URL]);
+
   const openLightbox = (m: Moment, idx: number) => {
     setLightbox(m);
     setLightboxIdx(idx);

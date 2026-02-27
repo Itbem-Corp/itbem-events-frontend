@@ -1041,6 +1041,19 @@ function GalleryLightbox({ moments, index, EVENTS_URL, theme, onClose, onNext, o
     }
   }, [onClose, onNext, onPrev])
 
+  // Preload adjacent images so navigation feels instant
+  useEffect(() => {
+    const preload = (m: Moment | undefined) => {
+      if (!m) return;
+      const url = resolveFullUrl(m, EVENTS_URL);
+      if (!url || isVideo(url)) return; // videos are too large to preload
+      const img = new Image();
+      img.src = url;
+    };
+    preload(moments[index - 1]);
+    preload(moments[index + 1]);
+  }, [index, moments, EVENTS_URL])
+
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
   }
