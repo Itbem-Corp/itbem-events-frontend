@@ -13,8 +13,8 @@ export default function Footer({ contact }: FooterProps = {}) {
   return (
     <motion.footer
       className="relative bg-white border-t mt-16 py-10 text-gray-600 text-sm overflow-hidden"
-      initial={{ opacity: 0, y: 40 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ y: 40 }}
+      animate={{ y: 0 }}
       transition={{ duration: 0.8, ease: "easeOut" }}
     >
       <div className="max-w-5xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
@@ -23,7 +23,8 @@ export default function Footer({ contact }: FooterProps = {}) {
           src="/backgrounds/vectores-03.svg"
           alt="eventiapp 2025 by itbem"
           className="w-[160px] sm:w-[200px] md:w-[240px]"
-          loading="lazy"
+          loading="eager"
+          fetchPriority="high"
           decoding="async"
         />
 
