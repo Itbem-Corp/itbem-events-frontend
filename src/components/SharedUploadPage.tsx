@@ -335,6 +335,24 @@ const POOL_SIZE       = 8;
 const PART_CONCURRENCY = 4;
 
 /**
+ * Returns the number of concurrent upload workers appropriate for the current
+ * network quality. Falls back to POOL_SIZE (8) when the Network Information API
+ * is unavailable (iOS Safari, Firefox private mode, etc.).
+ */
+function getAdaptivePoolSize(): number {
+  const conn = (navigator as unknown as {
+    connection?: { effectiveType?: string }
+  }).connection;
+  if (!conn?.effectiveType) return POOL_SIZE;
+  switch (conn.effectiveType) {
+    case "slow-2g":
+    case "2g":  return 2;
+    case "3g":  return 4;
+    default:    return POOL_SIZE; // "4g" or any future type
+  }
+}
+
+/**
  * Worker pool: starts up to `concurrency` workers, each draining the shared queue
  * immediately when they finish — no waiting for other workers to complete.
  */
@@ -784,7 +802,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
         }
       }
     });
-    await runPool(uploadTasks);
+    await runPool(uploadTasks, getAdaptivePoolSize());
 
     if (connectionError) setError("No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.");
     if (uploadsDisabled) { setUploadsNotEnabled(true); setUploading(false); return; }
