@@ -1060,6 +1060,7 @@ function GalleryLightbox({ moments, index, EVENTS_URL, theme, onClose, onNext, o
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className={`fixed inset-0 z-[60] ${theme.lightboxBg} backdrop-blur-sm flex flex-col items-center justify-center`}
+      style={{ touchAction: 'none' }}
       onClick={onClose}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}

@@ -51,7 +51,7 @@ export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: Section
 
   const [lightbox, setLightbox]           = useState<Moment | null>(null);
   const [lightboxIdx, setLightboxIdx]     = useState(0);
-  const [touchStartX, setTouchStartX]     = useState<number | null>(null);
+  const touchStartX                        = useRef<number | null>(null);
   const [loadMoreError, setLoadMoreError] = useState(false);
 
   const [showUpload, setShowUpload]       = useState(false);
@@ -120,13 +120,13 @@ export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: Section
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStartX(e.touches[0].clientX);
+    touchStartX.current = e.touches[0].clientX;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX === null) return;
-    const diff = touchStartX - e.changedTouches[0].clientX;
-    setTouchStartX(null);
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    touchStartX.current = null;
     if (Math.abs(diff) < 50) return; // ignore small swipes
     if (diff > 0) {
       // swiped left → next
@@ -369,6 +369,7 @@ export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: Section
               animate={{ scale: 1 }}
               exit={{ scale: 0.92 }}
               className="relative max-w-3xl w-full"
+              style={{ touchAction: 'none' }}
               onClick={(e) => e.stopPropagation()}
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
