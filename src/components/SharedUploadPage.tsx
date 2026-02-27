@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
+import { flushSync } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
 // ── Theme toggle ──────────────────────────────────────────────────────────────
@@ -743,8 +744,10 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
   const handleUpload = async () => {
     if (files.length === 0 || !identifier || uploading) return;
-    setUploading(true);
-    setError("");
+    flushSync(() => {
+      setUploading(true);
+      setError("");
+    });
 
     let uploaded = 0;
     let connectionError = false;
