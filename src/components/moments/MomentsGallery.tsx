@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { getTheme, type MomentsTheme } from "./themes"
+import { useVideoThumbnail } from '../../hooks/useVideoThumbnail'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -866,6 +867,92 @@ function ProcessingVideoCard({ index }: { index: number }) {
   )
 }
 
+// ── VideoCard ─────────────────────────────────────────────────────────────────
+
+function VideoCard({
+  moment,
+  index,
+  EVENTS_URL,
+  onOpen,
+}: {
+  moment: Moment
+  index: number
+  EVENTS_URL: string
+  onOpen: (index: number) => void
+}) {
+  // Resolve server-provided thumbnail to an absolute URL
+  const thumbUrl = moment.thumbnail_url
+    ? (moment.thumbnail_url.startsWith('http')
+        ? moment.thumbnail_url
+        : `${EVENTS_URL}${moment.thumbnail_url.startsWith('/') ? moment.thumbnail_url.slice(1) : moment.thumbnail_url}`)
+    : null
+
+  // Resolve the video content URL for canvas extraction (only used when thumbUrl is absent)
+  const videoUrl = !thumbUrl
+    ? (moment.content_url.startsWith('http')
+        ? moment.content_url
+        : `${EVENTS_URL}${moment.content_url.startsWith('/') ? moment.content_url.slice(1) : moment.content_url}`)
+    : null
+
+  // Extract first frame via canvas — only runs when server thumbnail is absent
+  const extractedThumb = useVideoThumbnail(videoUrl)
+
+  // Priority: server thumbnail → extracted frame → null (grey fallback)
+  const displayThumb = thumbUrl ?? extractedThumb
+
+  return (
+    <motion.button
+      key={moment.id}
+      type="button"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.07, type: 'spring', stiffness: 280, damping: 24 }}
+      onClick={() => onOpen(index)}
+      className="group relative w-full overflow-hidden rounded-2xl bg-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+      style={{ aspectRatio: '16/9' }}
+    >
+      {/* Thumbnail or dark placeholder */}
+      {displayThumb ? (
+        <img
+          src={displayThumb}
+          alt={moment.description || 'Video del evento'}
+          className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          loading="lazy"
+          decoding="async"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
+          <svg className="w-10 h-10 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+        </div>
+      )}
+
+      {/* Dark scrim for play button visibility */}
+      <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors duration-300" />
+
+      {/* Play button */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <motion.div
+          whileHover={{ scale: 1.1 }}
+          className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center shadow-xl"
+        >
+          <svg className="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+          </svg>
+        </motion.div>
+      </div>
+
+      {/* Description overlay */}
+      {moment.description && (
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-4 py-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+          <p className="text-white text-xs line-clamp-1">{moment.description}</p>
+        </div>
+      )}
+    </motion.button>
+  )
+}
+
 // ── VideoHighlights ──────────────────────────────────────────────────────────
 
 function VideoHighlights({
@@ -896,64 +983,15 @@ function VideoHighlights({
 
       {/* Responsive grid: 1 col mobile, 2 col sm+ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {videoMoments.map((moment, i) => {
-          const thumbUrl = moment.thumbnail_url
-            ? (moment.thumbnail_url.startsWith('http')
-                ? moment.thumbnail_url
-                : `${EVENTS_URL}${moment.thumbnail_url.startsWith('/') ? moment.thumbnail_url.slice(1) : moment.thumbnail_url}`)
-            : null
-          return (
-            <motion.button
-              key={moment.id}
-              type="button"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.07, type: 'spring', stiffness: 280, damping: 24 }}
-              onClick={() => onOpen(i)}
-              className="group relative w-full overflow-hidden rounded-2xl bg-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
-              style={{ aspectRatio: '16/9' }}
-            >
-              {/* Thumbnail or dark placeholder */}
-              {thumbUrl ? (
-                <img
-                  src={thumbUrl}
-                  alt={moment.description || 'Video del evento'}
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  loading="lazy"
-                  decoding="async"
-                />
-              ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
-                  <svg className="w-10 h-10 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
-                  </svg>
-                </div>
-              )}
-
-              {/* Dark scrim for play button visibility */}
-              <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors duration-300" />
-
-              {/* Play button */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <motion.div
-                  whileHover={{ scale: 1.1 }}
-                  className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center shadow-xl"
-                >
-                  <svg className="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-                  </svg>
-                </motion.div>
-              </div>
-
-              {/* Description overlay */}
-              {moment.description && (
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-4 py-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
-                  <p className="text-white text-xs line-clamp-1">{moment.description}</p>
-                </div>
-              )}
-            </motion.button>
-          )
-        })}
+        {videoMoments.map((moment, i) => (
+          <VideoCard
+            key={moment.id}
+            moment={moment}
+            index={i}
+            EVENTS_URL={EVENTS_URL}
+            onOpen={onOpen}
+          />
+        ))}
         {/* Processing video stubs — one card per pending video */}
         {Array.from({ length: processingVideoCount }).map((_, i) => (
           <ProcessingVideoCard key={`proc-video-${i}`} index={videoMoments.length + i} />
