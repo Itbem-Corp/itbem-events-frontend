@@ -821,6 +821,7 @@ function ProcessingCard({ index }: { index: number }) {
             animate={{ rotate: 360 }}
             transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}
             className="w-6 h-6 border-2 border-gray-300 border-t-gray-500 rounded-full"
+            style={{ willChange: 'transform' }}
             aria-hidden="true"
           />
           <span className="text-[11px] font-medium text-gray-400 tracking-wide select-none">
@@ -857,6 +858,7 @@ function ProcessingVideoCard({ index }: { index: number }) {
           animate={{ rotate: 360 }}
           transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}
           className="w-8 h-8 border-2 border-zinc-600 border-t-zinc-300 rounded-full"
+          style={{ willChange: 'transform' }}
           aria-hidden="true"
         />
         <span className="text-xs font-medium text-zinc-400 tracking-wide select-none">

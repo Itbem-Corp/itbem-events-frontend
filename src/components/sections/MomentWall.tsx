@@ -376,8 +376,8 @@ export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: Section
           <div className="mt-8 text-center">
             <button
               type="button"
-              onClick={handleLoadMore}
-              disabled={loadingMore}
+              onClick={() => { setLoadMoreError(false); handleLoadMore(); }}
+              disabled={loadingMore || loadMoreError}
               className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-6 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               {loadingMore ? (
@@ -440,6 +440,14 @@ export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: Section
               {lightbox.description && (
                 <p className="mt-3 text-center text-white/70 text-sm whitespace-pre-wrap break-words">{lightbox.description}</p>
               )}
+              {/* Accessible live region announcing current position */}
+              <span
+                className="sr-only"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {lightbox ? `Imagen ${lightboxIdx + 1} de ${moments.length}` : ""}
+              </span>
               {/* Close */}
               <button
                 type="button"
