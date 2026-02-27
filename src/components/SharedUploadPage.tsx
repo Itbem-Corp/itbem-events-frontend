@@ -352,6 +352,41 @@ function getAdaptivePoolSize(): number {
   }
 }
 
+/** Resolves the content-type for a FileEntry — falls back to extension sniffing when file.type is empty. */
+function resolveContentType(entry: FileEntry): string {
+  if (entry.file.type) return entry.file.type;
+  const ext = entry.file.name.toLowerCase().split(".").pop() ?? "";
+  if (ext === "heic" || ext === "heif") return "image/heic";
+  if (ext === "mp4") return "video/mp4";
+  if (ext === "mov") return "video/quicktime";
+  if (ext === "webm") return "video/webm";
+  return "application/octet-stream";
+}
+
+/**
+ * Returns the content-type that will actually be used when uploading.
+ * compressImage() re-encodes all non-exempt images as JPEG, so we must
+ * request presigned URLs for "image/jpeg" — not the original type.
+ * Exempt types (video, GIF, HEIC, HEIF, WebP, AVIF) are returned as-is.
+ */
+function effectiveBatchContentType(entry: FileEntry): string {
+  const ct = resolveContentType(entry);
+  if (
+    ct.startsWith("video/") ||
+    ct === "image/gif" ||
+    ct === "image/heic" ||
+    ct === "image/heif" ||
+    ct === "image/webp" ||
+    ct === "image/avif"
+  ) {
+    return ct; // compressImage will skip these — type is unchanged
+  }
+  if (ct.startsWith("image/")) {
+    return "image/jpeg"; // compressImage will re-encode as JPEG
+  }
+  return ct; // application/octet-stream fallback — no compression
+}
+
 /**
  * Worker pool: starts up to `concurrency` workers, each draining the shared queue
  * immediately when they finish — no waiting for other workers to complete.
@@ -675,7 +710,11 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
     const activeXHRs = new Set<XMLHttpRequest>();
     const abortActiveXHRs = () => { activeXHRs.forEach((x) => x.abort()); activeXHRs.clear(); };
 
-    const uploadOne = async (entry: FileEntry, isFirst: boolean): Promise<void> => {
+    const uploadOne = async (
+      entry: FileEntry,
+      isFirst: boolean,
+      cachedPresign?: { uploadUrl: string; s3Key: string }
+    ): Promise<void> => {
       if (entry.status === "done") { uploaded++; return; }
 
       setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "uploading" as const } : e));
@@ -692,24 +731,30 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
             "application/octet-stream"));
 
       try {
-        // ── Step 1: Request a presigned PUT URL from the backend ──────────────
-        const urlRes = await withRetry(() =>
-          fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/upload-url`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content_type: effectiveContentType, filename: entry.file.name }),
-          })
-        );
+        // ── Step 1: Get presigned PUT URL (from batch cache or individual fetch) ──────
+        let uploadUrl: string;
+        let s3Key: string;
 
-        if (urlRes.status === 403) { uploadsDisabled = true; return; }
-        if (!urlRes.ok) {
-          const json = await urlRes.json().catch(() => ({}));
-          throw new Error(json.message ?? `Error obteniendo URL (${urlRes.status})`);
+        if (cachedPresign) {
+          uploadUrl = cachedPresign.uploadUrl;
+          s3Key = cachedPresign.s3Key;
+        } else {
+          const urlRes = await withRetry(() =>
+            fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/upload-url`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content_type: effectiveContentType, filename: entry.file.name }),
+            })
+          );
+          if (urlRes.status === 403) { uploadsDisabled = true; return; }
+          if (!urlRes.ok) {
+            const json = await urlRes.json().catch(() => ({}));
+            throw new Error(json.message ?? `Error obteniendo URL (${urlRes.status})`);
+          }
+          const { data } = await urlRes.json();
+          uploadUrl = data.upload_url;
+          s3Key = data.s3_key;
         }
-
-        const { data } = await urlRes.json();
-        const uploadUrl: string = data.upload_url;
-        const s3Key: string = data.s3_key;
 
         // ── Step 2: PUT file bytes directly to S3 with XHR for progress ─────
         const xhr = new XMLHttpRequest();
@@ -779,6 +824,45 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
     };
 
     const pendingEntries = files.filter((e) => e.status !== "done");
+
+    // ── Batch-fetch presigned URLs for all single-PUT files upfront ───────────────
+    // Replaces N serial API calls with a single request before the pool starts.
+    const singleEntries = pendingEntries.filter(
+      (e) => !(e.isVideo && e.file.size > MULTIPART_THRESHOLD)
+    );
+    const presignCache = new Map<string, { uploadUrl: string; s3Key: string }>();
+
+    if (singleEntries.length > 0 && identifier && !connectionError) {
+      try {
+        const batchRes = await withRetry(() =>
+          fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/batch-upload-urls`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              files: singleEntries.map((e) => ({
+                content_type: effectiveBatchContentType(e),
+                filename: e.file.name,
+              })),
+            }),
+          }).then(async (r) => {
+            if (r.status === 403) { uploadsDisabled = true; return null; }
+            if (!r.ok) throw new Error(`Batch presign failed (${r.status})`);
+            return r.json();
+          })
+        );
+        if (batchRes?.data?.urls && batchRes.data.urls.length === singleEntries.length) {
+          (batchRes.data.urls as Array<{ upload_url: string; s3_key: string }>).forEach(
+            (u, i) => {
+              presignCache.set(singleEntries[i].id, { uploadUrl: u.upload_url, s3Key: u.s3_key });
+            }
+          );
+        }
+        // If lengths differ: presignCache stays empty → uploadOne falls back to per-file presign for all files
+      } catch {
+        // Batch presign failed — fall back silently to per-file presign in uploadOne
+      }
+    }
+
     const uploadTasks = pendingEntries.map((entry, idx) => async () => {
       if (connectionError || uploadsDisabled) return;
       try {
@@ -787,7 +871,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           uploaded++;
           setUploadedCount(uploaded);
         } else {
-          await uploadOne(entry, idx === 0);
+          await uploadOne(entry, idx === 0, presignCache.get(entry.id));
         }
       } catch (err) {
         if ((err as { uploadsDisabled?: boolean }).uploadsDisabled) {
