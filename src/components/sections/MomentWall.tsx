@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import InvitationLoader, { type InvitationData } from "../InvitationDataLoader";
 import type { SectionComponentProps, MomentWallConfig } from "../engine/types";
 import { addPendingMoment } from "../moments/MomentsGallery";
+import { useVideoThumbnail } from "../../hooks/useVideoThumbnail";
 
 interface Moment {
   id: string;
@@ -32,6 +33,54 @@ function getMediaUrl(contentUrl: string, EVENTS_URL: string): string {
   if (!contentUrl) return "";
   if (contentUrl.startsWith("http")) return contentUrl;
   return EVENTS_URL + "storage/" + contentUrl;
+}
+
+interface VideoMomentCardProps {
+  moment: Moment;
+  EVENTS_URL: string;
+  onClick: () => void;
+}
+
+function VideoMomentCard({ moment, EVENTS_URL, onClick }: VideoMomentCardProps) {
+  // Only invoke canvas extraction when the backend thumbnail is absent
+  const extractedFrame = useVideoThumbnail(
+    moment.thumbnail_url ? null : getMediaUrl(moment.content_url, EVENTS_URL)
+  );
+
+  const posterSrc = moment.thumbnail_url
+    ? getMediaUrl(moment.thumbnail_url, EVENTS_URL)
+    : extractedFrame; // null while extracting → falls back to grey div
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full break-inside-avoid block overflow-hidden rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-black relative group"
+    >
+      <div className="relative">
+        {posterSrc ? (
+          <img
+            src={posterSrc}
+            alt={moment.description || "Video del evento"}
+            className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          /* Grey fallback: shown until Lambda thumbnail or canvas frame is ready */
+          <div className="aspect-video bg-gray-900 w-full group-hover:brightness-110 transition-[filter] duration-300" />
+        )}
+        {/* Play icon overlay */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-full bg-black/50 flex items-center justify-center">
+            <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+            </svg>
+          </div>
+        </div>
+      </div>
+    </button>
+  );
 }
 
 export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: SectionComponentProps) {
@@ -292,6 +341,16 @@ export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: Section
             {moments.map((m, idx) => {
               const src   = getMediaUrl(m.content_url, EVENTS_URL);
               const video = isVideoUrl(m.content_url);
+              if (video) {
+                return (
+                  <VideoMomentCard
+                    key={m.id}
+                    moment={m}
+                    EVENTS_URL={EVENTS_URL}
+                    onClick={() => openLightbox(m, idx)}
+                  />
+                );
+              }
               return (
                 <button
                   key={m.id}
@@ -299,39 +358,13 @@ export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: Section
                   onClick={() => openLightbox(m, idx)}
                   className="w-full break-inside-avoid block overflow-hidden rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-black relative group"
                 >
-                  {video ? (
-                    <div className="relative">
-                      {m.thumbnail_url ? (
-                        /* Thumbnail extracted by Lambda — single image request, no video preload */
-                        <img
-                          src={getMediaUrl(m.thumbnail_url, EVENTS_URL)}
-                          alt={m.description || "Video del evento"}
-                          className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      ) : (
-                        /* Fallback for legacy videos without a thumbnail (processed before this feature) */
-                        <div className="aspect-video bg-gray-900 w-full group-hover:brightness-110 transition-[filter] duration-300" />
-                      )}
-                      {/* Play icon overlay */}
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-10 h-10 rounded-full bg-black/50 flex items-center justify-center">
-                          <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <img
-                      src={src}
-                      alt={m.description || "Momento del evento"}
-                      className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  )}
+                  <img
+                    src={src}
+                    alt={m.description || "Momento del evento"}
+                    className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </button>
               );
             })}
