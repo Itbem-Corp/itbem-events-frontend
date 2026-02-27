@@ -360,6 +360,8 @@ function resolveContentType(entry: FileEntry): string {
   if (ext === "mp4") return "video/mp4";
   if (ext === "mov") return "video/quicktime";
   if (ext === "webm") return "video/webm";
+  if (ext === "m4v") return "video/x-m4v";
+  if (ext === "3gp") return "video/3gpp";
   return "application/octet-stream";
 }
 
@@ -1089,15 +1091,13 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
                         </div>
                       )
                     ) : entry.previewUrl === "heic" ? (
-                      <div className={`absolute inset-0 flex flex-col items-center justify-center gap-1 ${
+                      <div className={`absolute inset-0 flex flex-col items-center justify-center gap-1 px-1 ${
                         theme === 'dark'
                           ? 'bg-gradient-to-br from-gray-700 to-gray-800'
                           : 'bg-gradient-to-br from-gray-200 to-gray-300'
                       }`}>
-                        <svg className={`w-6 h-6 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                        </svg>
-                        <p className={`text-[9px] font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>HEIC</p>
+                        <IconCamera className={`w-6 h-6 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} />
+                        <p className={`text-[9px] font-medium text-center leading-tight truncate w-full text-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{entry.file.name}</p>
                       </div>
                     ) : (
                       <img src={entry.previewUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
