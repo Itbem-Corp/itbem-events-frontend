@@ -594,12 +594,14 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       entries.filter((e) => e.isHeic).forEach(async (e) => {
         const converted = await tryConvertHeic(e.file);
         if (!converted) return; // browser unsupported — icon stays
-        const newPreview = URL.createObjectURL(converted);
-        setFiles((prev) => prev.map((x) =>
-          x.id === e.id
-            ? { ...x, file: converted, previewUrl: newPreview, isHeic: false }
-            : x
-        ));
+        setFiles((prev) => {
+          const match = prev.find((x) => x.id === e.id);
+          if (!match) return prev; // entry removed — nothing to update, no URL created
+          const newPreview = URL.createObjectURL(converted);
+          return prev.map((x) =>
+            x.id === e.id ? { ...x, file: converted, previewUrl: newPreview, isHeic: false } : x
+          );
+        });
       });
     }
     if (errors.length > 0) {
