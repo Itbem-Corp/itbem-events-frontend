@@ -966,12 +966,13 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
                       </div>
                     )}
 
-                    {/* Remove button */}
-                    {!uploading && entry.status !== "done" && (
+                    {/* Remove button — visible on pending (always) and error (even mid-upload).
+                        Always visible on mobile (no hover); hover-only on desktop. */}
+                    {(entry.status === "pending" || entry.status === "error") && (
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); removeFile(entry.id); }}
-                        className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/50 backdrop-blur-sm text-white hover:bg-black/70 transition-all opacity-0 group-hover:opacity-100 sm:opacity-70"
+                        className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/50 backdrop-blur-sm text-white hover:bg-black/70 transition-all opacity-70 sm:opacity-0 sm:group-hover:opacity-100"
                         aria-label="Quitar"
                       >
                         <IconX className="w-3.5 h-3.5" />
