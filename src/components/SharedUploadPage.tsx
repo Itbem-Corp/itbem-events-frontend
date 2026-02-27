@@ -210,6 +210,9 @@ async function compressImage(file: File, maxDimension = 2048, quality = 0.85): P
   });
 }
 
+/** Yields to the browser event loop so the UI can repaint between heavy operations. */
+const yield_ = () => new Promise<void>((r) => setTimeout(r, 0));
+
 /**
  * Retry an async operation up to maxAttempts times with exponential backoff.
  * Does NOT retry:
@@ -770,6 +773,9 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
     const activeXHRs = new Set<XMLHttpRequest>();
     const abortActiveXHRs = () => { activeXHRs.forEach((x) => x.abort()); activeXHRs.clear(); };
 
+    // Populated by the sequential pre-compression pass below, before the pool starts.
+    const compressedFiles = new Map<string, File>(); // entry.id → compressed File
+
     const uploadOne = async (
       entry: FileEntry,
       isFirst: boolean,
@@ -779,10 +785,10 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
       setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "uploading" as const } : e));
 
-      // Compress images before uploading — no-op for videos/HEIC/GIF/WebP/AVIF
-      const fileToUpload = await compressImage(entry.file);
+      // Compression was done in the sequential pre-compression pass before the pool started.
+      const fileToUpload = compressedFiles.get(entry.id) ?? entry.file;
       const ext = entry.file.name.toLowerCase().split(".").pop() ?? "";
-      const effectiveContentType = fileToUpload !== entry.file
+      const effectiveContentType = compressedFiles.get(entry.id) !== entry.file && compressedFiles.get(entry.id) !== undefined
         ? "image/jpeg"
         : (entry.file.type ||
            (ext === "heic" || ext === "heif" ? "image/heic" :
@@ -921,6 +927,16 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       } catch {
         // Batch presign failed — fall back silently to per-file presign in uploadOne
       }
+    }
+
+    // ── Sequential pre-compression pass ──────────────────────────────────────────
+    // canvas.toBlob() is synchronous CPU work — running all compressions concurrently
+    // (inside the upload pool) blocks the main thread for 2–10 seconds on batch uploads.
+    // Compressing one-at-a-time with a yield between each keeps the UI responsive.
+    for (const entry of pendingEntries) {
+      const compressed = await compressImage(entry.file);
+      compressedFiles.set(entry.id, compressed);
+      await yield_();
     }
 
     const uploadTasks = pendingEntries.map((entry, idx) => async () => {
