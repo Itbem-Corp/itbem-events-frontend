@@ -511,9 +511,22 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
                   setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, progress: pct } : e));
                 }
               };
-              xhr.onload = () => xhr.status >= 200 && xhr.status < 300
-                ? resolve(xhr.getResponseHeader("ETag") ?? xhr.getResponseHeader("etag") ?? "")
-                : reject(new Error(`Part ${partNumber} failed (${xhr.status})`));
+              xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  const etag = xhr.getResponseHeader("ETag") ?? xhr.getResponseHeader("etag") ?? "";
+                  // Empty ETag = CORS bucket is missing ExposeHeaders:ETag — fail fast with a clear message.
+                  if (!etag) {
+                    reject(Object.assign(new Error(`Part ${partNumber}: S3 no devolvió ETag (configura ExposeHeaders en CORS del bucket)`), { permanent: true }));
+                  } else {
+                    resolve(etag);
+                  }
+                } else if (xhr.status === 403 || xhr.status === 401) {
+                  // Presigned URL expired or IAM denied — not retryable, fail fast.
+                  reject(Object.assign(new Error(`Part ${partNumber}: sin permiso o URL expirada (${xhr.status})`), { permanent: true }));
+                } else {
+                  reject(new Error(`Part ${partNumber} failed (${xhr.status})`));
+                }
+              };
               xhr.onerror = () => reject(new Error(`Part ${partNumber}: connection error`));
               xhr.ontimeout = () => reject(new Error(`Part ${partNumber}: timeout`));
               xhr.send(blob);
@@ -522,7 +535,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
             etags[partNumber - 1] = { part_number: partNumber, etag };
             return;
           } catch (err) {
-            if (++attempt >= 3) throw err;
+            if ((err as { permanent?: boolean }).permanent || ++attempt >= 3) throw err;
             await new Promise(r => setTimeout(r, attempt * 1000));
           }
         }
