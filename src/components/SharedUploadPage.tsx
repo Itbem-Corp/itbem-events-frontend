@@ -43,6 +43,7 @@ function getIdentifierFromURL(): string {
 const MAX_FILES = 10;
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
+const MAX_VIDEO_DURATION_S = 300; // 5 minutes
 const ALLOWED_TYPES = [
   "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif",
   "image/heic", "image/heif", "image/avif",
@@ -132,6 +133,26 @@ function extractVideoThumbnail(blobUrl: string): Promise<string> {
 
     video.addEventListener("error", fallback, { once: true });
     setTimeout(fallback, 2000);
+  });
+}
+
+/**
+ * Reads the duration of a video file via a hidden <video> element.
+ * Returns 0 if duration cannot be determined — callers treat 0 as "unknown / allow".
+ */
+function getVideoDuration(file: File): Promise<number> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(video.src);
+      resolve(video.duration);
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(video.src);
+      resolve(0); // can't read duration — allow upload (backend size limit acts as proxy)
+    };
+    video.src = URL.createObjectURL(file);
   });
 }
 
@@ -569,7 +590,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
     }
   }, []);
 
-  const addFiles = (incoming: File[]) => {
+  const addFiles = async (incoming: File[]) => {
     setError("");
     const remaining = MAX_FILES - files.length;
     if (remaining <= 0) {
@@ -600,12 +621,47 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       }
     }
 
-    if (entries.length > 0) {
-      setFiles((prev) => [...prev, ...entries]);
+    // ── Video duration check ────────────────────────────────────────────────
+    // Read durations for all video entries in parallel before adding to state.
+    const videoEntries = entries.filter((e) => e.isVideo);
+    const nonVideoEntries = entries.filter((e) => !e.isVideo);
+
+    let validVideoEntries = videoEntries;
+    if (videoEntries.length > 0) {
+      const videosWithDuration = await Promise.all(
+        videoEntries.map(async (e) => ({
+          entry: e,
+          duration: await getVideoDuration(e.file),
+        }))
+      );
+
+      const tooLong = videosWithDuration.filter(({ duration }) => duration > MAX_VIDEO_DURATION_S);
+      validVideoEntries = videosWithDuration
+        .filter(({ duration }) => duration <= MAX_VIDEO_DURATION_S || duration === 0)
+        .map(({ entry }) => entry);
+
+      if (tooLong.length > 0) {
+        // Revoke blob URLs for rejected entries to avoid leaking object URLs
+        tooLong.forEach(({ entry }) => {
+          if (entry.previewUrl && entry.previewUrl !== "heic") URL.revokeObjectURL(entry.previewUrl);
+        });
+        addToast(
+          tooLong.length === 1
+            ? `Un video supera el límite de 5 minutos y no fue agregado`
+            : `${tooLong.length} videos superan el límite de 5 minutos y no fueron agregados`,
+          "error"
+        );
+      }
+    }
+
+    const validEntries = [...nonVideoEntries, ...validVideoEntries];
+
+    if (validEntries.length > 0) {
+      setFiles((prev) => [...prev, ...validEntries]);
       // Generate video thumbnails async
-      entries.filter((e) => e.isVideo).forEach((e) => generateVideoThumb(e));
+      validEntries.filter((e) => e.isVideo).forEach((e) => generateVideoThumb(e));
       // Attempt async HEIC → JPEG conversion for preview + compression
-      entries.filter((e) => e.isHeic).forEach(async (e) => {
+      validEntries.filter((e) => e.isHeic).forEach(async (e) => {
         const converted = await tryConvertHeic(e.file);
         if (!converted) return; // browser unsupported — icon stays
         setFiles((prev) => {
@@ -1292,7 +1348,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
                   <p className={`text-[15px] font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-700'}`}>
                     {dragOver ? "Suelta aquí" : "Seleccionar de galería"}
                   </p>
-                  <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>Fotos y videos · Máx. 25 MB fotos, 200 MB videos</p>
+                  <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>Fotos y videos · Máx. 25 MB fotos, 200 MB videos · Máximo 5 min por video</p>
                 </div>
               </div>
             ) : (
