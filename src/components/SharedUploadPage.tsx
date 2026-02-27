@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import { flushSync } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useToast } from "../hooks/useToast";
+import ToastList from "./common/Toast";
 
 // ── Theme toggle ──────────────────────────────────────────────────────────────
 type Theme = 'dark' | 'light';
@@ -485,6 +487,8 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
   const [wallEventName, setWallEventName] = useState("");
   const [uploadsNotEnabled, setUploadsNotEnabled] = useState(false);
 
+  const { toasts, addToast, removeToast } = useToast();
+
   const [isPreparing, setIsPreparing] = useState(false)
   const pickerOpenRef = useRef(false)
   const preparingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -567,6 +571,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
     const remaining = MAX_FILES - files.length;
     if (remaining <= 0) {
       setError(`Máximo ${MAX_FILES} archivos por subida.`);
+      addToast(`Ya alcanzaste el límite de ${MAX_FILES} archivos`, "error");
       return;
     }
 
@@ -585,6 +590,11 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
     if (incoming.length > remaining) {
       errors.push(`Se ignoraron ${incoming.length - remaining} archivo(s) — máximo ${MAX_FILES}.`);
+      if (remaining <= 0) {
+        addToast(`Ya alcanzaste el límite de ${MAX_FILES} archivos`, "error");
+      } else {
+        addToast(`Solo se agregaron ${remaining} de ${incoming.length} archivos (límite: ${MAX_FILES})`, "error");
+      }
     }
 
     if (entries.length > 0) {
@@ -1015,6 +1025,7 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
   return (
     <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
     <ThemeToggleButton />
+    <ToastList toasts={toasts} onRemove={removeToast} />
     <div className={`min-h-screen flex flex-col relative${theme === 'light' ? ' bg-gray-50' : ''}`}>
       <DarkBackground />
       {/* Preview lightbox */}
