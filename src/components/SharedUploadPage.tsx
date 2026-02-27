@@ -177,6 +177,35 @@ async function compressImage(file: File, maxDimension = 2048, quality = 0.85): P
   });
 }
 
+/**
+ * Retry an async operation up to maxAttempts times with exponential backoff.
+ * Does NOT retry:
+ *   - Silent abort errors ({ silent: true }) — user-cancelled or abortActiveXHRs
+ *   - TypeError = full connection loss — surface immediately so pool stops
+ *   - 4xx HTTP errors — client errors, retrying won't help
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+  baseDelayMs = 1000
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if ((err as { silent?: boolean }).silent) throw err;           // abort
+      if (err instanceof TypeError) throw err;                       // connection down
+      if (err instanceof Error && /\(4\d\d\)/.test(err.message)) throw err; // 4xx
+      if (attempt < maxAttempts) {
+        await new Promise(r => setTimeout(r, baseDelayMs * 2 ** (attempt - 1)));
+      }
+    }
+  }
+  throw lastErr ?? new Error("withRetry: maxAttempts must be >= 1");
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -508,11 +537,13 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       (ext === "mp4" ? "video/mp4" : ext === "mov" ? "video/quicktime" : ext === "webm" ? "video/webm" : "video/mp4");
 
     // ── Step 1: start multipart upload ──────────────────────────────────────
-    const startRes = await fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/multipart/start`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content_type: contentType, filename: file.name, file_size: file.size }),
-    });
+    const startRes = await withRetry(() =>
+      fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/multipart/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content_type: contentType, filename: file.name, file_size: file.size }),
+      })
+    );
     if (startRes.status === 403) throw Object.assign(new Error("uploads-disabled"), { uploadsDisabled: true });
     if (!startRes.ok) {
       const json = await startRes.json().catch(() => ({}));
@@ -537,53 +568,45 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
       const uploadPart = async ({ partNumber, start, end }: { partNumber: number; start: number; end: number }): Promise<void> => {
         const urlEntry = partUrls.find(u => u.part_number === partNumber)!;
         const blob = file.slice(start, end);
-        let attempt = 0;
         // Show which part is being uploaded
         setFiles(prev => prev.map(e => e.id === entry.id
           ? { ...e, subtitle: `Subiendo parte ${partNumber}/${parts.length}...` }
           : e));
-        while (true) {
-          bytesUploaded[partNumber - 1] = 0; // reset before each attempt to avoid stale progress
-          try {
-            const etag = await new Promise<string>((resolve, reject) => {
-              const xhr = new XMLHttpRequest();
-              xhr.open("PUT", urlEntry.url);
-              xhr.timeout = 10 * 60 * 1000; // 10 minutes per part
-              xhr.upload.onprogress = (ev) => {
-                if (ev.lengthComputable) {
-                  bytesUploaded[partNumber - 1] = ev.loaded;
-                  const pct = calcProgress(bytesUploaded, file.size);
-                  setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, progress: pct } : e));
-                }
-              };
-              xhr.onload = () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                  const etag = xhr.getResponseHeader("ETag") ?? xhr.getResponseHeader("etag") ?? "";
-                  // Empty ETag = CORS bucket is missing ExposeHeaders:ETag — fail fast with a clear message.
-                  if (!etag) {
-                    reject(Object.assign(new Error(`Part ${partNumber}: S3 no devolvió ETag (configura ExposeHeaders en CORS del bucket)`), { permanent: true }));
-                  } else {
-                    resolve(etag);
-                  }
-                } else if (xhr.status === 403 || xhr.status === 401) {
-                  // Presigned URL expired or IAM denied — not retryable, fail fast.
-                  reject(Object.assign(new Error(`Part ${partNumber}: sin permiso o URL expirada (${xhr.status})`), { permanent: true }));
-                } else {
-                  reject(new Error(`Part ${partNumber} failed (${xhr.status})`));
-                }
-              };
-              xhr.onerror = () => reject(new Error(`Part ${partNumber}: connection error`));
-              xhr.ontimeout = () => reject(new Error(`Part ${partNumber}: timeout`));
-              xhr.send(blob);
-            });
-            bytesUploaded[partNumber - 1] = end - start;
-            etags[partNumber - 1] = { part_number: partNumber, etag };
-            return;
-          } catch (err) {
-            if ((err as { permanent?: boolean }).permanent || ++attempt >= 3) throw err;
-            await new Promise(r => setTimeout(r, attempt * 1000));
-          }
-        }
+        bytesUploaded[partNumber - 1] = 0; // reset before first attempt
+        const etag = await withRetry(() => new Promise<string>((resolve, reject) => {
+          bytesUploaded[partNumber - 1] = 0; // reset on each retry to avoid stale progress
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", urlEntry.url);
+          xhr.timeout = 10 * 60 * 1000; // 10 minutes per part
+          xhr.upload.onprogress = (ev) => {
+            if (ev.lengthComputable) {
+              bytesUploaded[partNumber - 1] = ev.loaded;
+              const pct = calcProgress(bytesUploaded, file.size);
+              setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, progress: pct } : e));
+            }
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              const etag = xhr.getResponseHeader("ETag") ?? xhr.getResponseHeader("etag") ?? "";
+              // Empty ETag = CORS bucket is missing ExposeHeaders:ETag — fail fast with a clear message.
+              if (!etag) {
+                reject(Object.assign(new Error(`Part ${partNumber}: S3 no devolvió ETag (configura ExposeHeaders en CORS del bucket)`), { permanent: true }));
+              } else {
+                resolve(etag);
+              }
+            } else if (xhr.status === 403 || xhr.status === 401) {
+              // Presigned URL expired or IAM denied — not retryable, fail fast.
+              reject(new Error(`Part ${partNumber}: sin permiso o URL expirada (${xhr.status})`));
+            } else {
+              reject(new Error(`Part ${partNumber} failed (${xhr.status})`));
+            }
+          };
+          xhr.onerror = () => reject(new TypeError(`Part ${partNumber}: connection error`));
+          xhr.ontimeout = () => reject(new Error(`Part ${partNumber}: timeout`));
+          xhr.send(blob);
+        }));
+        bytesUploaded[partNumber - 1] = end - start;
+        etags[partNumber - 1] = { part_number: partNumber, etag };
       };
 
       const partTasks = parts.map(p => () => uploadPart(p));
@@ -652,11 +675,13 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
       try {
         // ── Step 1: Request a presigned PUT URL from the backend ──────────────
-        const urlRes = await fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/upload-url`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content_type: effectiveContentType, filename: entry.file.name }),
-        });
+        const urlRes = await withRetry(() =>
+          fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/upload-url`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content_type: effectiveContentType, filename: entry.file.name }),
+          })
+        );
 
         if (urlRes.status === 403) { uploadsDisabled = true; return; }
         if (!urlRes.ok) {
@@ -697,15 +722,17 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
         // ── Step 3: Confirm with backend — save DB record + queue Lambda ──────
         setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, progress: 95 } : e));
-        const confirmRes = await fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/confirm`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            s3_key: s3Key,
-            content_type: effectiveContentType,
-            description: isFirst && description.trim() ? description.trim() : "",
-          }),
-        });
+        const confirmRes = await withRetry(() =>
+          fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/confirm`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              s3_key: s3Key,
+              content_type: effectiveContentType,
+              description: isFirst && description.trim() ? description.trim() : "",
+            }),
+          })
+        );
 
         if (!confirmRes.ok) {
           const json = await confirmRes.json().catch(() => ({}));
