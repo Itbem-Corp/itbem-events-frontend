@@ -57,8 +57,8 @@ function resolveFullUrl(m: Moment, EVENTS_URL: string): string {
   return `${EVENTS_URL}${url.startsWith("/") ? url.slice(1) : url}`
 }
 
-const PAGE_SIZE = 30
-const MAX_PAGES = 4
+const PAGE_SIZE = 500
+const MAX_PAGES = 1
 const PROCESSING_POLL_MS = 12_000
 
 // ── Pending-moments helpers (sessionStorage) ─────────────────────────────────
