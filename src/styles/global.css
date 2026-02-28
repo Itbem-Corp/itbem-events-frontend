@@ -97,4 +97,16 @@
   animation: breathe-slow 3s ease-in-out infinite;
 }
 
+/* ── Typewriter CSS animation ──────────────────────────────────────────────── */
+/* Used by MemoryCard in MomentsGallery — zero JS re-renders.                  */
+/* steps(N) is supplied via inline style so it matches the exact char count.   */
+@keyframes typing {
+  from { width: 0 }
+  to   { width: 100% }
+}
+
+@keyframes blink-caret {
+  50% { border-color: transparent }
+}
+
 /* @font-face declarations live in fonts.css (imported by template.astro) */

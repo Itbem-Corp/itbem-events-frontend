@@ -149,50 +149,6 @@ function useLazyImage(src: string, eager = false): {
   return { ref, loaded, setLoaded, imgSrc }
 }
 
-// ── Typewriter hook — reveals text char by char when card enters viewport ──
-function useTypewriter(text: string, charDelayMs = 18): {
-  ref: React.RefObject<HTMLDivElement | null>
-  displayed: string
-} {
-  const ref = React.useRef<HTMLDivElement>(null)
-  const [displayed, setDisplayed] = React.useState('')
-  const started = React.useRef(false)
-  const intervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
-
-  React.useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !started.current) {
-          started.current = true
-          observer.disconnect()
-          let i = 0
-          intervalRef.current = setInterval(() => {
-            i++
-            setDisplayed(text.slice(0, i))
-            if (i >= text.length) {
-              clearInterval(intervalRef.current as ReturnType<typeof setInterval>)
-              intervalRef.current = null
-            }
-          }, charDelayMs)
-        }
-      },
-      { rootMargin: '50px' }
-    )
-    observer.observe(el)
-    return () => {
-      observer.disconnect()
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
-    }
-  }, [text, charDelayMs])
-
-  return { ref, displayed }
-}
-
 // ── MomentsGallery ─────────────────────────────────────────────────────────
 
 interface Props {
@@ -1016,11 +972,9 @@ function MemoryCard({
 }) {
   const rotations = [-2, 1, -1, 2, 0]
   const rotation = rotations[index % rotations.length]
-  const { ref, displayed } = useTypewriter(phrase, 18)
 
   return (
     <motion.div
-      ref={ref as React.RefObject<HTMLDivElement>}
       initial={{ opacity: 0, scale: 0.97 }}
       whileInView={{ opacity: 1, scale: 1 }}
       viewport={{ once: true, margin: '0px 0px -50px 0px' }}
@@ -1041,15 +995,17 @@ function MemoryCard({
           {theme.microIcon}
         </motion.div>
 
-        {/* Phrase text with typewriter cursor */}
+        {/* Phrase text — CSS typewriter, zero JS re-renders */}
         <p
-          className={`text-center text-lg sm:text-xl font-semibold leading-snug ${theme.cardTextColor} font-serif`}
-          style={{ minHeight: '2.5rem' }}
+          className={`text-center text-lg sm:text-xl font-semibold leading-snug ${theme.cardTextColor} font-serif overflow-hidden whitespace-nowrap border-r-2 border-current mx-auto`}
+          style={{
+            width: 0,
+            animation: `typing 1.8s steps(${phrase.length}) forwards, blink-caret 0.8s step-end infinite`,
+            maxWidth: '100%',
+            minHeight: '2.5rem',
+          }}
         >
-          {displayed}
-          {displayed.length < phrase.length && (
-            <span className="animate-pulse opacity-60">|</span>
-          )}
+          {phrase}
         </p>
       </div>
     </motion.div>
