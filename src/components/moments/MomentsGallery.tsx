@@ -57,7 +57,8 @@ function resolveFullUrl(m: Moment, EVENTS_URL: string): string {
   return `${EVENTS_URL}${url.startsWith("/") ? url.slice(1) : url}`
 }
 
-const PAGE_SIZE = 25
+const PAGE_SIZE = 25          // Scroll load size
+const INITIAL_PAGE_SIZE = 100 // First load: larger to capture all videos for VideoHighlights
 const MAX_TOTAL = 500
 const PROCESSING_POLL_MS = 12_000
 
@@ -192,11 +193,12 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
   const fetchMoments = useCallback(async (id: string, cursor: string | null, append: boolean) => {
     try {
       const tokenParam = previewToken ? `&preview_token=${encodeURIComponent(previewToken)}` : ''
-      // cursor=null → first page (?cursor=&limit=25 activates cursor mode on backend)
-      // cursor=string → subsequent pages
+      // cursor=null → first page: use INITIAL_PAGE_SIZE (100) to capture all videos for VideoHighlights
+      // cursor=string → subsequent scroll pages: use PAGE_SIZE (25)
       const cursorParam = cursor === null ? '' : cursor
+      const limit = cursor === null ? INITIAL_PAGE_SIZE : PAGE_SIZE
       const res = await fetch(
-        `${EVENTS_URL}api/events/${encodeURIComponent(id)}/moments?cursor=${encodeURIComponent(cursorParam)}&limit=${PAGE_SIZE}${tokenParam}`
+        `${EVENTS_URL}api/events/${encodeURIComponent(id)}/moments?cursor=${encodeURIComponent(cursorParam)}&limit=${limit}${tokenParam}`
       )
       if (!res.ok) {
         if (res.status === 404) { setError("Evento no encontrado"); return }
