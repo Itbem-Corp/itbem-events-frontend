@@ -63,12 +63,16 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
   const [newCount, setNewCount] = useState(0)
   const [newMomentNotif, setNewMomentNotif] = useState<Slide | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(true)
+  const [networkError, setNetworkError] = useState(false)
   const [eventName, setEventName] = useState("")
   const [clock, setClock] = useState("")
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoCapRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const qrHideRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const notifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pollFailuresRef = useRef(0)
+  const touchStartXRef = useRef<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // ── Init ──
@@ -90,17 +94,26 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
     return () => { if (notifTimerRef.current) clearTimeout(notifTimerRef.current) }
   }, [newMomentNotif])
 
+  // ── Fullscreen prompt — auto-dismiss after 5s ──
+  useEffect(() => {
+    if (!showFullscreenPrompt) return
+    const t = setTimeout(() => setShowFullscreenPrompt(false), 5000)
+    return () => clearTimeout(t)
+  }, [showFullscreenPrompt])
+
   // ── Fetch ──
   const fetchSlides = useCallback(async (id: string, isInitial: boolean) => {
     try {
       const res = await fetch(
         `${EVENTS_URL}api/events/${encodeURIComponent(id)}/moments?page=1&limit=500`
       )
-      if (!res.ok) return
+      if (!res.ok) throw new Error("not ok")
       const json = await res.json()
       const data = json.data ?? json
       const items: Slide[] = (data.items ?? [])
       if (data.event_name && isInitial) setEventName(data.event_name)
+      // Clear network error on success
+      if (pollFailuresRef.current > 0) { pollFailuresRef.current = 0; setNetworkError(false) }
 
       setSlides((prev) => {
         if (isInitial) return items
@@ -122,7 +135,10 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
         }
         return merged
       })
-    } catch { /* silent */ }
+    } catch {
+      pollFailuresRef.current += 1
+      if (pollFailuresRef.current >= 3) setNetworkError(true)
+    }
   }, [EVENTS_URL])
 
   useEffect(() => {
@@ -157,11 +173,35 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
     }
   }, [index, paused, currentIsVideo, slides.length, advance])
 
+  // ── Preload next image ──
+  useEffect(() => {
+    if (slides.length < 2) return
+    const next = slides[(index + 1) % slides.length]
+    const nextUrl = next ? resolveUrl(next, EVENTS_URL) : ""
+    if (!nextUrl || isVideo(nextUrl)) return
+    const img = new Image()
+    img.src = nextUrl
+  }, [index, slides, EVENTS_URL])
+
+  // ── Touch swipe (left = advance, right = back) ──
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX
+  }, [])
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartXRef.current === null) return
+    const delta = e.changedTouches[0].clientX - touchStartXRef.current
+    touchStartXRef.current = null
+    if (Math.abs(delta) < 50) return
+    if (delta < 0) advance(); else goBack()
+  }, [advance, goBack])
+
   // ── Fullscreen ──
   const toggleFullscreen = useCallback(async () => {
     if (!document.fullscreenElement) {
       await containerRef.current?.requestFullscreen().catch(() => {})
       setIsFullscreen(true)
+      setShowFullscreenPrompt(false)
     } else {
       await document.exitFullscreen().catch(() => {})
       setIsFullscreen(false)
@@ -246,6 +286,8 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
       onClick={handleClick}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {/* ── Slides ── */}
       <AnimatePresence mode="sync">
@@ -303,6 +345,7 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
                 animate={{ scale: kb.scaleEnd, x: `${kb.dx}%`, y: `${kb.dy}%` }}
                 transition={{ duration: PHOTO_DURATION / 1000, ease: "linear" }}
                 draggable={false}
+                onError={advance}
               />
             )
           )}
@@ -313,6 +356,12 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
           )}
         </motion.div>
       </AnimatePresence>
+
+      {/* ── Vignette (permanent dark edges) ── */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: "radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)" }}
+      />
 
       {/* ── Caption ── */}
       <AnimatePresence>
@@ -361,6 +410,15 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-3 pointer-events-auto">
+          {networkError && (
+            <div
+              title="Sin conexión — los momentos nuevos no se están cargando"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/20 border border-orange-500/30 text-orange-400 text-xs"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
+              Sin red
+            </div>
+          )}
           {newCount > 0 && (
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
@@ -412,6 +470,28 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
       <div className="absolute bottom-4 right-5 text-white/30 text-xs tabular-nums font-mono pointer-events-none">
         {index + 1} / {slides.length}
       </div>
+
+      {/* ── Fullscreen prompt (first load, auto-dismiss 5s) ── */}
+      <AnimatePresence>
+        {showFullscreenPrompt && !isFullscreen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.35 }}
+            className="absolute inset-0 flex items-center justify-center z-50 pointer-events-auto"
+            onClick={(e) => { e.stopPropagation(); toggleFullscreen() }}
+          >
+            <div className="flex flex-col items-center gap-3 bg-black/70 backdrop-blur-xl border border-white/15 rounded-2xl px-10 py-7 shadow-2xl">
+              <svg className="size-9 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+              </svg>
+              <p className="text-white text-base font-semibold">Abrir en pantalla completa</p>
+              <p className="text-white/40 text-sm">Toca aquí · tecla F</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── New moment live notification (bottom-right) ── */}
       <AnimatePresence>
