@@ -1,0 +1,52 @@
+---
+export const prerender = false
+
+import TemplateLayout from '../../../layouts/template.astro'
+import TvSlideshow from '../../../components/moments/TvSlideshow'
+import { fetchEventOgData } from '../../../lib/og'
+
+const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string ?? 'http://localhost:8080/'
+const { identifier } = Astro.params
+
+let ogTitle = 'Slideshow del evento'
+let ogDesc  = 'Modo TV — disfruta los momentos del evento en pantalla completa.'
+const ogUrl = Astro.url.href
+
+if (identifier) {
+  const ev = await fetchEventOgData(EVENTS_URL, identifier)
+  if (ev) {
+    ogTitle = ev.name ? `Slideshow — ${ev.name}` : ogTitle
+
+    if (ev.organizer_name) {
+      ogDesc = `Disfruta los momentos de ${ev.name} en modo TV.`
+    }
+  }
+}
+---
+
+<TemplateLayout
+  title={ogTitle}
+  ogTitle={ogTitle}
+  ogDescription={ogDesc}
+  ogUrl={ogUrl}
+>
+  <TvSlideshow
+    client:only="react"
+    EVENTS_URL={EVENTS_URL}
+  />
+
+  <style is:global>
+    body { overflow: hidden; background: #000; }
+  </style>
+
+  <script is:inline>
+    ;(function () {
+      var t
+      document.addEventListener('mousemove', function () {
+        document.body.style.cursor = 'default'
+        clearTimeout(t)
+        t = setTimeout(function () { document.body.style.cursor = 'none' }, 3000)
+      })
+    })()
+  </script>
+</TemplateLayout>
