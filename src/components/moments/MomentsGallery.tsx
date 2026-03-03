@@ -434,7 +434,6 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
           processingVideoCount={pendingVideoCount}
           EVENTS_URL={EVENTS_URL}
           theme={theme}
-          onOpen={(i) => setVideoLightboxIndex(i)}
         />
       </div>
 
@@ -903,27 +902,26 @@ function VideoCard({
 }
 
 // ── VideoHighlights ──────────────────────────────────────────────────────────
-// Horizontal-scroll rail (Stories-style). Peek of next card = scroll affordance.
+// Pinterest-style masonry grid of inline-playing videos.
+// onOpen removed — videos are watched directly in the grid.
 
 function VideoHighlights({
   videoMoments,
   processingVideoCount,
   EVENTS_URL,
   theme,
-  onOpen,
 }: {
   videoMoments: Moment[]
   processingVideoCount: number
   EVENTS_URL: string
   theme: ReturnType<typeof getTheme>
-  onOpen: (index: number) => void
 }) {
   if (videoMoments.length === 0 && processingVideoCount === 0) return null
 
   return (
     <div className="mb-8">
       {/* Section header */}
-      <div className="flex items-center gap-3 mb-3 px-1">
+      <div className="flex items-center gap-3 mb-4 px-1">
         <div className={`w-5 h-0.5 rounded-full ${theme.accentSoft}`} />
         <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${theme.accent}`}>
           Momentos en video
@@ -931,26 +929,17 @@ function VideoHighlights({
         <div className={`flex-1 h-px ${theme.accentSoft} opacity-30`} />
       </div>
 
-      {/* Horizontal scroll rail */}
-      <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 scrollbar-hide">
-        {videoMoments.map((moment, i) => (
-          <div
+      {/* Pinterest masonry — columns let each video keep its natural aspect ratio */}
+      <div className="columns-2 sm:columns-3 gap-3">
+        {videoMoments.map((moment) => (
+          <VideoCard
             key={moment.id}
-            className="flex-shrink-0 w-64 sm:w-72 snap-start"
-          >
-            <VideoCard
-              moment={moment}
-              EVENTS_URL={EVENTS_URL}
-            />
-          </div>
+            moment={moment}
+            EVENTS_URL={EVENTS_URL}
+          />
         ))}
         {Array.from({ length: processingVideoCount }).map((_, i) => (
-          <div
-            key={`proc-video-${i}`}
-            className="flex-shrink-0 w-64 sm:w-72 snap-start"
-          >
-            <ProcessingVideoCard index={videoMoments.length + i} />
-          </div>
+          <ProcessingVideoCard key={`proc-video-${i}`} index={i} />
         ))}
       </div>
     </div>
