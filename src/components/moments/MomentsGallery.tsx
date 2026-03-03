@@ -409,7 +409,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
 
   if (moments.length === 0 && pendingMoments.length === 0) {
     return (
-      <div className={`min-h-screen flex items-center justify-center px-6 ${theme.heroBg}`}>
+      <div className={`min-h-screen flex items-center justify-center px-6 ${theme.heroLightBg}`}>
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -646,8 +646,8 @@ function HeroHeader({
         initial={{ scaleX: 0 }}
         animate={{ scaleX: 1 }}
         transition={{ delay: 0.2, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        className="mt-5 mx-auto h-px w-16 bg-gradient-to-r from-transparent via-gray-300 to-transparent"
-        style={{ transformOrigin: 'center' }}
+        className="mt-5 mx-auto h-px w-16"
+        style={{ transformOrigin: 'center', background: `linear-gradient(to right, transparent, ${theme.blobColor1}80, transparent)` }}
       />
 
       {/* Stats pill — photo/video count */}
@@ -658,12 +658,12 @@ function HeroHeader({
           transition={{ delay: 0.4, duration: 0.5 }}
           className="mt-4 flex justify-center"
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/5 text-xs text-gray-500 font-medium">
+          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${theme.accentSoft} ${theme.accent}`}>
             {photoCount > 0 && (
               <span>{photoCount} {photoCount === 1 ? 'foto' : 'fotos'}</span>
             )}
             {photoCount > 0 && videoCount > 0 && (
-              <span className="w-1 h-1 rounded-full bg-gray-400 inline-block" aria-hidden="true" />
+              <span className="w-1 h-1 rounded-full opacity-40 bg-current inline-block" aria-hidden="true" />
             )}
             {videoCount > 0 && (
               <span>{videoCount} {videoCount === 1 ? 'video' : 'videos'}</span>
@@ -1205,7 +1205,7 @@ function ThemeFooter({ theme, eventName }: { theme: MomentsTheme; eventName: str
 
 function ComingSoonScreen({ eventName, theme }: { eventName: string; theme: MomentsTheme }) {
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center px-6 ${theme.heroBg} relative overflow-hidden`}>
+    <div className={`min-h-screen flex flex-col items-center justify-center px-6 ${theme.heroLightBg} relative overflow-hidden`}>
       <Decorations type={theme.decorationType} />
 
       {/* Floating ambient circles */}
