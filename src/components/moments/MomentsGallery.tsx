@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useRef } from "react"
+import React, { useState, useEffect, useCallback, useRef, memo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { getTheme, type MomentsTheme } from "./themes"
 import { useVideoThumbnail } from '../../hooks/useVideoThumbnail'
@@ -113,40 +113,12 @@ export function addPendingMoment(identifier: string, mediaType: "video" | "image
   writePending(identifier, [...existing, entry])
 }
 
-// ── Lazy image hook — only fires HTTP request when card is 200px from viewport ──
-function useLazyImage(src: string, eager = false): {
-  ref: React.RefObject<HTMLDivElement | null>
-  loaded: boolean
-  setLoaded: React.Dispatch<React.SetStateAction<boolean>>
-  imgSrc: string | null
-} {
-  const ref = React.useRef<HTMLDivElement>(null)
-  const [imgSrc, setImgSrc] = React.useState<string | null>(eager ? src : null)
-  const [loaded, setLoaded] = React.useState(false)
 
-  React.useEffect(() => {
-    // Reset state when src changes (handles card recycling / pagination)
-    setLoaded(false)
-    setImgSrc(eager ? src : null)
-
-    if (eager) return
-
-    const el = ref.current
-    if (!el) return
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setImgSrc(src)
-          observer.disconnect()
-        }
-      },
-      { rootMargin: '200px' }
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [src, eager])
-
-  return { ref, loaded, setLoaded, imgSrc }
+// ── getCardType ──────────────────────────────────────────────────────────────
+// Every 10th photo (1-indexed) is a 2×2 featured card in the Instagram grid.
+// Exported for unit testing.
+export function getCardType(index: number): 'normal' | 'featured' {
+  return (index + 1) % 10 === 0 ? 'featured' : 'normal'
 }
 
 // ── MomentsGallery ─────────────────────────────────────────────────────────
@@ -462,12 +434,12 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col gap-0">
+        <div className="flex flex-col gap-0.5">
           {/* Processing image stubs — shown at the top of the photo grid */}
           {pendingImageCount > 0 && (
-            <div className="columns-2 sm:columns-3 gap-3 sm:gap-4 mb-0">
+            <div className="grid grid-cols-3 gap-0.5 mb-0.5">
               {Array.from({ length: pendingImageCount }).map((_, i) => (
-                <ProcessingCard key={`proc-img-${i}`} index={i} />
+                <ProcessingCard key={`proc-img-${i}`} />
               ))}
             </div>
           )}
@@ -475,17 +447,19 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
             const indexOffset = groupIdx * MOMENTS_PER_GROUP
             return (
               <React.Fragment key={group.moments[0]?.id ?? groupIdx}>
-                {/* Photo grid group */}
-                <div className="columns-2 sm:columns-3 gap-3 sm:gap-4">
+                {/* Photo grid group — Instagram CSS grid */}
+                <div
+                  className="grid grid-cols-3 gap-0.5"
+                  style={{ gridAutoFlow: 'row dense' }}
+                >
                   {group.moments.map((moment, i) => {
                     const globalIndex = indexOffset + i
                     return (
-                      <MomentCard
+                      <PhotoCard
                         key={moment.id}
                         moment={moment}
-                        index={globalIndex}
+                        globalIndex={globalIndex}
                         EVENTS_URL={EVENTS_URL}
-                        theme={theme}
                         onClick={() => setLightboxIndex(globalIndex)}
                       />
                     )
@@ -660,88 +634,78 @@ function HeroHeader({ eventName, eventDate, theme }: {
   )
 }
 
-// ── MomentCard ──────────────────────────────────────────────────────────────
+// ── PhotoCard ────────────────────────────────────────────────────────────────
+// Instagram-grid card. Normal: aspect-square 1×1. Featured (every 10th): 2×2.
+// Uses native loading="lazy" — no custom lazy hook needed (grid reserves space).
 
-function MomentCard({
+function PhotoCard({
   moment,
-  index,
+  globalIndex,
   EVENTS_URL,
-  theme,
   onClick,
 }: {
   moment: Moment
-  index: number
+  globalIndex: number
   EVENTS_URL: string
-  theme: ReturnType<typeof getTheme>
   onClick: () => void
 }) {
+  const [loaded, setLoaded] = useState(false)
   const thumbUrl = resolveMediaUrl(moment, EVENTS_URL)
   const fullUrl = resolveFullUrl(moment, EVENTS_URL)
   const isVideoMoment = isVideo(fullUrl)
-  const eager = index < 4
-
-  const { ref, loaded, setLoaded, imgSrc } = useLazyImage(thumbUrl, eager)
+  const featured = getCardType(globalIndex) === 'featured'
+  const eager = globalIndex < 6
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{
-        delay: index < 4 ? 0 : Math.min(index * 0.03, 0.24),
-        type: 'spring',
-        stiffness: 300,
-        damping: 25,
-      }}
-      className="moment-card break-inside-avoid mb-3 sm:mb-4 cursor-pointer group"
-      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 300px' } as React.CSSProperties}
+    <div
+      className={`relative overflow-hidden bg-gray-100 cursor-pointer group ${
+        featured ? 'col-span-2 row-span-2' : 'aspect-square'
+      }`}
       onClick={onClick}
     >
+      {/* Shimmer — visible until image loads */}
+      {!loaded && (
+        <div
+          className="absolute inset-0 bg-gray-100 animate-pulse"
+          aria-hidden="true"
+        />
+      )}
+
+      <img
+        src={thumbUrl}
+        alt={moment.description || 'Momento del evento'}
+        loading={eager ? 'eager' : 'lazy'}
+        {...(eager ? { fetchPriority: 'high' as const } : {})}
+        decoding="async"
+        draggable={false}
+        className={`w-full h-full object-cover transition-[opacity,transform] duration-300 group-hover:scale-105 ${
+          loaded ? 'opacity-100' : 'opacity-0'
+        } ${featured ? 'absolute inset-0' : ''}`}
+        onLoad={() => setLoaded(true)}
+      />
+
+      {/* Desktop hover overlay */}
       <div
-        ref={ref}
-        className="relative rounded-2xl overflow-hidden bg-gray-100"
-        style={!loaded ? { minHeight: '160px' } : undefined}
-      >
-        {/* Shimmer placeholder — minHeight is on the parent so the absolute div is visible */}
-        {!loaded && (
-          <div
-            className="absolute inset-0 bg-gradient-to-r from-gray-100 via-gray-50 to-gray-100 bg-[length:200%_100%] animate-shimmer"
-            aria-hidden="true"
-          />
-        )}
+        className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
+        aria-hidden="true"
+      />
 
-        {/* Actual image / video thumbnail */}
-        {imgSrc && (
-          <img
-            src={imgSrc}
-            alt={moment.description || 'Momento del evento'}
-            loading={eager ? 'eager' : 'lazy'}
-            {...(eager ? { fetchPriority: 'high' as const } : {})}
-            decoding="async"
-            draggable={false}
-            className={`w-full h-auto block transition-[opacity,transform] duration-500 group-hover:scale-105 ${
-              loaded ? 'opacity-100' : 'opacity-0'
-            }`}
-            onLoad={() => setLoaded(true)}
-          />
-        )}
-
-        {/* Video play overlay */}
-        {isVideoMoment && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
-              <PlayIcon />
-            </div>
+      {/* Video play badge */}
+      {isVideoMoment && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+            <PlayIcon />
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Description overlay on hover */}
-        {moment.description && (
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
-            <p className="text-white text-xs line-clamp-2">{moment.description}</p>
-          </div>
-        )}
-      </div>
-    </motion.div>
+      {/* Description — slides up on hover */}
+      {moment.description && (
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-2 translate-y-full group-hover:translate-y-0 transition-transform duration-200 pointer-events-none">
+          <p className="text-white text-xs line-clamp-2">{moment.description}</p>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -754,39 +718,28 @@ function PlayIcon() {
 }
 
 // ── ProcessingCard ────────────────────────────────────────────────────────────
-// Shown while Lambda is still optimizing the just-uploaded moment.
+// Grid-compatible: uses aspect-square so it integrates seamlessly with PhotoCard cells.
 
-function ProcessingCard({ index }: { index: number }) {
+function ProcessingCard() {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{
-        delay: index * 0.06,
-        type: 'spring',
-        stiffness: 300,
-        damping: 25,
-      }}
-      className="break-inside-avoid mb-3 sm:mb-4"
-    >
-      <div className="relative rounded-2xl overflow-hidden bg-gray-100" style={{ minHeight: '160px' }}>
-        {/* Shimmer base */}
-        <div className="absolute inset-0 bg-gradient-to-r from-gray-100 via-gray-50 to-gray-100 bg-[length:200%_100%] animate-shimmer" aria-hidden="true" />
-        {/* Centered spinner + label */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}
-            className="w-6 h-6 border-2 border-gray-300 border-t-gray-500 rounded-full"
-            style={{ willChange: 'transform' }}
-            aria-hidden="true"
-          />
-          <span className="text-[11px] font-medium text-gray-400 tracking-wide select-none">
-            Optimizando…
-          </span>
-        </div>
+    <div className="aspect-square relative overflow-hidden bg-gray-100">
+      <div
+        className="absolute inset-0 bg-gradient-to-r from-gray-100 via-gray-50 to-gray-100 bg-[length:200%_100%] animate-shimmer"
+        aria-hidden="true"
+      />
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}
+          className="w-5 h-5 border-2 border-gray-300 border-t-gray-500 rounded-full"
+          style={{ willChange: 'transform' }}
+          aria-hidden="true"
+        />
+        <span className="text-[10px] font-medium text-gray-400 tracking-wide select-none">
+          Optimizando…
+        </span>
       </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -1014,6 +967,53 @@ function MemoryCard({
   )
 }
 
+// ── LightboxVideo — autoplay with iOS fallback ──────────────────────────────
+// iOS Safari silently rejects autoPlay unless triggered by a user gesture.
+// If play() returns a rejected promise, we show a tap-to-play overlay instead.
+
+const LightboxVideo = memo(function LightboxVideo({ src, className }: { src: string; className: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [needsTap, setNeedsTap] = useState(false)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    setNeedsTap(false)
+    const p = video.play()
+    if (p !== undefined) {
+      p.catch(() => setNeedsTap(true))
+    }
+  }, [src])
+
+  return (
+    <div className="relative">
+      <video
+        ref={videoRef}
+        src={src}
+        controls
+        playsInline
+        controlsList="nodownload"
+        disablePictureInPicture
+        onContextMenu={(e) => e.preventDefault()}
+        className={className}
+      />
+      {needsTap && (
+        <button
+          onClick={() => { videoRef.current?.play(); setNeedsTap(false) }}
+          className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-2xl"
+          aria-label="Reproducir video"
+        >
+          <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center">
+            <svg className="w-7 h-7 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+            </svg>
+          </div>
+        </button>
+      )}
+    </div>
+  )
+})
+
 // ── GalleryLightbox ─────────────────────────────────────────────────────────
 
 function GalleryLightbox({ moments, index, EVENTS_URL, theme, onClose, onNext, onPrev }: {
@@ -1101,16 +1101,7 @@ function GalleryLightbox({ moments, index, EVENTS_URL, theme, onClose, onNext, o
         onClick={(e) => e.stopPropagation()}
       >
         {video ? (
-          <video
-            src={url}
-            controls
-            autoPlay
-            playsInline
-            controlsList="nodownload"
-            disablePictureInPicture
-            onContextMenu={(e) => e.preventDefault()}
-            className="max-h-[80vh] max-w-full rounded-2xl"
-          />
+          <LightboxVideo src={url} className="max-h-[80vh] max-w-full rounded-2xl" />
         ) : (
           <img
             src={url}
