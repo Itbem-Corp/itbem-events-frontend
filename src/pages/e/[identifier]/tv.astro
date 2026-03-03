@@ -5,7 +5,8 @@ import TemplateLayout from '../../../layouts/template.astro'
 import TvSlideshow from '../../../components/moments/TvSlideshow'
 import { fetchEventOgData } from '../../../lib/og'
 
-const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string ?? 'http://localhost:8080/'
+const rawUrl = import.meta.env.PUBLIC_EVENTS_URL as string ?? 'http://localhost:8080/'
+const EVENTS_URL = rawUrl.endsWith('/') ? rawUrl : rawUrl + '/'
 const { identifier } = Astro.params
 
 let ogTitle = 'Slideshow del evento'
