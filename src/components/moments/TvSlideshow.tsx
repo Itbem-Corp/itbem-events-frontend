@@ -151,17 +151,21 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
     return () => document.removeEventListener("fullscreenchange", handler)
   }, [])
 
+  // ── Pause toggle ──
+  const togglePause = useCallback(() => setPaused((p) => !p), [])
+
   // ── Keyboard ──
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); advance() }
+      if (e.key === " ") { e.preventDefault(); togglePause() }
+      if (e.key === "ArrowRight") { e.preventDefault(); advance() }
       if (e.key === "ArrowLeft") { e.preventDefault(); goBack() }
       if (e.key === "f" || e.key === "F") toggleFullscreen()
       if (e.key === "Escape") setPaused(false)
     }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
-  }, [advance, goBack, toggleFullscreen])
+  }, [advance, goBack, toggleFullscreen, togglePause])
 
   // ── QR auto-hide after 10s idle ──
   const resetQrTimer = useCallback(() => {
@@ -330,6 +334,25 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
               {newCount} nuevo{newCount !== 1 ? "s" : ""}
             </motion.div>
           )}
+          {/* Play / Pause toggle */}
+          <button
+            onClick={(e) => { e.stopPropagation(); togglePause() }}
+            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-colors backdrop-blur-sm border border-white/10"
+            title={paused ? "Reanudar (Space)" : "Pausar (Space)"}
+            aria-label={paused ? "Reanudar" : "Pausar"}
+          >
+            {paused ? (
+              /* Play icon */
+              <svg className="size-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5.14v14l11-7-11-7z" />
+              </svg>
+            ) : (
+              /* Pause icon */
+              <svg className="size-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+              </svg>
+            )}
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); toggleFullscreen() }}
             className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-colors backdrop-blur-sm border border-white/10"
@@ -363,8 +386,8 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
             transition={{ duration: 0.4 }}
             className="absolute bottom-5 left-5 flex items-end gap-3 pointer-events-none"
           >
-            <div className="bg-white/90 backdrop-blur-sm p-2 rounded-xl shadow-2xl shadow-black/40">
-              <QRCodeSVG value={uploadUrl} size={72} />
+            <div className="bg-white/90 backdrop-blur-sm p-2.5 rounded-xl shadow-2xl shadow-black/40">
+              <QRCodeSVG value={uploadUrl} size={104} />
             </div>
             <p className="text-white/50 text-xs mb-1 leading-tight max-w-[120px]">
               Comparte tus momentos
