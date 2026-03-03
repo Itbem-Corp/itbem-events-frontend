@@ -143,7 +143,6 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
   const [eventDate, setEventDate] = useState("")
   const [error, setError] = useState("")
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-  const [videoLightboxIndex, setVideoLightboxIndex] = useState<number | null>(null)
   const [phrases, setPhrases] = useState<string[]>([])
   // Processing-state cards: moments that were just uploaded and are still being
   // optimized by Lambda (not yet returned by the wall API).
@@ -537,19 +536,6 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
             onClose={() => setLightboxIndex(null)}
             onNext={() => setLightboxIndex(i => i !== null ? Math.min(i + 1, photoMoments.length - 1) : null)}
             onPrev={() => setLightboxIndex(i => i !== null ? Math.max(i - 1, 0) : null)}
-          />
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {videoLightboxIndex !== null && (
-          <GalleryLightbox
-            moments={videoMoments}
-            index={videoLightboxIndex}
-            EVENTS_URL={EVENTS_URL}
-            theme={theme}
-            onClose={() => setVideoLightboxIndex(null)}
-            onNext={() => setVideoLightboxIndex(i => i !== null ? Math.min(i + 1, videoMoments.length - 1) : null)}
-            onPrev={() => setVideoLightboxIndex(i => i !== null ? Math.max(i - 1, 0) : null)}
           />
         )}
       </AnimatePresence>
