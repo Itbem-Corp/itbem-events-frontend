@@ -142,6 +142,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
   const [eventDate, setEventDate] = useState("")
   const [error, setError] = useState("")
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [lightboxOrigin, setLightboxOrigin] = useState<{ x: number; y: number } | null>(null)
   const [phrases, setPhrases] = useState<string[]>([])
   // Processing-state cards: moments that were just uploaded and are still being
   // optimized by Lambda (not yet returned by the wall API).
@@ -471,7 +472,16 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
                         moment={moment}
                         globalIndex={globalIndex}
                         EVENTS_URL={EVENTS_URL}
-                        onClick={() => setLightboxIndex(globalIndex)}
+                        onClick={(e) => {
+                          const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
+                          const cx = rect.left + rect.width / 2
+                          const cy = rect.top + rect.height / 2
+                          setLightboxOrigin({
+                            x: cx < window.innerWidth / 2 ? 0 : 100,
+                            y: cy < window.innerHeight / 2 ? 0 : 100,
+                          })
+                          setLightboxIndex(globalIndex)
+                        }}
                       />
                     )
                   })}
@@ -541,7 +551,8 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
             index={lightboxIndex}
             EVENTS_URL={EVENTS_URL}
             theme={theme}
-            onClose={() => setLightboxIndex(null)}
+            origin={lightboxOrigin}
+            onClose={() => { setLightboxIndex(null); setLightboxOrigin(null) }}
             onNext={() => setLightboxIndex(i => i !== null ? Math.min(i + 1, photoMoments.length - 1) : null)}
             onPrev={() => setLightboxIndex(i => i !== null ? Math.max(i - 1, 0) : null)}
           />
@@ -574,7 +585,19 @@ function HeroHeader({
     : ''
 
   return (
-    <div className="relative text-center py-10 sm:py-14 px-6 overflow-hidden">
+    <div className={`relative text-center py-10 sm:py-14 px-6 overflow-hidden ${theme.heroLightBg}`}>
+      {/* Aurora blob 1 — top-left */}
+      <div
+        className="animate-blob-1 absolute -top-16 -left-16 w-72 h-72 rounded-full opacity-40 pointer-events-none"
+        style={{ background: theme.blobColor1, filter: 'blur(80px)' }}
+        aria-hidden="true"
+      />
+      {/* Aurora blob 2 — bottom-right */}
+      <div
+        className="animate-blob-2 absolute -bottom-16 -right-16 w-80 h-80 rounded-full opacity-35 pointer-events-none"
+        style={{ background: theme.blobColor2, filter: 'blur(80px)' }}
+        aria-hidden="true"
+      />
       {/* Subtle theme decoration — left */}
       <motion.div
         initial={{ opacity: 0, x: -20 }}
@@ -648,6 +671,11 @@ function HeroHeader({
           </div>
         </motion.div>
       )}
+      {/* Fade hero gradient into white grid */}
+      <div
+        className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-b from-transparent to-white pointer-events-none"
+        aria-hidden="true"
+      />
     </div>
   )
 }
@@ -665,7 +693,7 @@ function PhotoCard({
   moment: Moment
   globalIndex: number
   EVENTS_URL: string
-  onClick: () => void
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void
 }) {
   const [loaded, setLoaded] = useState(false)
   const thumbUrl = resolveMediaUrl(moment, EVENTS_URL)
@@ -1038,8 +1066,9 @@ const LightboxVideo = memo(function LightboxVideo({ src, className }: { src: str
 
 // ── GalleryLightbox ─────────────────────────────────────────────────────────
 
-function GalleryLightbox({ moments, index, EVENTS_URL, theme, onClose, onNext, onPrev }: {
+function GalleryLightbox({ moments, index, EVENTS_URL, theme, origin, onClose, onNext, onPrev }: {
   moments: Moment[]; index: number; EVENTS_URL: string; theme: MomentsTheme
+  origin: { x: number; y: number } | null
   onClose: () => void; onNext: () => void; onPrev: () => void
 }) {
   const touchStart = useRef<{ x: number; y: number } | null>(null)
@@ -1115,10 +1144,11 @@ function GalleryLightbox({ moments, index, EVENTS_URL, theme, onClose, onNext, o
 
       <motion.div
         key={moment.id}
-        initial={{ scale: 0.9, opacity: 0 }}
+        initial={{ scale: 0.6, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+        exit={{ scale: 0.6, opacity: 0 }}
+        transition={{ type: "spring", damping: 28, stiffness: 350 }}
+        style={{ transformOrigin: `${origin?.x ?? 50}% ${origin?.y ?? 50}%` }}
         className="max-w-full max-h-[80vh] px-4"
         onClick={(e) => e.stopPropagation()}
       >

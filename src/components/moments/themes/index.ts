@@ -2,6 +2,12 @@ export interface MomentsTheme {
   headingFont: string
   bodyFont: string
   heroBg: string
+  /** Always-light hero gradient — safe for dark text regardless of event type. */
+  heroLightBg: string
+  /** CSS color value for aurora blob 1 (used with filter:blur + low opacity). */
+  blobColor1: string
+  /** CSS color value for aurora blob 2. */
+  blobColor2: string
   accent: string
   accentSoft: string
   decorationType: 'botanical' | 'confetti' | 'geometric' | 'sparkles' | 'minimal'
@@ -19,6 +25,9 @@ const WEDDING: MomentsTheme = {
   headingFont: 'font-bigilla',
   bodyFont: 'font-quicksand',
   heroBg: 'bg-gradient-to-br from-amber-50 via-yellow-50/80 to-orange-50/60',
+  heroLightBg: 'bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50',
+  blobColor1: '#fbbf24',
+  blobColor2: '#fb923c',
   accent: 'text-amber-700',
   accentSoft: 'bg-amber-100/80',
   decorationType: 'botanical',
@@ -36,6 +45,9 @@ const GRADUATION: MomentsTheme = {
   headingFont: 'font-quicksand font-bold',
   bodyFont: 'font-quicksand',
   heroBg: 'bg-gradient-to-br from-blue-950 via-indigo-950 to-slate-900',
+  heroLightBg: 'bg-gradient-to-br from-blue-50 via-indigo-50 to-slate-100',
+  blobColor1: '#818cf8',
+  blobColor2: '#38bdf8',
   accent: 'text-blue-400',
   accentSoft: 'bg-blue-500/10',
   decorationType: 'confetti',
@@ -53,6 +65,9 @@ const BIRTHDAY: MomentsTheme = {
   headingFont: 'font-quicksand font-bold',
   bodyFont: 'font-quicksand',
   heroBg: 'bg-gradient-to-br from-fuchsia-50 via-pink-50 to-orange-50',
+  heroLightBg: 'bg-gradient-to-br from-fuchsia-50 via-pink-50 to-orange-50',
+  blobColor1: '#e879f9',
+  blobColor2: '#fb923c',
   accent: 'text-fuchsia-600',
   accentSoft: 'bg-fuchsia-100/80',
   decorationType: 'confetti',
@@ -70,6 +85,9 @@ const QUINCEANERA: MomentsTheme = {
   headingFont: 'font-astralaga',
   bodyFont: 'font-quicksand',
   heroBg: 'bg-gradient-to-br from-pink-50 via-rose-50/80 to-amber-50/60',
+  heroLightBg: 'bg-gradient-to-br from-pink-50 via-rose-50 to-amber-50',
+  blobColor1: '#fb7185',
+  blobColor2: '#f472b6',
   accent: 'text-rose-600',
   accentSoft: 'bg-rose-100/80',
   decorationType: 'sparkles',
@@ -87,6 +105,9 @@ const CORPORATE: MomentsTheme = {
   headingFont: 'font-quicksand font-semibold',
   bodyFont: 'font-quicksand',
   heroBg: 'bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-100',
+  heroLightBg: 'bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-100',
+  blobColor1: '#94a3b8',
+  blobColor2: '#e2e8f0',
   accent: 'text-slate-700',
   accentSoft: 'bg-slate-100',
   decorationType: 'geometric',
@@ -104,6 +125,9 @@ const DEFAULT_THEME: MomentsTheme = {
   headingFont: 'font-quicksand font-bold',
   bodyFont: 'font-quicksand',
   heroBg: 'bg-gradient-to-br from-violet-50 via-indigo-50/80 to-sky-50/60',
+  heroLightBg: 'bg-gradient-to-br from-violet-50 via-indigo-50 to-sky-50',
+  blobColor1: '#a78bfa',
+  blobColor2: '#67e8f9',
   accent: 'text-indigo-600',
   accentSoft: 'bg-indigo-100/80',
   decorationType: 'minimal',

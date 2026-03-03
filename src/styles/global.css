@@ -109,6 +109,31 @@
   50% { border-color: transparent }
 }
 
+/* ── Aurora blob animations ─────────────────────────────────────────────────── */
+/* Used by HeroHeader in MomentsGallery. Pure CSS, GPU compositor only.         */
+/* Blobs animate only transform + opacity → zero layout thrashing.              */
+@keyframes blob-float-1 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  33%      { transform: translate(24px, -32px) scale(1.06); }
+  66%      { transform: translate(-18px, 22px) scale(0.94); }
+}
+
+@keyframes blob-float-2 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  33%      { transform: translate(-28px, 18px) scale(1.08); }
+  66%      { transform: translate(20px, -24px) scale(0.96); }
+}
+
+.animate-blob-1 {
+  animation: blob-float-1 20s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-blob-2 {
+  animation: blob-float-2 25s ease-in-out infinite;
+  will-change: transform;
+}
+
 /* @font-face declarations live in fonts.css (imported by template.astro) */
 
 /* ── Content protection ────────────────────────────────────────────────────── */
