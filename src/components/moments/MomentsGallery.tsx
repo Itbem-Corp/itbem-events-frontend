@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback, useRef, memo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { getTheme, type MomentsTheme } from "./themes"
-import { useVideoThumbnail } from '../../hooks/useVideoThumbnail'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -808,89 +807,98 @@ function ProcessingVideoCard({ index }: { index: number }) {
 }
 
 // ── VideoCard ─────────────────────────────────────────────────────────────────
+// Pinterest-style inline video card.
+// • Autoplays muted when ≥30% visible in viewport (IntersectionObserver).
+// • Pauses automatically when scrolled out of view.
+// • Click toggles mute so the user can hear audio without leaving the grid.
 
 function VideoCard({
   moment,
-  index,
   EVENTS_URL,
-  onOpen,
 }: {
   moment: Moment
-  index: number
   EVENTS_URL: string
-  onOpen: (index: number) => void
 }) {
-  // Resolve server-provided thumbnail to an absolute URL
-  const thumbUrl = moment.thumbnail_url
-    ? (moment.thumbnail_url.startsWith('http')
-        ? moment.thumbnail_url
-        : `${EVENTS_URL}${moment.thumbnail_url.startsWith('/') ? moment.thumbnail_url.slice(1) : moment.thumbnail_url}`)
-    : null
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [muted, setMuted] = useState(true)
 
-  // Resolve the video content URL for canvas extraction (only used when thumbUrl is absent)
-  const videoUrl = !thumbUrl
-    ? (moment.content_url.startsWith('http')
-        ? moment.content_url
-        : `${EVENTS_URL}${moment.content_url.startsWith('/') ? moment.content_url.slice(1) : moment.content_url}`)
-    : null
+  // Start playback when ≥30% of the card enters the viewport; pause on exit.
+  useEffect(() => {
+    const video = videoRef.current
+    const container = containerRef.current
+    if (!video || !container) return
 
-  // Extract first frame via canvas — only runs when server thumbnail is absent
-  const extractedThumb = useVideoThumbnail(videoUrl)
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          video.play().catch(() => {}) // silently handles autoplay-policy blocks
+        } else {
+          video.pause()
+        }
+      },
+      { threshold: 0.3 }
+    )
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [])
 
-  // Priority: server thumbnail → extracted frame → null (grey fallback)
-  const displayThumb = thumbUrl ?? extractedThumb
+  const url = resolveFullUrl(moment, EVENTS_URL)
+
+  const handleClick = () => {
+    const video = videoRef.current
+    if (!video) return
+    const next = !muted
+    video.muted = next
+    setMuted(next)
+    // If autoplay was blocked by the browser, start on first tap
+    if (video.paused) {
+      video.play().catch(() => {})
+    }
+  }
 
   return (
-    <motion.button
-      key={moment.id}
-      type="button"
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.07, type: 'spring', stiffness: 280, damping: 24 }}
-      onClick={() => onOpen(index)}
-      className="group relative w-full overflow-hidden rounded-2xl bg-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
-      style={{ aspectRatio: '16/9' }}
+    <div
+      ref={containerRef}
+      className="break-inside-avoid mb-3 relative rounded-xl overflow-hidden bg-zinc-900 cursor-pointer group"
+      onClick={handleClick}
     >
-      {/* Thumbnail or dark placeholder */}
-      {displayThumb ? (
-        <img
-          src={displayThumb}
-          alt={moment.description || 'Video del evento'}
-          className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-          loading="lazy"
-          decoding="async"
-          draggable={false}
-        />
-      ) : (
-        <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
-          <svg className="w-10 h-10 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
-          </svg>
-        </div>
-      )}
+      <video
+        ref={videoRef}
+        src={url}
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        controlsList="nodownload"
+        disablePictureInPicture
+        onContextMenu={(e) => e.preventDefault()}
+        className="w-full h-auto block"
+        style={{ minHeight: '140px' }}
+      />
 
-      {/* Dark scrim for play button visibility */}
-      <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors duration-300" />
-
-      {/* Play button */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <motion.div
-          whileHover={{ scale: 1.1 }}
-          className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center shadow-xl"
-        >
-          <svg className="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+      {/* Mute/unmute indicator — always faintly visible, full on hover */}
+      <div className="absolute bottom-2 right-2 p-1.5 rounded-full bg-black/50 backdrop-blur-sm opacity-60 group-hover:opacity-100 transition-opacity duration-200">
+        {muted ? (
+          // Speaker crossed (muted) — tap to hear
+          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM17.78 9.22a.75.75 0 10-1.06 1.06L18.44 12l-1.72 1.72a.75.75 0 001.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 101.06-1.06L20.56 12l1.72-1.72a.75.75 0 00-1.06-1.06l-1.72 1.72-1.72-1.72z" />
           </svg>
-        </motion.div>
+        ) : (
+          // Speaker with waves (unmuted) — tap to mute
+          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zm4.28 1.16a.75.75 0 011.06 0c3.808 3.807 3.808 9.98 0 13.788a.75.75 0 11-1.06-1.06 8.25 8.25 0 000-11.668.75.75 0 010-1.06zm-1.72 3.53a.75.75 0 011.06 0 5.25 5.25 0 010 7.424.75.75 0 11-1.06-1.06 3.75 3.75 0 000-5.304.75.75 0 010-1.06z" />
+          </svg>
+        )}
       </div>
 
       {/* Description overlay */}
       {moment.description && (
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-4 py-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
-          <p className="text-white text-xs line-clamp-1">{moment.description}</p>
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 py-3">
+          <p className="text-white text-xs line-clamp-2">{moment.description}</p>
         </div>
       )}
-    </motion.button>
+    </div>
   )
 }
 
@@ -932,9 +940,7 @@ function VideoHighlights({
           >
             <VideoCard
               moment={moment}
-              index={i}
               EVENTS_URL={EVENTS_URL}
-              onOpen={onOpen}
             />
           </div>
         ))}
