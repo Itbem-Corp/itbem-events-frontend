@@ -119,3 +119,14 @@ img, video {
   user-select: none;
   -webkit-user-drag: none;     /* Chrome/Safari: blocks drag-to-desktop        */
 }
+
+/* ── Scrollbar hide — used by VideoHighlights horizontal rail ──────────────── */
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
