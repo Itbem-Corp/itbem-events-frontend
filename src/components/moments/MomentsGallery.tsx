@@ -143,6 +143,8 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
   const [error, setError] = useState("")
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [lightboxOrigin, setLightboxOrigin] = useState<{ x: number; y: number } | null>(null)
+  const [videoLightboxIndex, setVideoLightboxIndex] = useState<number | null>(null)
+  const [videoLightboxOrigin, setVideoLightboxOrigin] = useState<{ x: number; y: number } | null>(null)
   const [phrases, setPhrases] = useState<string[]>([])
   // Processing-state cards: moments that were just uploaded and are still being
   // optimized by Lambda (not yet returned by the wall API).
@@ -442,6 +444,16 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
           processingVideoCount={pendingVideoCount}
           EVENTS_URL={EVENTS_URL}
           theme={theme}
+          onVideoClick={(index, e) => {
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+            const cx = rect.left + rect.width / 2
+            const cy = rect.top + rect.height / 2
+            setVideoLightboxOrigin({
+              x: cx < window.innerWidth / 2 ? 0 : 100,
+              y: cy < window.innerHeight / 2 ? 0 : 100,
+            })
+            setVideoLightboxIndex(index)
+          }}
         />
       </div>
 
@@ -555,6 +567,20 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
             onClose={() => { setLightboxIndex(null); setLightboxOrigin(null) }}
             onNext={() => setLightboxIndex(i => i !== null ? Math.min(i + 1, photoMoments.length - 1) : null)}
             onPrev={() => setLightboxIndex(i => i !== null ? Math.max(i - 1, 0) : null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {videoLightboxIndex !== null && (
+          <VideoLightbox
+            moments={videoMoments}
+            index={videoLightboxIndex}
+            EVENTS_URL={EVENTS_URL}
+            origin={videoLightboxOrigin}
+            onClose={() => { setVideoLightboxIndex(null); setVideoLightboxOrigin(null) }}
+            onNext={() => setVideoLightboxIndex(i => i !== null ? Math.min(i + 1, videoMoments.length - 1) : null)}
+            onPrev={() => setVideoLightboxIndex(i => i !== null ? Math.max(i - 1, 0) : null)}
           />
         )}
       </AnimatePresence>
@@ -836,13 +862,14 @@ function ProcessingVideoCard({ index }: { index: number }) {
 function VideoCard({
   moment,
   EVENTS_URL,
+  onExpand,
 }: {
   moment: Moment
   EVENTS_URL: string
+  onExpand: (e: React.MouseEvent) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [muted, setMuted] = useState(true)
 
   // Start playback when ≥30% of the card enters the viewport; pause on exit.
   useEffect(() => {
@@ -866,23 +893,11 @@ function VideoCard({
 
   const url = resolveFullUrl(moment, EVENTS_URL)
 
-  const handleClick = () => {
-    const video = videoRef.current
-    if (!video) return
-    const next = !muted
-    video.muted = next
-    setMuted(next)
-    // If autoplay was blocked by the browser, start on first tap
-    if (video.paused) {
-      video.play().catch(() => {})
-    }
-  }
-
   return (
     <div
       ref={containerRef}
       className="break-inside-avoid mb-3 relative rounded-xl overflow-hidden bg-zinc-900 cursor-pointer group"
-      onClick={handleClick}
+      onClick={onExpand}
     >
       <video
         ref={videoRef}
@@ -898,19 +913,17 @@ function VideoCard({
         style={{ minHeight: '140px' }}
       />
 
-      {/* Mute/unmute indicator — always faintly visible, full on hover */}
-      <div className="absolute bottom-2 right-2 p-1.5 rounded-full bg-black/50 backdrop-blur-sm opacity-60 group-hover:opacity-100 transition-opacity duration-200">
-        {muted ? (
-          // Speaker crossed (muted) — tap to hear
-          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM17.78 9.22a.75.75 0 10-1.06 1.06L18.44 12l-1.72 1.72a.75.75 0 001.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 101.06-1.06L20.56 12l1.72-1.72a.75.75 0 00-1.06-1.06l-1.72 1.72-1.72-1.72z" />
+      {/* Hover overlay + expand hint */}
+      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-200 pointer-events-none" aria-hidden="true" />
+
+      {/* Expand icon — centered, visible on hover */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-11 h-11 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 scale-90 group-hover:scale-100 transition-transform">
+          {/* Fullscreen / expand arrows */}
+          <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
           </svg>
-        ) : (
-          // Speaker with waves (unmuted) — tap to mute
-          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zm4.28 1.16a.75.75 0 011.06 0c3.808 3.807 3.808 9.98 0 13.788a.75.75 0 11-1.06-1.06 8.25 8.25 0 000-11.668.75.75 0 010-1.06zm-1.72 3.53a.75.75 0 011.06 0 5.25 5.25 0 010 7.424.75.75 0 11-1.06-1.06 3.75 3.75 0 000-5.304.75.75 0 010-1.06z" />
-          </svg>
-        )}
+        </div>
       </div>
 
       {/* Description overlay */}
@@ -923,20 +936,147 @@ function VideoCard({
   )
 }
 
+// ── VideoLightbox ────────────────────────────────────────────────────────────
+// Full-screen video lightbox — mirrors GalleryLightbox but for video moments.
+// Prev/next navigation, keyboard (←→ Esc), swipe, expand-from-card animation.
+
+function VideoLightbox({ moments, index, EVENTS_URL, origin, onClose, onNext, onPrev }: {
+  moments: Moment[]; index: number; EVENTS_URL: string
+  origin: { x: number; y: number } | null
+  onClose: () => void; onNext: () => void; onPrev: () => void
+}) {
+  const touchStart = useRef<{ x: number; y: number } | null>(null)
+  const moment = moments[index]
+  const url = resolveFullUrl(moment, EVENTS_URL)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      if (e.key === 'ArrowRight') onNext()
+      if (e.key === 'ArrowLeft') onPrev()
+    }
+    window.addEventListener('keydown', handler)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', handler)
+      document.body.style.overflow = ''
+    }
+  }, [onClose, onNext, onPrev])
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  }
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStart.current) return
+    const dx = e.changedTouches[0].clientX - touchStart.current.x
+    const dy = e.changedTouches[0].clientY - touchStart.current.y
+    touchStart.current = null
+    if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return
+    if (dx < 0) onNext()
+    else onPrev()
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] bg-black/95 backdrop-blur-sm flex flex-col items-center justify-center"
+      style={{ touchAction: 'none' }}
+      onClick={onClose}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Close button */}
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+        aria-label="Cerrar"
+      >
+        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      {/* Prev */}
+      {index > 0 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onPrev() }}
+          className="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+          aria-label="Anterior"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+      )}
+
+      {/* Next */}
+      {index < moments.length - 1 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onNext() }}
+          className="hidden sm:flex absolute right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+          aria-label="Siguiente"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </button>
+      )}
+
+      {/* Video — expands from card position */}
+      <motion.div
+        key={moment.id}
+        initial={{ scale: 0.6, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.6, opacity: 0 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 350 }}
+        style={{ transformOrigin: `${origin?.x ?? 50}% ${origin?.y ?? 50}%` }}
+        className="w-full max-w-2xl px-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <LightboxVideo src={url} className="w-full max-h-[80vh] rounded-2xl" />
+      </motion.div>
+
+      {/* Description */}
+      {moment.description && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 max-w-md px-6"
+        >
+          <p className="text-white/90 text-sm text-center bg-black/30 backdrop-blur-md rounded-2xl px-5 py-3 leading-relaxed">
+            "{moment.description}"
+          </p>
+        </motion.div>
+      )}
+
+      {/* Counter */}
+      {moments.length > 1 && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/50 text-xs font-medium">
+          {index + 1} / {moments.length}
+        </div>
+      )}
+    </motion.div>
+  )
+}
+
 // ── VideoHighlights ──────────────────────────────────────────────────────────
 // Pinterest-style masonry grid of inline-playing videos.
-// onOpen removed — videos are watched directly in the grid.
 
 function VideoHighlights({
   videoMoments,
   processingVideoCount,
   EVENTS_URL,
   theme,
+  onVideoClick,
 }: {
   videoMoments: Moment[]
   processingVideoCount: number
   EVENTS_URL: string
   theme: ReturnType<typeof getTheme>
+  onVideoClick: (index: number, e: React.MouseEvent) => void
 }) {
   if (videoMoments.length === 0 && processingVideoCount === 0) return null
 
@@ -953,11 +1093,12 @@ function VideoHighlights({
 
       {/* Pinterest masonry — columns let each video keep its natural aspect ratio */}
       <div className="columns-2 sm:columns-3 gap-3">
-        {videoMoments.map((moment) => (
+        {videoMoments.map((moment, i) => (
           <VideoCard
             key={moment.id}
             moment={moment}
             EVENTS_URL={EVENTS_URL}
+            onExpand={(e) => onVideoClick(i, e)}
           />
         ))}
         {Array.from({ length: processingVideoCount }).map((_, i) => (
