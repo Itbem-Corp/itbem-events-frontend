@@ -21,6 +21,7 @@ interface MomentsResponse {
   page: number
   limit: number
   has_more: boolean
+  next_cursor?: string
   published: boolean | number | undefined
   uploads_remaining: number
   uploads_used: number
@@ -56,7 +57,8 @@ function resolveFullUrl(m: Moment, EVENTS_URL: string): string {
   return `${EVENTS_URL}${url.startsWith("/") ? url.slice(1) : url}`
 }
 
-const PAGE_SIZE = 100
+const PAGE_SIZE = 25
+const MAX_TOTAL = 500
 const PROCESSING_POLL_MS = 12_000
 
 // ── Pending-moments helpers (sessionStorage) ─────────────────────────────────
@@ -132,8 +134,8 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
   const isAdminPreview = previewToken.length > 0
   const [identifier, setIdentifier] = useState("")
   const [moments, setMoments] = useState<Moment[]>([])
-  const [hasMore, setHasMore] = useState(false)
-  const [page, setPage] = useState(1)
+  const [reachedEnd, setReachedEnd] = useState(false)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [published, setPublished] = useState<boolean | null>(null)
@@ -187,11 +189,14 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
     setIdentifier(getIdentifier())
   }, [])
 
-  const fetchMoments = useCallback(async (id: string, pageNum: number, append: boolean) => {
+  const fetchMoments = useCallback(async (id: string, cursor: string | null, append: boolean) => {
     try {
       const tokenParam = previewToken ? `&preview_token=${encodeURIComponent(previewToken)}` : ''
+      // cursor=null → first page (?cursor=&limit=25 activates cursor mode on backend)
+      // cursor=string → subsequent pages
+      const cursorParam = cursor === null ? '' : cursor
       const res = await fetch(
-        `${EVENTS_URL}api/events/${encodeURIComponent(id)}/moments?page=${pageNum}&limit=${PAGE_SIZE}${tokenParam}`
+        `${EVENTS_URL}api/events/${encodeURIComponent(id)}/moments?cursor=${encodeURIComponent(cursorParam)}&limit=${PAGE_SIZE}${tokenParam}`
       )
       if (!res.ok) {
         if (res.status === 404) { setError("Evento no encontrado"); return }
@@ -200,15 +205,28 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
       }
       const json = await res.json()
       const data: MomentsResponse = json.data ?? json
+      const newItems: Moment[] = data.items ?? []
 
-      setMoments(prev => append ? [...prev, ...(data.items ?? [])] : (data.items ?? []))
-      setHasMore(data.has_more ?? false)
+      if (append) {
+        setMoments(prev => [...prev, ...newItems].slice(0, MAX_TOTAL))
+      } else {
+        setMoments(newItems.slice(0, MAX_TOTAL))
+      }
+
       totalRef.current = data.total ?? 0
       setPublished(data.published === true)
-
       if (data.event_name) setEventName(data.event_name)
       if (data.event_type) setEventType(data.event_type)
       if (data.event_date) setEventDate(data.event_date)
+
+      // Update cursor state
+      if (!data.next_cursor) {
+        setReachedEnd(true)
+        setNextCursor(null)
+      } else {
+        setReachedEnd(false)
+        setNextCursor(data.next_cursor)
+      }
     } catch {
       setError("No se pudieron cargar los momentos")
     }
@@ -232,7 +250,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
     if (!identifier) return
     setLoading(true)
     Promise.all([
-      fetchMoments(identifier, 1, false),
+      fetchMoments(identifier, null, false),
       fetchPageSpec(identifier),
     ]).finally(() => setLoading(false))
   }, [identifier, fetchMoments, fetchPageSpec])
@@ -295,7 +313,6 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
             const newItems = freshItems.filter(fi => !existingIds.has(fi.id))
             return newItems.length > 0 ? [...newItems, ...existing] : existing
           })
-          setHasMore(data.has_more ?? false)
           const gained = freshTotal - prev
           prevMomentCountRef.current = freshTotal
           totalRef.current = freshTotal
@@ -314,13 +331,11 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
   }, [identifier, pendingMoments.length, EVENTS_URL, previewToken])
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore || !identifier) return
-    const nextPage = page + 1
+    if (loadingMore || reachedEnd || !identifier || nextCursor === null) return
     setLoadingMore(true)
-    await fetchMoments(identifier, nextPage, true)
-    setPage(nextPage)
+    await fetchMoments(identifier, nextCursor, true)
     setLoadingMore(false)
-  }, [loadingMore, hasMore, identifier, page, fetchMoments])
+  }, [loadingMore, reachedEnd, identifier, nextCursor, fetchMoments])
 
   // Auto-load next page when sentinel enters viewport
   useEffect(() => {
@@ -328,7 +343,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
     if (!el) return
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && hasMore && !loadingMore) {
+        if (entry.isIntersecting && !reachedEnd && !loadingMore) {
           loadMore()
         }
       },
@@ -336,7 +351,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [hasMore, loadingMore, page, loadMore])
+  }, [reachedEnd, loadingMore, loadMore])
 
   const theme = getTheme(eventType)
 
@@ -513,26 +528,30 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
           })}
         </div>
 
-        {/* Infinite scroll sentinel — watched by IntersectionObserver */}
-        {hasMore && (
-          <div ref={sentinelRef} className="h-16 flex items-center justify-center mt-4">
-            {loadingMore && (
-              <div className="flex gap-1.5">
-                {[0, 1, 2].map(i => (
-                  <motion.div
-                    key={i}
-                    animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1, 0.8] }}
-                    transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
-                    className="w-2 h-2 rounded-full bg-gray-400"
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+        {reachedEnd && moments.length > 0 && (
+          <p className="col-span-3 text-center text-white/60 py-8 text-sm">
+            ✨ Has visto todos los momentos del evento
+          </p>
         )}
 
+        {/* Infinite scroll sentinel — watched by IntersectionObserver */}
+        <div ref={sentinelRef} className="h-16 flex items-center justify-center mt-4">
+          {loadingMore && (
+            <div className="flex gap-1.5">
+              {[0, 1, 2].map(i => (
+                <motion.div
+                  key={i}
+                  animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1, 0.8] }}
+                  transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+                  className="w-2 h-2 rounded-full bg-gray-400"
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* End card — shown when all moments loaded or page cap reached */}
-        {!hasMore && moments.length > 0 && (
+        {reachedEnd && moments.length > 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
