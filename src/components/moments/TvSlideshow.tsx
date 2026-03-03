@@ -239,7 +239,6 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
               key={currentUrl}
               src={currentUrl}
               autoPlay
-              muted
               playsInline
               className="absolute inset-0 w-full h-full object-contain"
               onEnded={advance}
