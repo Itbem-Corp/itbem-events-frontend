@@ -421,7 +421,13 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
     <>
       {isAdminPreview && <AdminPreviewBanner onClose={() => {/* dismisses UI only */}} />}
       <div className={`min-h-screen bg-white ${isAdminPreview ? 'pt-14' : ''}`}>
-      <HeroHeader eventName={eventName} eventDate={eventDate} theme={theme} />
+      <HeroHeader
+          eventName={eventName}
+          eventDate={eventDate}
+          theme={theme}
+          photoCount={photoMoments.length}
+          videoCount={videoMoments.length}
+        />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-0">
         <VideoHighlights
@@ -556,10 +562,18 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
 
 // ── HeroHeader ──────────────────────────────────────────────────────────────
 
-function HeroHeader({ eventName, eventDate, theme }: {
+function HeroHeader({
+  eventName,
+  eventDate,
+  theme,
+  photoCount,
+  videoCount,
+}: {
   eventName: string
   eventDate: string
   theme: ReturnType<typeof getTheme>
+  photoCount: number
+  videoCount: number
 }) {
   const formattedDate = eventDate
     ? new Date(eventDate + 'T12:00:00').toLocaleDateString('es-ES', {
@@ -568,7 +582,7 @@ function HeroHeader({ eventName, eventDate, theme }: {
     : ''
 
   return (
-    <div className="relative text-center py-16 sm:py-24 px-6 overflow-hidden">
+    <div className="relative text-center py-10 sm:py-14 px-6 overflow-hidden">
       {/* Subtle theme decoration — left */}
       <motion.div
         initial={{ opacity: 0, x: -20 }}
@@ -621,15 +635,27 @@ function HeroHeader({ eventName, eventDate, theme }: {
         style={{ transformOrigin: 'center' }}
       />
 
-      {/* Subtitle */}
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.35, duration: 0.5 }}
-        className="mt-3 text-xs tracking-[0.25em] uppercase text-gray-400"
-      >
-        sus momentos
-      </motion.p>
+      {/* Stats pill — photo/video count */}
+      {(photoCount > 0 || videoCount > 0) && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.5 }}
+          className="mt-4 flex justify-center"
+        >
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/5 text-xs text-gray-500 font-medium">
+            {photoCount > 0 && (
+              <span>{photoCount} {photoCount === 1 ? 'foto' : 'fotos'}</span>
+            )}
+            {photoCount > 0 && videoCount > 0 && (
+              <span className="w-1 h-1 rounded-full bg-gray-400 inline-block" aria-hidden="true" />
+            )}
+            {videoCount > 0 && (
+              <span>{videoCount} {videoCount === 1 ? 'video' : 'videos'}</span>
+            )}
+          </div>
+        </motion.div>
+      )}
     </div>
   )
 }
