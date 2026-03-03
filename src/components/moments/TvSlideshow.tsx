@@ -61,15 +61,34 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
   const [paused, setPaused] = useState(false)
   const [showQR, setShowQR] = useState(true)
   const [newCount, setNewCount] = useState(0)
+  const [newMomentNotif, setNewMomentNotif] = useState<Slide | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [eventName, setEventName] = useState("")
+  const [clock, setClock] = useState("")
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoCapRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const qrHideRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const notifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // ── Init ──
   useEffect(() => { setIdentifier(getIdentifier()) }, [])
+
+  // ── Live clock ──
+  useEffect(() => {
+    const tick = () => setClock(new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }))
+    tick()
+    const interval = setInterval(tick, 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // ── New moment notification auto-dismiss ──
+  useEffect(() => {
+    if (!newMomentNotif) return
+    if (notifTimerRef.current) clearTimeout(notifTimerRef.current)
+    notifTimerRef.current = setTimeout(() => setNewMomentNotif(null), 4500)
+    return () => { if (notifTimerRef.current) clearTimeout(notifTimerRef.current) }
+  }, [newMomentNotif])
 
   // ── Fetch ──
   const fetchSlides = useCallback(async (id: string, isInitial: boolean) => {
@@ -87,12 +106,16 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
         if (isInitial) return items
         const newIds = new Set(items.map((s: Slide) => s.id))
         const prevIds = new Set(prev.map((s) => s.id))
-        const added = items.filter((s: Slide) => !prevIds.has(s.id)).length
-        if (added > 0) setNewCount((n) => n + added)
+        const newItems = items.filter((s: Slide) => !prevIds.has(s.id))
+        if (newItems.length > 0) {
+          setNewCount((n) => n + newItems.length)
+          // Show live notification for the first new moment
+          setNewMomentNotif(newItems[0])
+        }
         // Merge new items at end; preserve current index position
         const merged = [
           ...prev.filter((s) => newIds.has(s.id)),
-          ...items.filter((s: Slide) => !prevIds.has(s.id)),
+          ...newItems,
         ]
         if (merged.length > 0) {
           setIndex((i) => Math.min(i, merged.length - 1))
@@ -234,6 +257,16 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
           transition={{ duration: 0.8, ease: "easeInOut" }}
           className="absolute inset-0"
         >
+          {/* ── Ambient blur fill (Apple TV effect) — photos only ── */}
+          {!currentIsVideo && currentUrl && (
+            <img
+              src={currentUrl}
+              aria-hidden
+              draggable={false}
+              className="absolute inset-0 w-full h-full object-cover scale-110 blur-3xl opacity-25 pointer-events-none"
+            />
+          )}
+
           {currentIsVideo ? (
             <video
               key={currentUrl}
@@ -318,9 +351,14 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
           {eventName && (
             <p className="text-white/50 text-sm font-medium tracking-wide drop-shadow">{eventName}</p>
           )}
-          {paused && (
-            <span className="text-white/40 text-xs tracking-widest uppercase">Pausado</span>
-          )}
+          <div className="flex items-center gap-2">
+            {clock && (
+              <span className="text-white/30 text-xs font-mono tabular-nums">{clock}</span>
+            )}
+            {paused && (
+              <span className="text-white/40 text-xs tracking-widest uppercase">· Pausado</span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3 pointer-events-auto">
           {newCount > 0 && (
@@ -374,6 +412,32 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
       <div className="absolute bottom-4 right-5 text-white/30 text-xs tabular-nums font-mono pointer-events-none">
         {index + 1} / {slides.length}
       </div>
+
+      {/* ── New moment live notification (bottom-right) ── */}
+      <AnimatePresence>
+        {newMomentNotif && (
+          <motion.div
+            key={newMomentNotif.id}
+            initial={{ opacity: 0, x: 32, scale: 0.9 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 32, scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 320, damping: 26 }}
+            className="absolute bottom-12 right-5 flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-3 py-2.5 shadow-2xl pointer-events-none max-w-[220px]"
+          >
+            {(newMomentNotif.thumbnail_url || newMomentNotif.content_url) && (
+              <img
+                src={resolveUrl(newMomentNotif, EVENTS_URL)}
+                className="w-11 h-11 rounded-xl object-cover flex-shrink-0"
+                alt=""
+              />
+            )}
+            <div className="flex flex-col min-w-0">
+              <span className="text-white text-xs font-semibold leading-snug">✨ Nuevo momento</span>
+              <span className="text-white/50 text-xs truncate">Acaba de llegar</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── QR (bottom-left, auto-hides) ── */}
       <AnimatePresence>
