@@ -76,6 +76,53 @@ const {
   </head>
   <body>
     <slot />
+
+    <!-- Content protection: right-click block + background black overlay -->
+    <script>
+      // Block right-click "Save Image / Save Video" on all media elements
+      document.addEventListener('contextmenu', (e) => {
+        if (e.target instanceof HTMLImageElement || e.target instanceof HTMLVideoElement) {
+          e.preventDefault()
+        }
+      }, { capture: true })
+
+      // Block drag-to-desktop on images
+      document.addEventListener('dragstart', (e) => {
+        if (e.target instanceof HTMLImageElement) {
+          e.preventDefault()
+        }
+      }, { capture: true })
+
+      // Black overlay when page goes to background (iOS/Android recent-apps screenshot,
+      // screen-share, task switcher). Content reappears only when user returns.
+      const shield = document.createElement('div')
+      shield.setAttribute('aria-hidden', 'true')
+      shield.style.cssText = [
+        'position:fixed',
+        'inset:0',
+        'background:#000',
+        'z-index:2147483647',
+        'display:none',
+        'pointer-events:none',
+      ].join(';')
+      document.body.appendChild(shield)
+
+      const showShield  = () => { shield.style.display = 'block' }
+      const hideShield  = () => { shield.style.display = 'none'  }
+
+      // visibilitychange fires on tab-switch, minimise, and app-switcher on Android
+      document.addEventListener('visibilitychange', () => {
+        document.hidden ? showShield() : hideShield()
+      })
+
+      // pagehide fires on iOS Safari when swiping away or backgrounding
+      window.addEventListener('pagehide', showShield)
+      window.addEventListener('pageshow', hideShield)
+
+      // blur fires on desktop when window loses focus (e.g. screen-record start)
+      window.addEventListener('blur', showShield)
+      window.addEventListener('focus', hideShield)
+    </script>
   </body>
 </html>
 

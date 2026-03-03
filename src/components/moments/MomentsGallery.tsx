@@ -717,6 +717,7 @@ function MomentCard({
             loading={eager ? 'eager' : 'lazy'}
             {...(eager ? { fetchPriority: 'high' as const } : {})}
             decoding="async"
+            draggable={false}
             className={`w-full h-auto block transition-[opacity,transform] duration-500 group-hover:scale-105 ${
               loaded ? 'opacity-100' : 'opacity-0'
             }`}
@@ -877,6 +878,7 @@ function VideoCard({
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           loading="lazy"
           decoding="async"
+          draggable={false}
         />
       ) : (
         <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
@@ -1099,9 +1101,23 @@ function GalleryLightbox({ moments, index, EVENTS_URL, theme, onClose, onNext, o
         onClick={(e) => e.stopPropagation()}
       >
         {video ? (
-          <video src={url} controls autoPlay playsInline className="max-h-[80vh] max-w-full rounded-2xl" />
+          <video
+            src={url}
+            controls
+            autoPlay
+            playsInline
+            controlsList="nodownload"
+            disablePictureInPicture
+            onContextMenu={(e) => e.preventDefault()}
+            className="max-h-[80vh] max-w-full rounded-2xl"
+          />
         ) : (
-          <img src={url} alt={moment.description ?? ""} className="max-h-[80vh] max-w-full rounded-2xl object-contain" />
+          <img
+            src={url}
+            alt={moment.description ?? ""}
+            draggable={false}
+            className="max-h-[80vh] max-w-full rounded-2xl object-contain"
+          />
         )}
       </motion.div>
 

@@ -110,3 +110,12 @@
 }
 
 /* @font-face declarations live in fonts.css (imported by template.astro) */
+
+/* ── Content protection ────────────────────────────────────────────────────── */
+/* Disable long-press "Save Image" on iOS/iPadOS and disable drag on desktop. */
+img, video {
+  -webkit-touch-callout: none; /* iOS/iPadOS: blocks long-press context menu  */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;     /* Chrome/Safari: blocks drag-to-desktop        */
+}

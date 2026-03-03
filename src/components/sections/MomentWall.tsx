@@ -65,6 +65,7 @@ function VideoMomentCard({ moment, EVENTS_URL, onClick }: VideoMomentCardProps) 
             className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
             decoding="async"
+            draggable={false}
           />
         ) : (
           /* Grey fallback: shown until Lambda thumbnail or canvas frame is ready */
@@ -364,6 +365,7 @@ export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: Section
                     className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
                     loading="lazy"
                     decoding="async"
+                    draggable={false}
                   />
                 </button>
               );
@@ -428,12 +430,16 @@ export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: Section
                   autoPlay
                   playsInline
                   preload="metadata"
+                  controlsList="nodownload"
+                  disablePictureInPicture
+                  onContextMenu={(e) => e.preventDefault()}
                   className="w-full max-h-[80vh] rounded-xl"
                 />
               ) : (
                 <img
                   src={getMediaUrl(lightbox.content_url, EVENTS_URL)}
                   alt={lightbox.description || "Momento"}
+                  draggable={false}
                   className="w-full max-h-[80vh] object-contain rounded-xl"
                 />
               )}
