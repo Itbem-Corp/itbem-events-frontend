@@ -657,11 +657,13 @@ function PhotoCard({
   const eager = globalIndex < 6
 
   return (
-    <div
-      className={`relative overflow-hidden bg-gray-100 cursor-pointer group ${
-        featured ? 'col-span-2 row-span-2' : 'aspect-square'
+    <button
+      type="button"
+      className={`relative overflow-hidden bg-gray-100 cursor-pointer group aspect-square focus:outline-none focus-visible:ring-2 focus-visible:ring-black ${
+        featured ? 'col-span-2 row-span-2' : ''
       }`}
       onClick={onClick}
+      aria-label={moment.description || 'Ver momento'}
     >
       {/* Shimmer — visible until image loads */}
       {!loaded && (
@@ -705,7 +707,7 @@ function PhotoCard({
           <p className="text-white text-xs line-clamp-2">{moment.description}</p>
         </div>
       )}
-    </div>
+    </button>
   )
 }
 
