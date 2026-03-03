@@ -770,7 +770,7 @@ function ProcessingCard() {
 }
 
 // ── ProcessingVideoCard ───────────────────────────────────────────────────────
-// Wide-format (16/9) processing placeholder used in the VideoHighlights section.
+// Masonry-compatible placeholder shown while Lambda optimizes an uploaded video.
 
 function ProcessingVideoCard({ index }: { index: number }) {
   return (
@@ -778,8 +778,8 @@ function ProcessingVideoCard({ index }: { index: number }) {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.07, type: 'spring', stiffness: 280, damping: 24 }}
-      className="relative w-full rounded-2xl overflow-hidden bg-zinc-900"
-      style={{ aspectRatio: '16/9' }}
+      className="break-inside-avoid mb-3 relative w-full rounded-xl overflow-hidden bg-zinc-900"
+      style={{ aspectRatio: '9/16' }}
     >
       {/* Dark gradient placeholder */}
       <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900" />
