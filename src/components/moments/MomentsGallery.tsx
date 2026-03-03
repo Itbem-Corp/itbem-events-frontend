@@ -58,7 +58,7 @@ function resolveFullUrl(m: Moment, EVENTS_URL: string): string {
 }
 
 const PAGE_SIZE = 25          // Scroll load size
-const INITIAL_PAGE_SIZE = 125 // First load: larger to capture all videos for VideoHighlights
+const INITIAL_PAGE_SIZE = 500 // First load: load all visible moments (matches MAX_TOTAL cap)
 const MAX_TOTAL = 500
 const PROCESSING_POLL_MS = 12_000
 
