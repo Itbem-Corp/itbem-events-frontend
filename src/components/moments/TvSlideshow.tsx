@@ -64,6 +64,7 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [eventName, setEventName] = useState("")
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const videoCapRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const qrHideRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -93,6 +94,9 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
           ...prev.filter((s) => newIds.has(s.id)),
           ...items.filter((s: Slide) => !prevIds.has(s.id)),
         ]
+        if (merged.length > 0) {
+          setIndex((i) => Math.min(i, merged.length - 1))
+        }
         return merged
       })
     } catch { /* silent */ }
@@ -124,20 +128,11 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
     if (paused || currentIsVideo || slides.length === 0) return
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(advance, PHOTO_DURATION)
-    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
-  }, [index, paused, currentIsVideo, slides.length, advance])
-
-  // ── Keyboard ──
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); advance() }
-      if (e.key === "ArrowLeft") { e.preventDefault(); goBack() }
-      if (e.key === "f" || e.key === "F") toggleFullscreen()
-      if (e.key === "Escape") setPaused(false)
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+      if (videoCapRef.current) clearTimeout(videoCapRef.current)
     }
-    window.addEventListener("keydown", handler)
-    return () => window.removeEventListener("keydown", handler)
-  }, [advance, goBack])
+  }, [index, paused, currentIsVideo, slides.length, advance])
 
   // ── Fullscreen ──
   const toggleFullscreen = useCallback(async () => {
@@ -155,6 +150,18 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
     document.addEventListener("fullscreenchange", handler)
     return () => document.removeEventListener("fullscreenchange", handler)
   }, [])
+
+  // ── Keyboard ──
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); advance() }
+      if (e.key === "ArrowLeft") { e.preventDefault(); goBack() }
+      if (e.key === "f" || e.key === "F") toggleFullscreen()
+      if (e.key === "Escape") setPaused(false)
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [advance, goBack, toggleFullscreen])
 
   // ── QR auto-hide after 10s idle ──
   const resetQrTimer = useCallback(() => {
@@ -235,9 +242,17 @@ export default function TvSlideshow({ EVENTS_URL }: Props) {
               onError={advance}
               ref={(el) => {
                 if (el) {
-                  // Cap very long videos
-                  const cap = () => { if (el.duration > VIDEO_MAX_MS / 1000) el.currentTime = el.duration - 1 }
+                  // Clear any previous cap timer
+                  if (videoCapRef.current) clearTimeout(videoCapRef.current)
+                  const cap = () => {
+                    if (el.duration > VIDEO_MAX_MS / 1000) {
+                      videoCapRef.current = setTimeout(advance, VIDEO_MAX_MS)
+                    }
+                  }
                   el.addEventListener("loadedmetadata", cap, { once: true })
+                } else {
+                  // Element removed — clear cap timer
+                  if (videoCapRef.current) clearTimeout(videoCapRef.current)
                 }
               }}
             />
