@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import InvitationLoader, { type InvitationData } from "../InvitationDataLoader";
 import type { SectionComponentProps, MomentWallConfig } from "../engine/types";
@@ -24,6 +24,51 @@ interface PaginatedMoments {
   has_more: boolean;
   published: number;
 }
+
+// ── LightboxVideo — autoplay with iOS fallback ───────────────────────────────
+const LightboxVideo = memo(function LightboxVideo({ src, className }: { src: string; className: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [needsTap, setNeedsTap] = useState(false)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    setNeedsTap(false)
+    const p = video.play()
+    if (p !== undefined) {
+      p.catch(() => setNeedsTap(true))
+    }
+  }, [src])
+
+  return (
+    <div className="relative">
+      <video
+        ref={videoRef}
+        src={src}
+        controls
+        playsInline
+        preload="metadata"
+        controlsList="nodownload"
+        disablePictureInPicture
+        onContextMenu={(e) => e.preventDefault()}
+        className={className}
+      />
+      {needsTap && (
+        <button
+          onClick={() => { videoRef.current?.play(); setNeedsTap(false) }}
+          className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-xl"
+          aria-label="Reproducir video"
+        >
+          <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center">
+            <svg className="w-7 h-7 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+            </svg>
+          </div>
+        </button>
+      )}
+    </div>
+  )
+})
 
 function isVideoUrl(url: string): boolean {
   return /\.(mp4|webm|mov|avi|m4v)(\?|$)/i.test(url);
@@ -424,15 +469,8 @@ export default function MomentWall({ config, EVENTS_URL: rawEventsUrl }: Section
               onTouchEnd={handleTouchEnd}
             >
               {isVideoUrl(lightbox.content_url) ? (
-                <video
+                <LightboxVideo
                   src={getMediaUrl(lightbox.content_url, EVENTS_URL)}
-                  controls
-                  autoPlay
-                  playsInline
-                  preload="metadata"
-                  controlsList="nodownload"
-                  disablePictureInPicture
-                  onContextMenu={(e) => e.preventDefault()}
                   className="w-full max-h-[80vh] rounded-xl"
                 />
               ) : (

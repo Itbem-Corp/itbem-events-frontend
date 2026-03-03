@@ -59,13 +59,15 @@ if (identifier) {
       function show() { shield.style.display = 'block' }
       function hide() { shield.style.display = 'none'  }
 
+      // visibilitychange: tab-switch, minimise, Android app-switcher
       document.addEventListener('visibilitychange', function () {
         document.hidden ? show() : hide()
       })
+      // pagehide/pageshow: iOS Safari backgrounding / back-forward cache
       window.addEventListener('pagehide', show)
       window.addEventListener('pageshow', hide)
-      window.addEventListener('blur',     show)
-      window.addEventListener('focus',    hide)
+      // NOTE: blur/focus intentionally omitted — fires on DevTools open,
+      // OS popups, and any window losing focus, causing false positives.
     })()
   </script>
 </TemplateLayout>
