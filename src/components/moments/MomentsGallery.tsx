@@ -869,6 +869,7 @@ function VideoCard({
 }
 
 // ── VideoHighlights ──────────────────────────────────────────────────────────
+// Horizontal-scroll rail (Stories-style). Peek of next card = scroll affordance.
 
 function VideoHighlights({
   videoMoments,
@@ -886,30 +887,38 @@ function VideoHighlights({
   if (videoMoments.length === 0 && processingVideoCount === 0) return null
 
   return (
-    <div className="mb-10">
+    <div className="mb-8">
       {/* Section header */}
-      <div className="flex items-center gap-3 mb-4 px-1">
-        <div className={`w-6 h-0.5 rounded-full ${theme.accentSoft}`} />
+      <div className="flex items-center gap-3 mb-3 px-1">
+        <div className={`w-5 h-0.5 rounded-full ${theme.accentSoft}`} />
         <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${theme.accent}`}>
           Momentos en video
         </p>
         <div className={`flex-1 h-px ${theme.accentSoft} opacity-30`} />
       </div>
 
-      {/* Responsive grid: 1 col mobile, 2 col sm+ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Horizontal scroll rail */}
+      <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 scrollbar-hide">
         {videoMoments.map((moment, i) => (
-          <VideoCard
+          <div
             key={moment.id}
-            moment={moment}
-            index={i}
-            EVENTS_URL={EVENTS_URL}
-            onOpen={onOpen}
-          />
+            className="flex-shrink-0 w-64 sm:w-72 snap-start"
+          >
+            <VideoCard
+              moment={moment}
+              index={i}
+              EVENTS_URL={EVENTS_URL}
+              onOpen={onOpen}
+            />
+          </div>
         ))}
-        {/* Processing video stubs — one card per pending video */}
         {Array.from({ length: processingVideoCount }).map((_, i) => (
-          <ProcessingVideoCard key={`proc-video-${i}`} index={videoMoments.length + i} />
+          <div
+            key={`proc-video-${i}`}
+            className="flex-shrink-0 w-64 sm:w-72 snap-start"
+          >
+            <ProcessingVideoCard index={videoMoments.length + i} />
+          </div>
         ))}
       </div>
     </div>
