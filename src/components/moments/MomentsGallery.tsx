@@ -56,8 +56,7 @@ function resolveFullUrl(m: Moment, EVENTS_URL: string): string {
   return `${EVENTS_URL}${url.startsWith("/") ? url.slice(1) : url}`
 }
 
-const PAGE_SIZE = 500
-const MAX_PAGES = 1
+const PAGE_SIZE = 100
 const PROCESSING_POLL_MS = 12_000
 
 // ── Pending-moments helpers (sessionStorage) ─────────────────────────────────
@@ -149,6 +148,9 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
   const [pendingMoments, setPendingMoments] = useState<PendingMoment[]>([])
 
   const sentinelRef = React.useRef<HTMLDivElement>(null)
+  // Tracks the API's total moment count so polling can detect new arrivals
+  // independently of how many pages have been locally loaded.
+  const totalRef = React.useRef<number>(0)
 
   const MOMENTS_PER_GROUP = 9
 
@@ -198,6 +200,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
 
       setMoments(prev => append ? [...prev, ...(data.items ?? [])] : (data.items ?? []))
       setHasMore(data.has_more ?? false)
+      totalRef.current = data.total ?? 0
       setPublished(data.published === true)
 
       if (data.event_name) setEventName(data.event_name)
@@ -265,8 +268,8 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
   useEffect(() => {
     if (!identifier || pendingMoments.length === 0) return
 
-    // Capture current count at the time the effect runs
-    prevMomentCountRef.current = moments.length
+    // Capture API total (not local items.length) so pagination doesn't skew detection
+    prevMomentCountRef.current = totalRef.current
 
     const poll = setInterval(async () => {
       try {
@@ -278,17 +281,22 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
         const json = await res.json()
         const data: MomentsResponse = json.data ?? json
         const freshItems: Moment[] = data.items ?? []
-        const freshCount = freshItems.length
+        // Compare total count from API (not items.length) so pagination doesn't skew detection
+        const freshTotal = data.total ?? freshItems.length
         const prev = prevMomentCountRef.current
 
-        if (freshCount > prev) {
-          // At least one pending moment became visible — update the wall
-          setMoments(freshItems)
+        if (freshTotal > prev) {
+          // Merge page-1 results into existing list without losing already-loaded pages
+          setMoments(existing => {
+            const existingIds = new Set(existing.map(m => m.id))
+            const newItems = freshItems.filter(fi => !existingIds.has(fi.id))
+            return newItems.length > 0 ? [...newItems, ...existing] : existing
+          })
           setHasMore(data.has_more ?? false)
-          const gained = freshCount - prev
-          prevMomentCountRef.current = freshCount
+          const gained = freshTotal - prev
+          prevMomentCountRef.current = freshTotal
+          totalRef.current = freshTotal
 
-          // Remove one stub per newly-appeared moment
           setPendingMoments(stubs => {
             const next = stubs.slice(Math.max(0, gained))
             writePending(identifier, next)
@@ -317,7 +325,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
     if (!el) return
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && hasMore && !loadingMore && page < MAX_PAGES) {
+        if (entry.isIntersecting && hasMore && !loadingMore) {
           loadMore()
         }
       },
@@ -453,7 +461,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
                 {/* Photo grid group — Instagram CSS grid */}
                 <div
                   className="grid grid-cols-3 gap-0.5"
-                  style={{ gridAutoFlow: 'row dense' }}
+                  style={{ gridAutoFlow: 'row dense', contentVisibility: 'auto', containIntrinsicSize: 'auto 540px' }}
                 >
                   {group.moments.map((moment, i) => {
                     const globalIndex = indexOffset + i
@@ -484,7 +492,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
         </div>
 
         {/* Infinite scroll sentinel — watched by IntersectionObserver */}
-        {hasMore && page < MAX_PAGES && (
+        {hasMore && (
           <div ref={sentinelRef} className="h-16 flex items-center justify-center mt-4">
             {loadingMore && (
               <div className="flex gap-1.5">
@@ -502,7 +510,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
         )}
 
         {/* End card — shown when all moments loaded or page cap reached */}
-        {(!hasMore || page >= MAX_PAGES) && moments.length > 0 && (
+        {!hasMore && moments.length > 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -854,7 +862,7 @@ function VideoCard({
         muted
         loop
         playsInline
-        preload="metadata"
+        preload="none"
         controlsList="nodownload"
         disablePictureInPicture
         onContextMenu={(e) => e.preventDefault()}
