@@ -962,9 +962,6 @@ function MemoryCard({
   index: number
   theme: MomentsTheme
 }) {
-  const rotations = [-2, 1, -1, 2, 0]
-  const rotation = rotations[index % rotations.length]
-
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.97 }}
@@ -972,7 +969,6 @@ function MemoryCard({
       viewport={{ once: true, margin: '0px 0px -50px 0px' }}
       transition={{ type: 'spring', stiffness: 280, damping: 24 }}
       className="w-full"
-      style={{ transform: `rotate(${rotation}deg)` }}
     >
       <div
         className={`bg-gradient-to-br ${theme.cardGradient} border ${theme.cardBorder} rounded-[20px] px-6 py-7`}
