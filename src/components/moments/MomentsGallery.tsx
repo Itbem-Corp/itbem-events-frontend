@@ -117,9 +117,14 @@ export function addPendingMoment(identifier: string, mediaType: "video" | "image
 
 // ── getCardType ──────────────────────────────────────────────────────────────
 // Every 10th photo (1-indexed) is a 2×2 featured card in the Instagram grid.
+// Exception: skip featured if the card falls at position 8 (last) in a 9-item group —
+// that would force the 2×2 block onto a new row, leaving 3 empty cells in the grid.
 // Exported for unit testing.
 export function getCardType(index: number): 'normal' | 'featured' {
-  return (index + 1) % 10 === 0 ? 'featured' : 'normal'
+  if ((index + 1) % 10 !== 0) return 'normal'
+  // Don't feature the last slot in a 9-item group (would create grid gaps)
+  const posInGroup = index % 9
+  return posInGroup === 8 ? 'normal' : 'featured'
 }
 
 // ── MomentsGallery ─────────────────────────────────────────────────────────
@@ -455,7 +460,7 @@ export default function MomentsGallery({ EVENTS_URL: rawEventsUrl, previewToken 
           videoCount={videoMoments.length}
         />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-0">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 overflow-hidden">
         <VideoHighlights
           videoMoments={videoMoments}
           processingVideoCount={pendingVideoCount}
