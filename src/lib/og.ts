@@ -44,15 +44,17 @@ export async function fetchEventOgData(
     eventsUrl: string,
     identifier: string
 ): Promise<EventOgData | null> {
+    // Normalize: always end with /
+    const base = eventsUrl.endsWith('/') ? eventsUrl : `${eventsUrl}/`
     try {
         const res = await fetch(
-            `${eventsUrl}api/events/${encodeURIComponent(identifier)}/meta`,
+            `${base}api/events/${encodeURIComponent(identifier)}/meta`,
             { signal: AbortSignal.timeout(3000) }
         )
         if (!res.ok) {
             // Fallback to page-spec if /meta doesn't exist
             const specRes = await fetch(
-                `${eventsUrl}api/events/${encodeURIComponent(identifier)}/page-spec`,
+                `${base}api/events/${encodeURIComponent(identifier)}/page-spec`,
                 { signal: AbortSignal.timeout(3000) }
             )
             if (!specRes.ok) return null
