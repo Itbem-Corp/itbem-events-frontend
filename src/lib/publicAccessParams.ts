@@ -22,6 +22,9 @@ export const PUBLIC_EVENT_ACCESS_TOKEN_QUERY_KEYS = [
   "event_access_token",
   "eventAccessToken",
   "EventAccessToken",
+  "access_token",
+  "accessToken",
+  "AccessToken",
 ] as const;
 
 export const PUBLIC_ACCESS_CREDENTIAL_QUERY_KEYS = [

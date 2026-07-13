@@ -32,7 +32,7 @@ describe("publicShareUrl", () => {
   it("strips event access proof token aliases", () => {
     expect(
       sanitizePublicShareUrl(
-        "https://public.test/e/mi-evento?event_access_token=proof-123&eventAccessToken=proof-456",
+        "https://public.test/e/mi-evento?event_access_token=proof-123&eventAccessToken=proof-456&access_token=oauth-style&accessToken=camel-style&AccessToken=pascal-style",
       ),
     ).toBe("https://public.test/e/mi-evento");
   });
@@ -58,7 +58,7 @@ describe("publicShareUrl", () => {
   ])("sanitizes every SSR route used as an Open Graph URL: %s", (path) => {
     const result = new URL(
       sanitizePublicShareUrl(
-        `https://www.eventiapp.com.mx${path}?preview=1&t=cache&preview_token=preview&token=invite&event_access_token=access&utm_source=share`,
+        `https://www.eventiapp.com.mx${path}?preview=1&t=cache&preview_token=preview&token=invite&event_access_token=access&access_token=generic-access&utm_source=share`,
       ),
     );
 
@@ -69,6 +69,7 @@ describe("publicShareUrl", () => {
     expect(result.searchParams.has("preview_token")).toBe(false);
     expect(result.searchParams.has("token")).toBe(false);
     expect(result.searchParams.has("event_access_token")).toBe(false);
+    expect(result.searchParams.has("access_token")).toBe(false);
   });
 
   it("turns token-only invitation routes into a usable canonical event URL", () => {

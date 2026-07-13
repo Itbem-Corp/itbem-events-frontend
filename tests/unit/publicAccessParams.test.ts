@@ -32,6 +32,9 @@ describe("publicAccessParams", () => {
       "event_access_token",
       "eventAccessToken",
       "EventAccessToken",
+      "access_token",
+      "accessToken",
+      "AccessToken",
     ]);
   });
 
