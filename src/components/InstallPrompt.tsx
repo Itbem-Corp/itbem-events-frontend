@@ -3,8 +3,8 @@
 /**
  * Smart PWA install prompt.
  *
- * Android Chrome: intercepts `beforeinstallprompt`, shows custom banner after 3s.
- * iOS Safari:     detects iOS + non-standalone → shows "Add to Home Screen" instructions.
+ * Android Chrome: intercepts `beforeinstallprompt`, then waits for meaningful page engagement.
+ * iOS Safari:     detects iOS + non-standalone and offers lightweight install instructions.
  * Already installed (standalone): renders nothing.
  * Dismissed: hidden for 7 days (localStorage).
  *
@@ -13,7 +13,9 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { Share, X } from 'lucide-react';
+import { parsePublicPreviewParams } from '../lib/publicPreview';
 
 // BeforeInstallPromptEvent is not in standard TypeScript DOM lib yet.
 interface BeforeInstallPromptEvent extends Event {
@@ -47,7 +49,7 @@ function isInStandaloneMode(): boolean {
 
 function isPreviewMode(): boolean {
   if (typeof window === 'undefined') return false;
-  return new URLSearchParams(window.location.search).get('preview') === '1';
+  return parsePublicPreviewParams(window.location.search).isPreview;
 }
 
 function isDismissedRecently(): boolean {
@@ -78,12 +80,7 @@ function IOSInstructions() {
           <span
             className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-gray-200 bg-white shadow-sm align-middle mx-0.5"
           >
-            {/* iOS share icon */}
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="#007aff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" />
-              <polyline points="16 6 12 2 8 6" />
-              <line x1="12" y1="2" x2="12" y2="15" />
-            </svg>
+            <Share aria-hidden="true" className="size-4 text-[#007aff]" strokeWidth={1.8} />
           </span>{' '}
           en Safari
         </span>
@@ -109,33 +106,52 @@ export default function InstallPrompt() {
   const [platform, setPlatform] = useState<'android' | 'ios' | null>(null);
   const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     // Guard: skip in preview mode, already installed, or dismissed recently
     if (isPreviewMode() || isInStandaloneMode() || isDismissedRecently()) return;
 
     const detected = detectPlatform();
+    let timeReady = false;
+    let engagementReady = window.scrollY > 320;
+    let eligible = detected === 'ios';
+
+    const maybeShow = () => {
+      if (eligible && timeReady && engagementReady) setShow(true);
+    };
+
+    const handleEngagement = () => {
+      if (window.scrollY <= 320) return;
+      engagementReady = true;
+      maybeShow();
+      window.removeEventListener('scroll', handleEngagement);
+    };
+
+    window.addEventListener('scroll', handleEngagement, { passive: true });
+    timerRef.current = setTimeout(() => {
+      timeReady = true;
+      maybeShow();
+    }, 9000);
 
     if (detected === 'ios') {
-      // iOS: Safari doesn't fire beforeinstallprompt.
-      // Show instructions after a 3.5s delay (let user read the invitation first).
       setPlatform('ios');
-      timerRef.current = setTimeout(() => setShow(true), 3500);
-      return;
     }
 
     // Android / Chrome / Edge: wait for the browser's install event.
     const handler = (e: Event) => {
       e.preventDefault(); // suppress browser's default mini-infobar
       deferredPromptRef.current = e as BeforeInstallPromptEvent;
+      eligible = true;
       setPlatform('android');
-      timerRef.current = setTimeout(() => setShow(true), 3000);
+      maybeShow();
     };
 
     window.addEventListener('beforeinstallprompt', handler);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('scroll', handleEngagement);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, []);
@@ -168,17 +184,15 @@ export default function InstallPrompt() {
     <AnimatePresence>
       {show && platform && (
         <motion.div
-          initial={{ y: '100%', opacity: 0 }}
+          initial={reducedMotion ? false : { y: 24, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          exit={{ y: '100%', opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-          // env(safe-area-inset-bottom) keeps the banner above iPhone home indicator
-          className="fixed bottom-0 left-0 right-0 z-50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
-          role="dialog"
-          aria-modal="true"
+          exit={reducedMotion ? { opacity: 0 } : { y: 16, opacity: 0 }}
+          transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 32 }}
+          className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-50 px-4"
+          role="status"
           aria-label={platform === 'android' ? 'Instalar EventiApp' : 'Agregar a pantalla de inicio'}
         >
-          <div className="mx-auto max-w-sm rounded-3xl bg-white shadow-2xl overflow-hidden ring-1 ring-black/5">
+          <div className="pointer-events-auto mx-auto max-w-sm overflow-hidden rounded-3xl bg-white/95 shadow-2xl shadow-gray-950/15 ring-1 ring-black/5 backdrop-blur-xl">
             {/* Pink gradient header stripe */}
             <div
               className="h-1 w-full"
@@ -212,13 +226,11 @@ export default function InstallPrompt() {
                 {/* Close button */}
                 <button
                   onClick={handleDismiss}
-                  className="flex-shrink-0 p-1 -mr-1 -mt-1 text-gray-400 hover:text-gray-600 transition-colors rounded-full"
+                  className="-mr-2 -mt-2 flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500/40"
                   aria-label="Cerrar"
                   type="button"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <X aria-hidden="true" className="size-4" strokeWidth={2.2} />
                 </button>
               </div>
 

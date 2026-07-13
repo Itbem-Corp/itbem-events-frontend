@@ -11,21 +11,38 @@
  */
 import TemplateLayout from '../../layouts/template.astro';
 import SharedUploadPage from '../../components/SharedUploadPage';
+import { normalizeEventsUrl } from '../../lib/eventsUrl';
+import { buildSharedUploadOgMeta, fetchEventOgData } from '../../lib/og';
+import { normalizePathIdentifier } from '../../lib/pathIdentifier';
+import { readPublicAccessParams } from '../../lib/publicPreview';
 
-const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string ?? 'http://localhost:8080/';
+const EVENTS_URL = normalizeEventsUrl(import.meta.env.PUBLIC_EVENTS_URL as string | undefined);
 
-// Attempt server-side identifier extraction for OG tags
-// (works at runtime on Cloudflare Pages SSR; gracefully degrades on static builds)
-let ogTitle       = 'Comparte tu momento';
-let ogDescription = 'Sube una foto o video para el organizador del evento.';
-const ogUrl       = Astro.url.href;
+const identifier = normalizePathIdentifier(
+  Astro.url.searchParams.get('e') ?? Astro.url.searchParams.get('identifier')
+);
+const accessParams = readPublicAccessParams(Astro.url.search);
+const ogUrl = Astro.url.href;
+const eventOg = identifier
+  ? await fetchEventOgData(
+      EVENTS_URL,
+      identifier,
+      accessParams.previewToken,
+      accessParams.cacheKey,
+      accessParams.invitationToken,
+      accessParams.accessToken
+    )
+  : null;
+const ogMeta = buildSharedUploadOgMeta(eventOg, EVENTS_URL);
 ---
 
 <TemplateLayout
-  title={ogTitle}
-  ogTitle={ogTitle}
-  ogDescription={ogDescription}
+  title={ogMeta.title}
+  ogTitle={ogMeta.title}
+  ogDescription={ogMeta.description}
+  ogImage={ogMeta.image}
   ogUrl={ogUrl}
+  language={eventOg?.language}
 >
   <SharedUploadPage
     client:only="react"

@@ -1,27 +1,8 @@
 import { describe, it, expect } from "vitest";
-
-// Pure helper: calculates part boundaries for a file.
-// Returns array of { partNumber, start, end } — end is exclusive.
-function calcParts(fileSize: number, partSize: number): Array<{ partNumber: number; start: number; end: number }> {
-  const parts: Array<{ partNumber: number; start: number; end: number }> = [];
-  let offset = 0;
-  let partNumber = 1;
-  while (offset < fileSize) {
-    const end = Math.min(offset + partSize, fileSize);
-    parts.push({ partNumber, start: offset, end });
-    offset = end;
-    partNumber++;
-  }
-  return parts;
-}
-
-// Pure helper: computes overall progress percentage from per-part byte counters.
-// Returns 0-90 (last 10% reserved for /complete round-trip).
-function calcProgress(bytesPerPart: number[], totalBytes: number): number {
-  if (totalBytes === 0) return 0;
-  const uploaded = bytesPerPart.reduce((a, b) => a + b, 0);
-  return Math.min(90, Math.round((uploaded / totalBytes) * 90));
-}
+import {
+  calcParts,
+  calcProgress,
+} from "../../../src/components/shared-upload/SharedUploadEngine";
 
 describe("calcParts", () => {
   it("produces correct part count for exact multiple", () => {

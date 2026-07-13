@@ -1,17 +1,10 @@
 import { describe, it, expect } from "vitest";
+import {
+  isSharedUploadVideoDurationAllowed as isAllowed,
+  MAX_SHARED_UPLOAD_VIDEO_DURATION_S,
+} from "../../src/components/shared-upload/SharedUploadEngine";
 
-// Mirrors MAX_VIDEO_DURATION_S and the duration-filter logic in SharedUploadPage.tsx (lines 46, 639-641).
-const MAX_VIDEO_DURATION_S = 300; // 5 minutes
-
-// Mirrors the filter predicate on line 641:
-// .filter(({ duration }) => duration <= MAX_VIDEO_DURATION_S || duration === 0)
-const isAllowed = (duration: number): boolean =>
-  duration <= MAX_VIDEO_DURATION_S || duration === 0;
-
-// Mirrors the rejection predicate on line 639:
-// videosWithDuration.filter(({ duration }) => duration > MAX_VIDEO_DURATION_S)
-const isRejected = (duration: number): boolean =>
-  duration > MAX_VIDEO_DURATION_S;
+const isRejected = (duration: number): boolean => !isAllowed(duration);
 
 describe("video duration limit (MAX_VIDEO_DURATION_S = 300 s)", () => {
   it("allows a 1-second video", () => {
@@ -48,6 +41,6 @@ describe("video duration limit (MAX_VIDEO_DURATION_S = 300 s)", () => {
   });
 
   it("MAX_VIDEO_DURATION_S constant is exactly 300", () => {
-    expect(MAX_VIDEO_DURATION_S).toBe(300);
+    expect(MAX_SHARED_UPLOAD_VIDEO_DURATION_S).toBe(300);
   });
 });

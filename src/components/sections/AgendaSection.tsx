@@ -1,21 +1,62 @@
 "use client";
 
-import { motion } from 'framer-motion';
-import type { SectionComponentProps, AgendaConfig, AgendaItem } from '../engine/types';
+import { MotionConfig, motion } from "framer-motion";
+import {
+  CalendarDays,
+  Camera,
+  GlassWater,
+  Landmark,
+  MapPin,
+  Music2,
+  PartyPopper,
+  Sparkles,
+  Utensils,
+  type LucideIcon,
+} from "lucide-react";
+import type {
+  SectionComponentProps,
+  AgendaConfig,
+  AgendaItem,
+} from "../engine/types";
 
-const ICONS: Record<string, string> = {
-  ceremony:  '💍',
-  reception: '🥂',
-  dinner:    '🍽️',
-  party:     '🎉',
-  music:     '🎵',
-  photo:     '📸',
-  default:   '✨',
+const ICONS: Record<string, LucideIcon> = {
+  ceremony: Landmark,
+  reception: GlassWater,
+  dinner: Utensils,
+  party: PartyPopper,
+  music: Music2,
+  photo: Camera,
+  schedule: CalendarDays,
+  default: Sparkles,
+};
+
+function getIcon(item: AgendaItem): LucideIcon {
+  return ICONS[item.icon ?? "default"] ?? Sparkles;
 }
 
-function getIcon(item: AgendaItem): string {
-  return ICONS[item.icon ?? 'default'] ?? '✨'
-}
+const headingStyle = {
+  color: "var(--eventi-color-heading, #07293A)",
+  fontFamily: "var(--eventi-font-heading-effective, Astralaga SemiBold, serif)",
+};
+
+const accentStyle = {
+  color: "var(--eventi-color-accent, #8B5D3D)",
+};
+
+const mutedStyle = {
+  color: "var(--eventi-color-muted, #555)",
+};
+
+const markerStyle = {
+  borderColor: "var(--eventi-color-border, #C7A44C)",
+  backgroundColor: "var(--eventi-color-surface, #fff)",
+};
+
+const lineStyle = {
+  backgroundColor: "var(--eventi-color-border, #C7A44C)",
+  opacity: 0.3,
+  minHeight: 32,
+};
 
 function AgendaSkeleton() {
   return (
@@ -33,28 +74,30 @@ function AgendaSkeleton() {
         ))}
       </div>
     </section>
-  )
+  );
 }
 
 interface AgendaItemRowProps {
-  item: AgendaItem
-  index: number
-  isLast: boolean
+  item: AgendaItem;
+  index: number;
+  isLast: boolean;
 }
 
 function AgendaItemRow({ item, index, isLast }: AgendaItemRowProps) {
+  const ItemIcon = getIcon(item);
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -16 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.1, ease: 'easeOut' }}
+      transition={{ duration: 0.4, delay: index * 0.1, ease: "easeOut" }}
       className="flex gap-0 relative"
     >
       {/* Time column */}
       <div className="w-12 sm:w-16 flex-shrink-0 pt-1 text-right pr-2 sm:pr-4">
         <span
           className="text-sm font-aloevera font-semibold"
-          style={{ color: '#C7A44C' }}
+          style={accentStyle}
         >
           {item.time}
         </span>
@@ -64,79 +107,100 @@ function AgendaItemRow({ item, index, isLast }: AgendaItemRowProps) {
       <div className="flex flex-col items-center w-8 flex-shrink-0">
         <div
           className="w-8 h-8 rounded-full flex items-center justify-center text-lg flex-shrink-0 border-2 border-dashed"
-          style={{ borderColor: '#C7A44C', backgroundColor: '#fff' }}
+          style={markerStyle}
         >
-          {getIcon(item)}
+          <ItemIcon className="size-4" aria-hidden="true" style={accentStyle} />
         </div>
-        {!isLast && (
-          <div
-            className="w-px flex-1 mt-1"
-            style={{ backgroundColor: '#C7A44C', opacity: 0.3, minHeight: 32 }}
-          />
-        )}
+        {!isLast && <div className="w-px flex-1 mt-1" style={lineStyle} />}
       </div>
 
       {/* Content column */}
       <div className="flex-1 pl-4 pb-8">
         <p
           className="text-base sm:text-lg font-astralaga leading-tight"
-          style={{ color: '#07293A' }}
+          style={headingStyle}
         >
           {item.title}
         </p>
         {item.location && (
-          <p className="text-sm font-aloevera mt-0.5" style={{ color: '#8B5D3D' }}>
-            📍 {item.location}
+          <p className="text-sm font-aloevera mt-0.5" style={accentStyle}>
+            <MapPin className="mr-1 inline size-3.5" aria-hidden="true" />
+            {item.location}
           </p>
         )}
         {item.description && (
-          <p className="text-sm font-aloevera mt-1" style={{ color: '#555' }}>
+          <p className="text-sm font-aloevera mt-1" style={mutedStyle}>
             {item.description}
           </p>
         )}
       </div>
     </motion.div>
-  )
+  );
 }
 
 export default function AgendaSection({ config }: SectionComponentProps) {
-  const { title = 'Programa del día', subtitle, items = [] } = config as unknown as AgendaConfig;
+  const {
+    title = "Programa del día",
+    subtitle,
+    content,
+    items = [],
+  } = config as unknown as AgendaConfig;
 
-  if (!items || items.length === 0) return <AgendaSkeleton />
+  if ((!items || items.length === 0) && !content) return <AgendaSkeleton />;
 
   return (
-    <section className="py-16 px-4 relative z-10">
-      <div className="max-w-lg mx-auto">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="text-center mb-12"
-        >
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-astralaga" style={{ color: '#07293A' }}>
-            {title}
-          </h2>
-          {subtitle && (
-            <p className="mt-2 text-lg font-aloevera" style={{ color: '#8B5D3D' }}>
-              {subtitle}
-            </p>
-          )}
-          <div className="mt-4 mx-auto w-16 h-px" style={{ backgroundColor: '#C7A44C' }} />
-        </motion.div>
-
-        {/* Timeline items */}
-        <div>
-          {items.map((item, i) => (
-            <AgendaItemRow
-              key={i}
-              item={item}
-              index={i}
-              isLast={i === items.length - 1}
+    <MotionConfig reducedMotion="user">
+      <section className="py-16 px-4 relative z-10">
+        <div className="max-w-lg mx-auto">
+          {/* Header */}
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="text-center mb-12"
+          >
+            <h2
+              className="text-2xl sm:text-3xl md:text-4xl font-astralaga"
+              style={headingStyle}
+            >
+              {title}
+            </h2>
+            {subtitle && (
+              <p className="mt-2 text-lg font-aloevera" style={accentStyle}>
+                {subtitle}
+              </p>
+            )}
+            <div
+              className="mt-4 mx-auto w-16 h-px"
+              style={{ backgroundColor: "var(--eventi-color-border, #C7A44C)" }}
             />
-          ))}
+          </motion.div>
+
+          {/* Timeline items */}
+          {items.length > 0 ? (
+            <div>
+              {items.map((item, i) => (
+                <AgendaItemRow
+                  key={i}
+                  item={item}
+                  index={i}
+                  isLast={i === items.length - 1}
+                />
+              ))}
+            </div>
+          ) : (
+            <motion.p
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="whitespace-pre-line text-center text-base font-aloevera leading-relaxed"
+              style={mutedStyle}
+            >
+              {content}
+            </motion.p>
+          )}
         </div>
-      </div>
-    </section>
-  )
+      </section>
+    </MotionConfig>
+  );
 }

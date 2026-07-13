@@ -2,50 +2,41 @@
 export const prerender = false;
 
 /**
- * Public event preview page — /e/{identifier}
- * Loads the SDUI PageSpec by event identifier (no invitation token required).
- * Used by the dashboard "Vista previa" button and shareable public links.
+ * Public event page - /e/{identifier}.
+ * Loads the SDUI PageSpec by event identifier.
  */
 import TemplateLayout from '../../../layouts/template.astro';
 import EventPage from '../../../components/engine/EventPage';
-import { fetchEventOgData, buildOgImageUrl } from '../../../lib/og';
+import { buildPublicEventOgMeta, fetchEventOgData } from '../../../lib/og';
+import { normalizeEventsUrl } from '../../../lib/eventsUrl';
+import { normalizePathIdentifier } from '../../../lib/pathIdentifier';
+import { readPublicAccessParams } from '../../../lib/publicPreview';
 
-const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string;
-const { identifier } = Astro.params;
-
-let ogTitle = 'Estás invitado';
-let ogDesc  = 'Abre tu invitación y descubre todos los detalles del evento.';
-let ogImage = '';
+const EVENTS_URL = normalizeEventsUrl(import.meta.env.PUBLIC_EVENTS_URL as string | undefined);
+const identifier = normalizePathIdentifier(Astro.params.identifier);
+const accessParams = readPublicAccessParams(Astro.url.search);
 const ogUrl = Astro.url.href;
 
-if (identifier) {
-  const ev = await fetchEventOgData(EVENTS_URL, identifier);
-  if (ev) {
-    ogTitle = ev.name || ogTitle;
-
-    if (ev.description) {
-      ogDesc = ev.description.slice(0, 160);
-    } else if (ev.organizer_name) {
-      ogDesc = `${ev.organizer_name} te invita. Abre para ver fecha, lugar y confirmar asistencia.`;
-    }
-
-    ogImage = buildOgImageUrl({
-      title: ev.name,
-      date: ev.event_date_time,
-      address: ev.address,
-      cover: ev.cover_image_url,
-      type: ev.event_type,
-    });
-  }
-}
+const eventOg = identifier
+  ? await fetchEventOgData(
+      EVENTS_URL,
+      identifier,
+      accessParams.previewToken,
+      accessParams.cacheKey,
+      accessParams.invitationToken,
+      accessParams.accessToken
+    )
+  : null;
+const ogMeta = buildPublicEventOgMeta(eventOg, EVENTS_URL);
 ---
 
 <TemplateLayout
-  title={ogTitle}
-  ogTitle={ogTitle}
-  ogDescription={ogDesc}
-  ogImage={ogImage}
+  title={ogMeta.title}
+  ogTitle={ogMeta.title}
+  ogDescription={ogMeta.description}
+  ogImage={ogMeta.image}
   ogUrl={ogUrl}
+  language={eventOg?.language}
 >
   <EventPage
     client:only="react"

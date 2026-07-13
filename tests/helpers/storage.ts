@@ -10,7 +10,13 @@ import type { Page } from '@playwright/test';
 
 export async function installStorageClearScript(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    const sessionPrefixes = ['resourcesBySection-', 'pageSpec-', 'attendees-'];
+    const sessionPrefixes = [
+      'resourcesBySection-',
+      'pageSpec-',
+      'attendees-',
+      'view-tracked-',
+      'event-verified-',
+    ];
     const localPrefixes   = ['resourcesExpiry-'];
 
     for (let i = sessionStorage.length - 1; i >= 0; i--) {

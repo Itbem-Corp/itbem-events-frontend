@@ -1,10 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-// Mirrors getCardType() from MomentsGallery.tsx.
-// Every 10th photo (1-indexed: 10, 20, 30...) becomes a featured (2×2) card.
-function getCardType(index: number): "normal" | "featured" {
-  return (index + 1) % 10 === 0 ? "featured" : "normal";
-}
+import { getCardType } from "../../src/lib/momentGalleryState";
 
 describe("getCardType", () => {
   it("returns 'normal' for index 0 (first photo)", () => {
@@ -37,5 +33,9 @@ describe("getCardType", () => {
 
   it("returns 'featured' for index 99 (100th photo)", () => {
     expect(getCardType(99)).toBe("featured");
+  });
+
+  it("avoids a featured card in the last slot of a nine-item group", () => {
+    expect(getCardType(89)).toBe("normal");
   });
 });

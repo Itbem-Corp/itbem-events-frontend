@@ -1,88 +1,239 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Check, Copy, MessageCircle, Share2, X } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useEffect, useId, useRef, useState } from "react";
+import { buildPublicShareUrl } from "../lib/publicShareUrl";
 
 interface ShareWidgetProps {
   eventTitle: string;
+  eventIdentifier?: string;
 }
 
-export default function ShareWidget({ eventTitle }: ShareWidgetProps) {
+export default function ShareWidget({
+  eventTitle,
+  eventIdentifier,
+}: ShareWidgetProps) {
   const [visible, setVisible] = useState(false);
+  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
+  const rootRef = useRef<HTMLElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const firstActionRef = useRef<HTMLButtonElement>(null);
+  const copiedTimerRef = useRef<number | null>(null);
+  const menuId = useId();
+  const shouldReduceMotion = useReducedMotion();
 
   useEffect(() => {
-    const onScroll = () => setVisible(window.scrollY > 300);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    const updateVisibility = () => {
+      const nextVisible = window.scrollY > 280;
+      setVisible(nextVisible);
+      if (!nextVisible) setOpen(false);
+    };
+
+    updateVisibility();
+    window.addEventListener("scroll", updateVisibility, { passive: true });
+    return () => window.removeEventListener("scroll", updateVisibility);
   }, []);
 
-  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
-  const shareText = `¡Mira mi invitación para ${eventTitle}! 🎉`;
+  useEffect(() => {
+    if (!open) return;
+
+    const focusFrame = window.requestAnimationFrame(() => {
+      firstActionRef.current?.focus();
+    });
+
+    const closeOnOutsideInteraction = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideInteraction);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("pointerdown", closeOnOutsideInteraction);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  useEffect(
+    () => () => {
+      if (copiedTimerRef.current !== null) {
+        window.clearTimeout(copiedTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const shareUrl =
+    typeof window !== "undefined"
+      ? buildPublicShareUrl(window.location.href, eventIdentifier)
+      : "";
+  const normalizedTitle = eventTitle.trim();
+  const shareText = normalizedTitle
+    ? `¡Mira mi invitación para ${normalizedTitle}!`
+    : "¡Mira esta invitación!";
+
+  const restoreTriggerFocus = () => {
+    window.requestAnimationFrame(() => triggerRef.current?.focus());
+  };
+
+  const closeMenu = () => {
+    setOpen(false);
+    restoreTriggerFocus();
+  };
+
+  const copyToClipboard = async (value: string): Promise<boolean> => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        return true;
+      }
+    } catch {
+      // Fall through to the selection-based fallback for older/restricted browsers.
+    }
+
+    const input = document.createElement("textarea");
+    input.value = value;
+    input.setAttribute("readonly", "");
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.appendChild(input);
+    input.select();
+
+    try {
+      const legacyCopy = Reflect.get(document, "execCommand");
+      return typeof legacyCopy === "function"
+        ? Boolean(legacyCopy.call(document, "copy"))
+        : false;
+    } catch {
+      return false;
+    } finally {
+      input.remove();
+    }
+  };
 
   const handleWhatsApp = () => {
     const url = `https://wa.me/?text=${encodeURIComponent(`${shareText}\n${shareUrl}`)}`;
     window.open(url, "_blank", "noopener,noreferrer");
+    closeMenu();
   };
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard API unavailable — silent fail
+    const succeeded = await copyToClipboard(shareUrl);
+    setCopied(succeeded);
+    setCopyError(!succeeded);
+    if (copiedTimerRef.current !== null) {
+      window.clearTimeout(copiedTimerRef.current);
     }
+    copiedTimerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      setCopyError(false);
+    }, 2400);
   };
 
   return (
     <AnimatePresence>
       {visible && (
-        <motion.div
-          initial={{ opacity: 0, x: 60 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 60 }}
-          transition={{ duration: 0.35, ease: "easeOut" }}
-          className="fixed bottom-24 right-4 z-40 flex flex-col gap-2 items-end"
+        <motion.nav
+          ref={rootRef}
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
+          transition={{
+            duration: shouldReduceMotion ? 0 : 0.24,
+            ease: "easeOut",
+          }}
+          className="fixed bottom-[var(--eventi-safe-bottom)] right-4 z-[45] sm:right-5"
           aria-label="Compartir invitación"
         >
-          {/* WhatsApp share */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={handleWhatsApp}
-            className="flex items-center gap-2 bg-[#25D366] text-white px-4 py-2 rounded-full shadow-lg font-aloevera text-sm"
-            aria-label="Compartir por WhatsApp"
-            type="button"
-          >
-            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" aria-hidden="true">
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-            </svg>
-            Compartir
-          </motion.button>
+          <AnimatePresence>
+            {open && (
+              <motion.div
+                id={menuId}
+                initial={
+                  shouldReduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }
+                }
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={
+                  shouldReduceMotion
+                    ? { opacity: 0 }
+                    : { opacity: 0, y: 6, scale: 0.98 }
+                }
+                transition={{ duration: shouldReduceMotion ? 0 : 0.18 }}
+                className="eventi-floating-panel absolute bottom-[calc(100%+0.75rem)] right-0 w-60 overflow-hidden p-2"
+              >
+                <div className="px-3 pb-2 pt-1.5">
+                  <p className="text-xs font-semibold text-[#102f3f]">
+                    Comparte este momento
+                  </p>
+                  <p className="mt-0.5 text-[0.68rem] text-[#758893]">
+                    Compartimos una versión segura, sin tokens privados.
+                  </p>
+                </div>
 
-          {/* Copy link */}
+                <button
+                  ref={firstActionRef}
+                  onClick={handleWhatsApp}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-[#315b46] transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 motion-reduce:transition-none"
+                  type="button"
+                >
+                  <span className="flex size-8 items-center justify-center rounded-lg bg-[#25D366]/[0.12] text-[#168646]">
+                    <MessageCircle aria-hidden="true" className="size-4" />
+                  </span>
+                  WhatsApp
+                </button>
+
+                <button
+                  onClick={handleCopy}
+                  className="mt-1 flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-[#3c5968] transition hover:bg-[#f4f7f8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#dd2284]/25 motion-reduce:transition-none"
+                  type="button"
+                >
+                  <span className="flex size-8 items-center justify-center rounded-lg bg-[#102f3f]/[0.07] text-[#365767]">
+                    {copied ? (
+                      <Check aria-hidden="true" className="size-4" />
+                    ) : (
+                      <Copy aria-hidden="true" className="size-4" />
+                    )}
+                  </span>
+                  <span aria-live="polite">
+                    {copied
+                      ? "Enlace copiado"
+                      : copyError
+                        ? "No se pudo copiar"
+                        : "Copiar enlace"}
+                  </span>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={handleCopy}
-            className="flex items-center gap-2 bg-white border-2 border-dashed border-gold text-dark px-4 py-2 rounded-full shadow-lg font-aloevera text-sm"
-            aria-label="Copiar enlace de invitación"
+            ref={triggerRef}
+            whileHover={shouldReduceMotion ? undefined : { y: -2 }}
+            whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
+            onClick={() => setOpen((current) => !current)}
+            className="eventi-floating-control transition-colors motion-reduce:transition-none"
+            aria-label={
+              open ? "Cerrar opciones para compartir" : "Compartir invitación"
+            }
+            aria-expanded={open}
+            aria-controls={menuId}
             type="button"
           >
-            {copied ? (
-              <span>¡Copiado!</span>
+            {open ? (
+              <X aria-hidden="true" className="size-5" />
             ) : (
-              <>
-                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-                Copiar enlace
-              </>
+              <Share2 aria-hidden="true" className="size-5" />
             )}
           </motion.button>
-        </motion.div>
+        </motion.nav>
       )}
     </AnimatePresence>
   );

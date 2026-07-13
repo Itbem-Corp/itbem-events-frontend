@@ -23,7 +23,16 @@ export const TEST_TOKENS = {
 
 // Test attendees returned by GET /api/events/section/:id/attendees
 export const TEST_GRADUATION_ATTENDEES = [
-  { first_name: 'Ana Gloria',  last_name: 'Vásquez Velázquez', nickname: '', role: 'Graduado', order: 1 },
+  {
+    first_name: 'Ana Gloria',
+    last_name: 'Vásquez Velázquez',
+    nickname: '',
+    role: 'Graduado',
+    order: 1,
+    headline: 'Ingeniería en Sistemas',
+    bio: 'Apasionada por la tecnología y el diseño de experiencias.',
+    signature: 'Gracias por acompañarme',
+  },
   { first_name: 'Valeria',     last_name: 'Trujillo Iniesta',  nickname: '', role: 'Graduado', order: 2 },
   { first_name: 'Carlos',      last_name: 'Mendoza Ruiz',      nickname: '', role: 'Graduado', order: 3 },
 ] as const;
@@ -48,6 +57,8 @@ function makePresignedUrl(filename: string): string {
 
 export function makeSectionResponse(sectionId: string, resourceCount = 2) {
   return {
+    status: 200,
+    message: 'Resources loaded',
     data: Array.from({ length: resourceCount }, (_, i) => ({
       view_url: makePresignedUrl(`${sectionId.slice(0, 8)}-img-${i}.jpg`),
       title: `Test image ${i + 1}`,
@@ -60,6 +71,8 @@ export function makeSectionResponse(sectionId: string, resourceCount = 2) {
 
 export function makeGraduationPageSpec() {
   return {
+    status: 200,
+    message: 'Page spec loaded',
     data: {
       meta: {
         pageTitle: 'Nos Graduamos 2022-2025 | El Gran Día',
@@ -123,6 +136,8 @@ export function makeGraduationPageSpec() {
 
 export function makeWeddingPageSpec() {
   return {
+    status: 200,
+    message: 'Page spec loaded',
     data: {
       meta: { pageTitle: 'Andrés & Ivanna', musicUrl: '' },
       sections: [
@@ -144,17 +159,29 @@ export function makeInvitationResponse(overrides: {
   maxGuests?: number;
   prettyToken?: string;
   eventDate?: string;
+  eventIdentifier?: string;
 } = {}) {
+  const event = {
+    name: 'AndrÃ©s & Ivanna',
+    identifier: overrides.eventIdentifier ?? 'boda-ana-luis',
+    cover_image_url: 'events/wedding/cover.webp',
+    event_date_time: overrides.eventDate ?? '2026-08-15T20:30:00-06:00',
+    address: 'Hacienda Centro',
+    organizer_name: 'AndrÃ©s e Ivanna',
+    event_type: 'wedding',
+  };
+
   return {
+    status: 200,
+    message: 'Invitation loaded',
     data: {
       pretty_token: overrides.prettyToken ?? 'ABC-123',
+      event,
       invitation: {
-        ID: 'inv-test-001',
-        EventID: 'evt-test-001',
+        id: 'inv-test-001',
+        event_id: 'evt-test-001',
         max_guests: overrides.maxGuests ?? 3,
-        Event: {
-          EventDateTime: overrides.eventDate ?? '2026-08-15T20:30:00-06:00',
-        },
+        event,
       },
       guest: {
         first_name: 'Ana',
@@ -165,7 +192,11 @@ export function makeInvitationResponse(overrides: {
   };
 }
 
-export const RSVP_SUCCESS = { data: { message: 'RSVP updated' } };
+export const RSVP_SUCCESS = {
+  status: 200,
+  message: 'RSVP confirmed',
+  data: { message: 'RSVP updated' },
+};
 
 
 // -- MomentWall fixtures --
@@ -193,10 +224,17 @@ export function makeMomentsResponse(overrides: {
   items?: ReturnType<typeof makeMoment>[];
   total?: number;
   has_more?: boolean;
+  uploads_limit?: number;
   uploads_remaining?: number;
+  moments_wall_published?: boolean;
+  show_moment_wall?: boolean;
 } = {}) {
   const items = overrides.items ?? [];
+  const momentsWallPublished =
+    overrides.moments_wall_published ?? overrides.show_moment_wall ?? false;
   return {
+    status: 200,
+    message: 'success',
     data: {
       items,
       total: overrides.total ?? items.length,
@@ -204,14 +242,22 @@ export function makeMomentsResponse(overrides: {
       limit: 20,
       has_more: overrides.has_more ?? false,
       published: true,
-      uploads_remaining: overrides.uploads_remaining ?? 3,
+      moments_wall_published: momentsWallPublished,
+      show_moment_wall: momentsWallPublished,
+      uploads_limit: overrides.uploads_limit ?? 30,
+      uploads_remaining: overrides.uploads_remaining ?? 30,
       uploads_used: 0,
     },
   };
 }
 
-export function makeMomentWallPageSpec(identifier = MOMENT_EVENT_IDENTIFIER) {
+export function makeMomentWallPageSpec(
+  identifier = MOMENT_EVENT_IDENTIFIER,
+  configOverrides: Record<string, unknown> = {},
+) {
   return {
+    status: 200,
+    message: 'success',
     data: {
       meta: { pageTitle: 'Momentos del Evento', musicUrl: '' },
       sections: [
@@ -223,6 +269,13 @@ export function makeMomentWallPageSpec(identifier = MOMENT_EVENT_IDENTIFIER) {
             identifier,
             title: 'Momentos',
             subtitle: 'Comparte tus fotos favoritas',
+            allow_uploads: true,
+            allow_messages: true,
+            published: false,
+            moments_wall_published: false,
+            show_moment_wall: false,
+            share_uploads_enabled: true,
+            ...configOverrides,
           },
         },
       ],

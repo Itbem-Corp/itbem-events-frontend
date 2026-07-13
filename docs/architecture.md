@@ -158,30 +158,32 @@ Las páginas de evento son **públicas** — no hay usuario logueado. El acceso 
 
 - El token identifica a quién pertenece la invitación (`InvitationAccessToken` en el backend)
 - Es **opcional** — eventos sin acceso restringido simplemente no validan el token
-- Para RSVP: el componente `RSVPConfirmation` lee el `?token=` y llama a `/api/invitations/ByToken/:token`
+- Para RSVP: el componente `RSVPConfirmation` lee el `?token=` y llama a `/api/invitations/ByToken?token=...`
 - El backend devuelve `pretty_token` que se usa en el POST de confirmación
 
 **No hay auth de usuario** en este repo. El dashboard admin es un proyecto separado (Next.js).
 
 ---
 
-## Servidor de producción (`server.mjs`)
+## Runtime Cloudflare
 
-El adapter usa **modo `middleware`** (no `standalone`). El servidor HTTP lo levanta `server.mjs` en la raíz del proyecto.
+Astro genera un Worker de Cloudflare Pages en `dist/_worker.js`. El desarrollo
+diario usa `astro dev`; `npm start` y `npm run preview` sirven el build con
+`wrangler pages dev`, manteniendo localmente las mismas reglas SSR y de assets
+del despliegue.
 
 ```
 browser request
-  → http.createServer (server.mjs)
-      → withCompression(req, res)   # gzip o brotli via node:zlib
-          → handler(req, res)        # Astro SSR handler (dist/server/entry.mjs)
+  → Cloudflare Pages / Wrangler
+      → dist/_worker.js             # rutas Astro SSR
+      → dist/*                      # assets estáticos
 ```
 
-- **Brotli** — calidad 5, si `Accept-Encoding: br`
-- **gzip** — nivel 6, si `Accept-Encoding: gzip`
-- Solo comprime tipos compresibles: `text/*`, `application/javascript`, `application/json`, `image/svg+xml`
-- Sin dependencias extra — solo `node:http` y `node:zlib` nativos
+- Cloudflare aplica compresión y caching HTTP en el edge de producción.
+- Wrangler es una dependencia directa y versionada para que el preview sea reproducible.
+- El contenedor Docker también ejecuta ese Worker; no mantiene un segundo adapter Node.
 
-**Iniciar en producción:** `npm run start` o `node server.mjs`
+**Preview local:** `npm run build && npm start`
 
 ---
 
@@ -203,5 +205,17 @@ browser request
 4. **ResourcesBySectionSingle cache** — `sessionStorage` + expiry en `localStorage` basado en presigned URL params
 5. **EventPage sessionStorage cache** — page-spec cacheado 30 min; retorno a la misma invitación no hace fetch
 6. **Fuentes locales** — `/public/fonts/*.otf/.ttf`, sin CDN externo
-7. **Compresión gzip/brotli** — `server.mjs` aplica compresión usando `node:zlib` nativo
+7. **Entrega edge** — Cloudflare Pages aplica compresión y caching HTTP; Wrangler conserva el runtime Worker en preview local
 8. **HTML válido** — Un solo `<main>` por página
+9. **Shared-upload previews async** — el grid se descarga al seleccionar el
+   primer archivo y el diálogo solo al pedir una vista previa; el estado del
+   diálogo queda colocalizado dentro del grid y no aumenta el entry vacío.
+10. **Preview accesible** — el diálogo mueve/restaura foco, atrapa Tab, cierra
+    con Escape, bloquea/restaura scroll, pausa video al desmontar y desactiva
+    autoplay/movimiento ornamental con `prefers-reduced-motion`.
+11. **Visor de galería bajo demanda** — `MomentsGalleryLightbox` es un chunk
+    independiente que no se solicita durante el primer render. Se precarga al
+    detectar intención (`pointerenter` o foco) y `Suspense` comunica la apertura.
+    El visor unifica foto/video, atrapa y restaura foco, soporta Escape, flechas,
+    swipe, scroll lock, errores recuperables y movimiento reducido. Medición del
+    build 2026-07-09: entry `39.14 → 35.06 kB`; visor async `8.80 kB`.

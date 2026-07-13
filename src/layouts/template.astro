@@ -1,5 +1,8 @@
 ---
+import "../styles/global.css";
 import "../styles/fonts.css";
+import { eventsUrlOrigin } from "../lib/eventsUrl";
+import { sanitizePublicShareUrl } from "../lib/publicShareUrl";
 
 interface Props {
   title: string;
@@ -7,6 +10,7 @@ interface Props {
   ogDescription?: string;
   ogImage?: string;
   ogUrl?: string;
+  language?: string;
 }
 
 const {
@@ -15,26 +19,50 @@ const {
   ogDescription = 'Tu invitación digital',
   ogImage       = '',
   ogUrl         = '',
+  language      = 'es',
 } = Astro.props;
+
+const apiOrigin = eventsUrlOrigin(import.meta.env.PUBLIC_EVENTS_URL as string | undefined);
+const cloudflareAnalyticsEnabled = import.meta.env.PROD;
+
+function normalizeLanguage(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return 'es';
+  return trimmed.replace(/_/g, '-');
+}
+
+function ogLocaleForLanguage(value: string): string {
+  const lang = normalizeLanguage(value);
+  if (lang.startsWith('en')) return 'en_US';
+  if (lang.startsWith('es')) return 'es_MX';
+  return lang.replace(/-/g, '_');
+}
+
+const htmlLanguage = normalizeLanguage(language);
+const ogLocale = ogLocaleForLanguage(htmlLanguage);
+// SSR routes can receive preview, invitation, and access credentials in the
+// query string. Open Graph metadata is public/shareable, so it must never echo
+// those credentials even when an individual page passes Astro.url.href.
+const publicOgUrl = ogUrl ? sanitizePublicShareUrl(ogUrl) : '';
 ---
 
 <!DOCTYPE html>
-<html lang="es" class="overflow-x-hidden">
+<html lang={htmlLanguage} class="overflow-x-hidden">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#dd2284" />
+    <meta name="theme-color" content="#fbfaf9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#102f3f" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="EventiApp" />
     <link rel="apple-touch-icon" href="/icons/pwa-192.png" />
-    <!-- Preload critical fonts -->
+    <!-- Preload only the two fonts used by the initial public shell. -->
     <link rel="preload" href="/fonts/Bigilla.otf" as="font" type="font/otf" crossorigin>
     <link rel="preload" href="/fonts/Quicksand-VariableFont_wght.ttf" as="font" type="font/ttf" crossorigin>
-    <link rel="preload" href="/fonts/Aloevera-Regular.otf" as="font" type="font/otf" crossorigin>
-    <link rel="preload" href="/fonts/Astralaga SemiBold.ttf" as="font" type="font/ttf" crossorigin>
 
     <!-- Preconnect to AWS S3 -->
     <link rel="preconnect" href="https://itbem-events-bucket-prod.s3.us-east-2.amazonaws.com" crossorigin>
@@ -44,8 +72,8 @@ const {
     <link rel="dns-prefetch" href="https://maps.googleapis.com">
 
     <!-- Preconnect to API (DNS + TCP + TLS warmup) -->
-    <link rel="preconnect" href="https://api.eventiapp.com.mx" crossorigin>
-    <link rel="dns-prefetch" href="https://api.eventiapp.com.mx">
+    {apiOrigin && <link rel="preconnect" href={apiOrigin} crossorigin>}
+    {apiOrigin && <link rel="dns-prefetch" href={apiOrigin}>}
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
 
@@ -57,8 +85,8 @@ const {
     <meta property="og:description" content={ogDescription} />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="EventiApp" />
-    <meta property="og:locale" content="es_MX" />
-    {ogUrl   && <meta property="og:url"            content={ogUrl} />}
+    <meta property="og:locale" content={ogLocale} />
+    {publicOgUrl && <meta property="og:url" content={publicOgUrl} />}
     {ogImage && <meta property="og:image"          content={ogImage} />}
     {ogImage && <meta property="og:image:alt"      content={ogTitle} />}
     {ogImage && <meta property="og:image:width"    content="1200" />}
@@ -70,11 +98,13 @@ const {
     <meta name="twitter:title"       content={ogTitle} />
     <meta name="twitter:description" content={ogDescription} />
     {ogImage && <meta name="twitter:image" content={ogImage} />}
-    <!-- Cloudflare Web Analytics -->
-    <script defer src="https://static.cloudflareinsights.com/beacon.min.js"
-            data-cf-beacon='{"token": "07475d5be6a94add96c6e02ec0fab176"}'></script>
+    <!-- Cloudflare Web Analytics is production-only; local development stays private and quiet. -->
+    {cloudflareAnalyticsEnabled && (
+      <script is:inline defer src="https://static.cloudflareinsights.com/beacon.min.js"
+              data-cf-beacon='{"token": "07475d5be6a94add96c6e02ec0fab176"}'></script>
+    )}
   </head>
-  <body>
+  <body class="eventi-app-shell">
     <slot />
 
     <!-- Content protection: right-click + drag block (applies to all pages) -->
@@ -91,22 +121,3 @@ const {
     </script>
   </body>
 </html>
-
-<style is:global>
-  :root {
-    --foreground-rgb: 0, 0, 0;
-    --background-rgb: 255, 255, 255;
-  }
-
-  body {
-    font-family: 'Quicksand', 'Aloevera', 'Bigilla', serif;
-    background: rgb(var(--background-rgb));
-    color: #07293A;
-    margin: 0;
-    padding: 0;
-  }
-
-  html {
-    scroll-behavior: smooth;
-  }
-</style>

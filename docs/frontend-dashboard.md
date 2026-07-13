@@ -99,7 +99,7 @@ Ambos frontends usan el mismo backend. Endpoints compartidos:
 | Endpoint | dashboard-ts | cafetton-casero |
 |---|---|---|
 | `GET /api/resources/section/:id` | No aún (futuro) | ✅ ResourcesBySectionSingle |
-| `GET /api/invitations/ByToken/:token` | ❌ | ✅ InvitationDataLoader |
+| `GET /api/invitations/ByToken?token=...` | ❌ | ✅ InvitationDataLoader |
 | `POST /api/invitations/rsvp` | ❌ | ✅ Section1Wrapper |
 | Rutas protegidas (`/api/events`, `/api/clients`…) | ✅ | ❌ |
 

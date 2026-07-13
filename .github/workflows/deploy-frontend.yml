@@ -7,6 +7,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+env:
+  PUBLIC_EVENTS_URL: https://api.eventiapp.com.mx
+  PUBLIC_DASHBOARD_URL: ${{ vars.PUBLIC_DASHBOARD_URL || 'https://dashboard.eventiapp.com.mx' }}
+
 jobs:
   # ── Job 1: build + lint check (runs on every push & PR) ──────────────────
   build:
@@ -14,15 +21,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: 20
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify source revision
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.1
           cache: npm
+
+      - name: Validate public build URLs
+        run: |
+          node --input-type=module <<'NODE'
+          for (const name of ["PUBLIC_EVENTS_URL", "PUBLIC_DASHBOARD_URL"]) {
+            const value = process.env[name];
+            if (!value) throw new Error(`${name} is required`);
+            const url = new URL(value);
+            if (url.protocol !== "https:") {
+              throw new Error(`${name} must use HTTPS`);
+            }
+          }
+          NODE
 
       - name: Install dependencies
         run: npm ci
+
+      - name: TypeScript and Astro check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:unit
 
       - name: Build (static + SSR Functions)
         run: npm run build
@@ -31,9 +65,9 @@ jobs:
           PUBLIC_EVENTS_URL: https://api.eventiapp.com.mx
 
       - name: Upload dist artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: dist
+          name: dist-${{ github.sha }}
           path: dist/
           retention-days: 1
 
@@ -43,29 +77,201 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # Reserve enough job time for the rollback step even if a bounded deploy or
+    # smoke step consumes its full timeout.
+    timeout-minutes: 45
+    environment: production
+    concurrency:
+      group: cafetton-casero-production
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_PAGES_PROJECT: itbem-events-frontend
 
     permissions:
       contents: read
       deployments: write
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: 20
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify deployment revision
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.1
+          cache: npm
+
+      - name: Install pinned deployment CLI
+        run: |
+          npm ci --ignore-scripts
+          test "$(npx --no-install wrangler --version)" = "4.110.0"
 
       - name: Download dist artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          name: dist
+          name: dist-${{ github.sha }}
           path: dist/
 
-      - name: Install Wrangler
-        run: npm install -g wrangler@latest
+      - name: Fingerprint release artifact
+        id: release_artifact
+        run: |
+          set -euo pipefail
+          DIST_SHA256="$(tar --sort=name --mtime='UTC 1970-01-01' \
+            --owner=0 --group=0 --numeric-owner -cf - dist \
+            | sha256sum | cut -d' ' -f1)"
+          [[ "${DIST_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+          printf 'sha256=%s\n' "${DIST_SHA256}" >> "${GITHUB_OUTPUT}"
 
-      - name: Deploy to Cloudflare Pages
-        run: wrangler pages deploy dist --project-name=itbem-events-frontend --branch=main
+      - name: Capture current production deployment
+        id: previous_production
+        timeout-minutes: 2
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          PREVIOUS_DEPLOYMENT_ID="$(node scripts/cloudflare-pages-release.mjs current-production)"
+          test -n "${PREVIOUS_DEPLOYMENT_ID}"
+          printf 'deployment_id=%s\n' "${PREVIOUS_DEPLOYMENT_ID}" >> "${GITHUB_OUTPUT}"
+
+      - name: Deploy and smoke candidate
+        id: candidate
+        timeout-minutes: 8
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-candidate.jsonl
+        run: |
+          set -euo pipefail
+          rm -f "${WRANGLER_OUTPUT_FILE_PATH}"
+          npx --no-install wrangler pages deploy dist \
+            --project-name="${CLOUDFLARE_PAGES_PROJECT}" \
+            --branch=deployment-candidate \
+            --commit-hash="${GITHUB_SHA}" \
+            --commit-dirty=false
+
+          CANDIDATE_JSON="$(jq -ecs \
+            --arg project "${CLOUDFLARE_PAGES_PROJECT}" \
+            --arg sha "${GITHUB_SHA}" \
+            'map(select(
+              .type == "pages-deploy-detailed"
+              and .version == 1
+              and .pages_project == $project
+              and .environment == "preview"
+              and .deployment_trigger.metadata.commit_hash == $sha
+            )) | if length == 1 then .[0] else error("expected exactly one candidate deployment") end' \
+            "${WRANGLER_OUTPUT_FILE_PATH}")"
+          CANDIDATE_ID="$(jq -er '.deployment_id' <<< "${CANDIDATE_JSON}")"
+          CANDIDATE_URL="$(jq -er '.url' <<< "${CANDIDATE_JSON}")"
+          case "${CANDIDATE_URL}" in
+            https://*) ;;
+            *) echo "Candidate deployment did not return an HTTPS URL" >&2; exit 1 ;;
+          esac
+
+          curl --fail --silent --show-error --location \
+            --retry 6 --retry-all-errors --retry-delay 5 --max-time 20 \
+            "${CANDIDATE_URL%/}/offline/" > /dev/null
+          bash scripts/smoke-security-headers.sh "$CANDIDATE_URL"
+          bash scripts/smoke-root.sh "$CANDIDATE_URL"
+
+          printf 'deployment_id=%s\n' "${CANDIDATE_ID}" >> "${GITHUB_OUTPUT}"
+          printf 'deployment_url=%s\n' "${CANDIDATE_URL}" >> "${GITHUB_OUTPUT}"
+
+      # Cloudflare Pages preview deployments cannot be promoted or used as
+      # rollback targets. Re-upload the same downloaded dist/ artifact to the
+      # production branch after its immutable preview URL passes smoke tests.
+      - name: Publish validated artifact to production
+        id: production_rollout
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-production.jsonl
+          PREVIOUS_DEPLOYMENT_ID: ${{ steps.previous_production.outputs.deployment_id }}
+          EXPECTED_DIST_SHA256: ${{ steps.release_artifact.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          printf 'attempted=true\n' >> "${GITHUB_OUTPUT}"
+          ACTUAL_DIST_SHA256="$(tar --sort=name --mtime='UTC 1970-01-01' \
+            --owner=0 --group=0 --numeric-owner -cf - dist \
+            | sha256sum | cut -d' ' -f1)"
+          test "${ACTUAL_DIST_SHA256}" = "${EXPECTED_DIST_SHA256}"
+          rm -f "${WRANGLER_OUTPUT_FILE_PATH}"
+          npx --no-install wrangler pages deploy dist \
+            --project-name="${CLOUDFLARE_PAGES_PROJECT}" \
+            --branch=main \
+            --commit-hash="${GITHUB_SHA}" \
+            --commit-dirty=false
+
+          PRODUCTION_JSON="$(jq -ecs \
+            --arg project "${CLOUDFLARE_PAGES_PROJECT}" \
+            --arg sha "${GITHUB_SHA}" \
+            'map(select(
+              .type == "pages-deploy-detailed"
+              and .version == 1
+              and .pages_project == $project
+              and .environment == "production"
+              and .deployment_trigger.metadata.commit_hash == $sha
+            )) | if length == 1 then .[0] else error("expected exactly one production deployment") end' \
+            "${WRANGLER_OUTPUT_FILE_PATH}")"
+          DEPLOYMENT_ID="$(jq -er '.deployment_id' <<< "${PRODUCTION_JSON}")"
+          DEPLOYMENT_URL="$(jq -er '.url' <<< "${PRODUCTION_JSON}")"
+          test "${DEPLOYMENT_ID}" != "${PREVIOUS_DEPLOYMENT_ID}"
+
+          VERIFIED_URL="$(node scripts/cloudflare-pages-release.mjs \
+            verify-production "${DEPLOYMENT_ID}" "${GITHUB_SHA}")"
+          test "${VERIFIED_URL%/}" = "${DEPLOYMENT_URL%/}"
+
+          printf 'deployment_id=%s\n' "${DEPLOYMENT_ID}" >> "${GITHUB_OUTPUT}"
+          printf 'deployment_url=%s\n' "${DEPLOYMENT_URL}" >> "${GITHUB_OUTPUT}"
+
+      - name: Smoke production deployment and public domain
+        id: post_production_smoke
+        if: steps.production_rollout.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          DEPLOYMENT_URL: ${{ steps.production_rollout.outputs.deployment_url }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            --retry 6 --retry-all-errors --retry-delay 5 --max-time 20 \
+            "${DEPLOYMENT_URL%/}/offline/" > /dev/null
+          bash scripts/smoke-security-headers.sh "${DEPLOYMENT_URL}"
+          bash scripts/smoke-root.sh "${DEPLOYMENT_URL}"
+          curl --fail --silent --show-error --location \
+            --retry 6 --retry-all-errors --retry-delay 5 --max-time 20 \
+            "https://www.eventiapp.com.mx/offline/" > /dev/null
+          bash scripts/smoke-security-headers.sh "https://www.eventiapp.com.mx"
+          bash scripts/smoke-root.sh "https://www.eventiapp.com.mx"
+
+      - name: Roll back production after a failed rollout
+        if: >-
+          ${{ always()
+            && steps.production_rollout.outputs.attempted == 'true'
+            && (steps.production_rollout.outcome != 'success'
+              || steps.post_production_smoke.outcome != 'success') }}
+        timeout-minutes: 5
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PREVIOUS_DEPLOYMENT_ID: ${{ steps.previous_production.outputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          node scripts/cloudflare-pages-release.mjs rollback "${PREVIOUS_DEPLOYMENT_ID}"
+
+      - name: Fail any incomplete production rollout
+        if: >-
+          ${{ always()
+            && (steps.production_rollout.outcome != 'success'
+              || steps.post_production_smoke.outcome != 'success') }}
+        run: |
+          echo "::error::Production rollout failed or did not complete; any attempted mutation was rolled back to the previous canonical deployment."
+          exit 1

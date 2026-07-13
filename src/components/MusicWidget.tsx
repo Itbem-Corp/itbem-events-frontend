@@ -1,95 +1,117 @@
-import React, { useEffect, useState, useRef } from 'react';
-import type { ComponentType } from 'react';
-import { Pause, Play } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+"use client";
+
+import { Music2, Pause, Play } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type MouseEvent,
+} from "react";
+import type { PropTypes as ReactHowlerProps } from "react-howler";
 
 interface MusicWidgetProps {
   audioUrl: string;
   volume?: number;
 }
 
-export default function MusicWidget({ audioUrl, volume = 0.8 }: MusicWidgetProps) {
+export default function MusicWidget({
+  audioUrl,
+  volume = 0.8,
+}: MusicWidgetProps) {
   const [playing, setPlaying] = useState(false);
-  // react-howler is loaded only on first user interaction
-  const [Howler, setHowler] = useState<ComponentType<any> | null>(null);
-  const howlerRef = useRef(null);
+  const [Howler, setHowler] =
+    useState<ComponentType<ReactHowlerProps> | null>(null);
+  const howlerPromiseRef =
+    useRef<Promise<ComponentType<ReactHowlerProps>> | null>(null);
+  const shouldReduceMotion = useReducedMotion();
 
-  const loadHowler = async () => {
-    if (Howler) return;
-    const mod = await import('react-howler');
-    setHowler(() => mod.default);
-  };
+  const loadHowler = useCallback(async () => {
+    if (!howlerPromiseRef.current) {
+      howlerPromiseRef.current = import("react-howler").then(
+        (module) => module.default,
+      );
+    }
+    const Component = await howlerPromiseRef.current;
+    setHowler(
+      (current: ComponentType<ReactHowlerProps> | null) =>
+        current ?? Component,
+    );
+  }, []);
 
   useEffect(() => {
-    const enableMusic = async () => {
-      await loadHowler();
-      setPlaying(true);
-      window.removeEventListener('click', enableMusic);
-      window.removeEventListener('scroll', enableMusic);
-    };
-
     const handleVisibilityChange = () => {
       if (document.hidden) setPlaying(false);
     };
 
-    window.addEventListener('click', enableMusic);
-    window.addEventListener('scroll', enableMusic);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.removeEventListener('click', enableMusic);
-      window.removeEventListener('scroll', enableMusic);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
-  const togglePlayback = async () => {
+  const togglePlayback = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
     await loadHowler();
-    setPlaying(prev => !prev);
+    setPlaying((current) => !current);
   };
 
   return (
     <>
       {Howler && (
-        <Howler
-          src={audioUrl}
-          playing={playing}
-          loop
-          volume={volume}
-          ref={howlerRef}
-        />
+        <Howler src={audioUrl} playing={playing} loop volume={volume} />
       )}
 
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="fixed bottom-5 left-5 z-50"
+        transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: "easeOut" }}
+        className="fixed bottom-[var(--eventi-safe-bottom)] left-4 z-[45] sm:left-5"
       >
-        <button
+        <motion.button
           onClick={togglePlayback}
-          className="group relative w-16 h-16 bg-white/70 backdrop-blur-md border border-white/20 rounded-full shadow-xl flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
-          aria-label={playing ? 'Pausar música' : 'Reproducir música'}
+          whileHover={shouldReduceMotion ? undefined : { y: -2 }}
+          whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
+          className="eventi-floating-control group relative transition-colors motion-reduce:transition-none"
+          aria-label={playing ? "Pausar música" : "Reproducir música"}
+          aria-pressed={playing}
+          type="button"
         >
           <AnimatePresence>
-            {playing && (
-              <motion.div
-                className="absolute inset-0 rounded-full bg-pink-400/30 blur-md z-0"
-                initial={{ scale: 1, opacity: 0.4 }}
-                animate={{ scale: 1.5, opacity: 0 }}
-                exit={{ scale: 1, opacity: 0 }}
-                transition={{ duration: 1.5, ease: 'easeInOut', repeat: Infinity }}
+            {playing && !shouldReduceMotion && (
+              <motion.span
+                aria-hidden="true"
+                className="absolute inset-1 rounded-full border border-[#dd2284]/[0.35]"
+                initial={{ scale: 0.88, opacity: 0.65 }}
+                animate={{ scale: 1.38, opacity: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 1.8, ease: "easeOut", repeat: Infinity }}
               />
             )}
           </AnimatePresence>
 
-          <div className="text-black relative z-10">
-            {playing
-              ? <Pause size={28} className="group-hover:scale-110 transition-transform" />
-              : <Play size={28} className="group-hover:scale-110 transition-transform" />
-            }
-          </div>
-        </button>
+          <span
+            aria-hidden="true"
+            className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-[#dd2284] text-white shadow-sm"
+          >
+            <Music2 className="size-2.5" strokeWidth={2.2} />
+          </span>
+
+          <span className="relative flex items-center justify-center text-[var(--eventi-color-heading,var(--eventi-ink))]">
+            {playing ? (
+              <Pause aria-hidden="true" className="size-5" fill="currentColor" />
+            ) : (
+              <Play
+                aria-hidden="true"
+                className="ml-0.5 size-5"
+                fill="currentColor"
+              />
+            )}
+          </span>
+        </motion.button>
       </motion.div>
     </>
   );

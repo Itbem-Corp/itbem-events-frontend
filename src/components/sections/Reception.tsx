@@ -5,6 +5,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ResourcesBySectionSingle, { type Section } from '../ResourcesBySectionSingle';
 import ImageWithLoader from '../ImageWithLoader';
 import type { SectionComponentProps, ReceptionConfig } from '../engine/types';
+import { resourceAtPosition } from '../../lib/publicResources';
+
+const bodyStyle = {
+  color: 'var(--eventi-color-body, #07293A)',
+};
 
 function Skeleton() {
   return (
@@ -30,13 +35,19 @@ function Skeleton() {
   );
 }
 
-export default function Reception({ sectionId, config, EVENTS_URL }: SectionComponentProps) {
+export default function Reception({ sectionId, config, EVENTS_URL, publicAccess }: SectionComponentProps) {
   const { venueText, mapUrl } = config as unknown as ReceptionConfig;
   const [section, setSection] = useState<Section | null>(null);
+  const topImages = [0, 1]
+    .map((position) => resourceAtPosition(section?.sectionResources, position))
+    .filter((resource): resource is NonNullable<typeof resource> => Boolean(resource));
+  const bottomImages = [2, 3]
+    .map((position) => resourceAtPosition(section?.sectionResources, position))
+    .filter((resource): resource is NonNullable<typeof resource> => Boolean(resource));
 
   return (
     <>
-      <ResourcesBySectionSingle sectionId={sectionId} EVENTS_URL={EVENTS_URL} onLoaded={setSection} />
+      <ResourcesBySectionSingle sectionId={sectionId} EVENTS_URL={EVENTS_URL} publicAccess={publicAccess} onLoaded={setSection} />
 
       <AnimatePresence mode="wait">
         {section ? (
@@ -49,7 +60,7 @@ export default function Reception({ sectionId, config, EVENTS_URL }: SectionComp
             transition={{ duration: 0.6 }}
           >
             <div className="grid grid-cols-2 gap-2 sm:gap-4">
-              {section.sectionResources.slice(0, 2).map(r => (
+              {topImages.map(r => (
                 <div key={r.position} className="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
                   <ImageWithLoader src={r.view_url} alt={r.title || ''} />
                 </div>
@@ -61,22 +72,23 @@ export default function Reception({ sectionId, config, EVENTS_URL }: SectionComp
                 <div className="bg-gray-300 w-full max-w-[500px] aspect-[4/3] rounded mx-auto overflow-hidden">
                   <iframe
                     src={mapUrl}
+                    title={`Mapa de ${venueText || "la recepción"}`}
                     className="w-full h-full"
                     allowFullScreen
                     loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
+                    referrerPolicy="no-referrer"
                   />
                 </div>
               </div>
               <div className="sm:basis-2/3 place-content-center sm:ps-2">
-                <p className="text-sm sm:text-base md:text-lg lg:text-xl leading-relaxed font-quicksand text-[#07293A]">
+                <p className="text-sm sm:text-base md:text-lg lg:text-xl leading-relaxed font-quicksand" style={bodyStyle}>
                   {venueText}
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:gap-4">
-              {section.sectionResources.slice(2, 4).map(r => (
+              {bottomImages.map(r => (
                 <div key={r.position} className="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
                   <ImageWithLoader src={r.view_url} alt={r.title || ''} />
                 </div>

@@ -3,25 +3,51 @@ export const prerender = false
 
 import TemplateLayout from '../../../layouts/template.astro'
 import TvSlideshow from '../../../components/moments/TvSlideshow'
-import { fetchEventOgData } from '../../../lib/og'
+import { buildTvOgMeta, fetchEventOgData } from '../../../lib/og'
+import { normalizeEventsUrl } from '../../../lib/eventsUrl'
+import { normalizePathIdentifier } from '../../../lib/pathIdentifier'
+import { readPublicAccessParams } from '../../../lib/publicPreview'
 
-const rawUrl = import.meta.env.PUBLIC_EVENTS_URL as string ?? 'http://localhost:8080/'
-const EVENTS_URL = rawUrl.endsWith('/') ? rawUrl : rawUrl + '/'
-const { identifier } = Astro.params
+const EVENTS_URL = normalizeEventsUrl(import.meta.env.PUBLIC_EVENTS_URL as string | undefined)
+const identifier = normalizePathIdentifier(Astro.params.identifier)
+const accessParams = readPublicAccessParams(Astro.url.search)
+const previewToken = accessParams.previewToken
 
 let ogTitle = 'Slideshow del evento'
 let ogDesc  = 'Modo TV — disfruta los momentos del evento en pantalla completa.'
+let pageLanguage = 'es'
+let ogImage = ''
 const ogUrl = Astro.url.href
+let publicContentVersion = ''
 
 if (identifier) {
-  const ev = await fetchEventOgData(EVENTS_URL, identifier)
+  const ev = await fetchEventOgData(
+    EVENTS_URL,
+    identifier,
+    previewToken,
+    accessParams.cacheKey,
+    accessParams.invitationToken,
+    accessParams.accessToken
+  )
   if (ev) {
     ogTitle = ev.name ? `Slideshow — ${ev.name}` : ogTitle
 
-    if (ev.organizer_name) {
-      ogDesc = `Disfruta los momentos de ${ev.name} en modo TV.`
-    }
+    const meta = buildTvOgMeta(ev, EVENTS_URL)
+    ogTitle = meta.title
+    ogDesc = meta.description
+    ogImage = meta.image
+    pageLanguage = ev.language ?? pageLanguage
+    publicContentVersion = ev.content_version ?? ''
   }
+}
+
+const tvCacheKey = accessParams.cacheKey || publicContentVersion
+const tvPublicAccess = {
+  previewToken,
+  cacheKey: tvCacheKey,
+  sendCacheKey: Boolean(tvCacheKey && !accessParams.cacheKey),
+  invitationToken: accessParams.invitationToken,
+  accessToken: accessParams.accessToken ?? '',
 }
 ---
 
@@ -29,11 +55,15 @@ if (identifier) {
   title={ogTitle}
   ogTitle={ogTitle}
   ogDescription={ogDesc}
+  ogImage={ogImage}
   ogUrl={ogUrl}
+  language={pageLanguage}
 >
   <TvSlideshow
     client:only="react"
     EVENTS_URL={EVENTS_URL}
+    previewToken={previewToken}
+    publicAccess={tvPublicAccess}
   />
 
   <style is:global>

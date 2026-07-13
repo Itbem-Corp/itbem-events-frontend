@@ -29,4 +29,6 @@ playwright-report/
 
 # Local dev helpers
 .claude/
+.local/
+.wrangler/
 write_wall.py

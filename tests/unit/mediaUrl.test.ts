@@ -1,86 +1,128 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import {
+  isRawMomentMediaPath,
+  isVideoMedia,
+  isVideoMediaUrl,
+  resolvePublicMediaUrl,
+} from "../../src/lib/mediaUrl";
 
-// Mirrors getMediaUrl() and isVideoUrl() from MomentWall.tsx (lines 28-36).
+describe("resolvePublicMediaUrl", () => {
+  const base = "https://events.example.com/";
 
-function getMediaUrl(contentUrl: string, EVENTS_URL: string): string {
-  if (!contentUrl) return "";
-  if (contentUrl.startsWith("http")) return contentUrl;
-  return EVENTS_URL + "storage/" + contentUrl;
-}
-
-function isVideoUrl(url: string): boolean {
-  return /\.(mp4|webm|mov|avi|m4v)(\?|$)/i.test(url);
-}
-
-describe("getMediaUrl", () => {
-  const BASE = "https://events.example.com/";
-
-  it("returns empty string for empty contentUrl", () => {
-    expect(getMediaUrl("", BASE)).toBe("");
+  it("returns an empty string for missing media paths", () => {
+    expect(resolvePublicMediaUrl("", base)).toBe("");
+    expect(resolvePublicMediaUrl(null, base)).toBe("");
+    expect(resolvePublicMediaUrl(undefined, base)).toBe("");
   });
 
-  it("returns empty string for falsy contentUrl", () => {
-    // TypeScript signature accepts string, but runtime may receive undefined/null from API
-    expect(getMediaUrl(null as unknown as string, BASE)).toBe("");
-    expect(getMediaUrl(undefined as unknown as string, BASE)).toBe("");
-  });
-
-  it("returns absolute http URL unchanged", () => {
-    const abs = "http://cdn.example.com/photo.jpg";
-    expect(getMediaUrl(abs, BASE)).toBe(abs);
-  });
-
-  it("returns absolute https URL unchanged", () => {
-    const abs = "https://cdn.example.com/photo.jpg";
-    expect(getMediaUrl(abs, BASE)).toBe(abs);
-  });
-
-  it("prepends EVENTS_URL + 'storage/' to a relative path", () => {
-    expect(getMediaUrl("events/abc/photo.jpg", BASE)).toBe(
-      "https://events.example.com/storage/events/abc/photo.jpg"
+  it("returns absolute URLs unchanged", () => {
+    expect(
+      resolvePublicMediaUrl("http://cdn.example.com/photo.jpg", base),
+    ).toBe("http://cdn.example.com/photo.jpg");
+    expect(
+      resolvePublicMediaUrl("https://cdn.example.com/photo.jpg", base),
+    ).toBe("https://cdn.example.com/photo.jpg");
+    expect(resolvePublicMediaUrl("blob:https://app.example/id", base)).toBe(
+      "blob:https://app.example/id",
+    );
+    expect(resolvePublicMediaUrl("data:image/webp;base64,AAAA", base)).toBe(
+      "data:image/webp;base64,AAAA",
     );
   });
 
-  it("works when EVENTS_URL already has a trailing slash", () => {
-    expect(getMediaUrl("img.png", "https://api.example.com/")).toBe(
-      "https://api.example.com/storage/img.png"
+  it("returns protocol-relative CDN URLs unchanged", () => {
+    expect(resolvePublicMediaUrl("//cdn.example.com/photo.jpg", base)).toBe(
+      "//cdn.example.com/photo.jpg",
+    );
+  });
+
+  it("prepends the public storage route to raw backend keys", () => {
+    expect(resolvePublicMediaUrl("events/abc/photo.jpg", base)).toBe(
+      "https://events.example.com/storage/events/abc/photo.jpg",
+    );
+  });
+
+  it("does not duplicate the storage route when the API already returns it", () => {
+    expect(resolvePublicMediaUrl("/storage/events/abc/photo.jpg", base)).toBe(
+      "https://events.example.com/storage/events/abc/photo.jpg",
+    );
+  });
+
+  it("normalizes a base URL without a trailing slash", () => {
+    expect(resolvePublicMediaUrl("img.png", "https://api.example.com")).toBe(
+      "https://api.example.com/storage/img.png",
+    );
+  });
+
+  it("does not keep /api in backend media URLs", () => {
+    expect(
+      resolvePublicMediaUrl("img.png", "https://api.example.com/api"),
+    ).toBe("https://api.example.com/storage/img.png");
+  });
+
+  it("preserves backend deployment subpaths before storage media URLs", () => {
+    expect(
+      resolvePublicMediaUrl(
+        "events/abc/photo.jpg",
+        "https://staging.example.com/eventi-api/api",
+      ),
+    ).toBe(
+      "https://staging.example.com/eventi-api/storage/events/abc/photo.jpg",
     );
   });
 });
 
-describe("isVideoUrl", () => {
-  it("recognises .mp4 URLs", () => {
-    expect(isVideoUrl("https://cdn.example.com/clip.mp4")).toBe(true);
-  });
-
-  it("recognises .webm URLs", () => {
-    expect(isVideoUrl("https://cdn.example.com/clip.webm")).toBe(true);
-  });
-
-  it("recognises .mov URLs", () => {
-    expect(isVideoUrl("https://cdn.example.com/clip.mov")).toBe(true);
-  });
-
-  it("recognises .avi URLs", () => {
-    expect(isVideoUrl("clip.avi")).toBe(true);
-  });
-
-  it("recognises .m4v URLs", () => {
-    expect(isVideoUrl("clip.m4v")).toBe(true);
-  });
-
-  it("recognises video URLs with query strings", () => {
-    expect(isVideoUrl("https://cdn.example.com/clip.mp4?token=abc")).toBe(true);
+describe("isVideoMediaUrl", () => {
+  it("recognizes video URLs and raw keys", () => {
+    expect(isVideoMediaUrl("https://cdn.example.com/clip.mp4")).toBe(true);
+    expect(
+      isVideoMediaUrl(
+        "https://cdn.example.com/moments/event/raw/clip.mp4?X-Amz-Signature=fake",
+      ),
+    ).toBe(true);
+    expect(isVideoMediaUrl("clip.webm")).toBe(true);
+    expect(isVideoMediaUrl("clip.MOV?token=abc")).toBe(true);
+    expect(isVideoMediaUrl("clip.m4v#poster")).toBe(true);
+    expect(isVideoMediaUrl("clip.3gp?token=abc")).toBe(true);
+    expect(isVideoMediaUrl("clip.avi?token=abc")).toBe(true);
+    expect(isVideoMediaUrl("moments/event/raw/clip.mkv")).toBe(true);
   });
 
   it("returns false for image URLs", () => {
-    expect(isVideoUrl("https://cdn.example.com/photo.jpg")).toBe(false);
-    expect(isVideoUrl("https://cdn.example.com/photo.png")).toBe(false);
-    expect(isVideoUrl("photo.webp")).toBe(false);
+    expect(isVideoMediaUrl("https://cdn.example.com/photo.jpg")).toBe(false);
+    expect(isVideoMediaUrl("photo.webp")).toBe(false);
+  });
+});
+
+describe("isVideoMedia", () => {
+  it("prefers backend content_type when present", () => {
+    expect(
+      isVideoMedia("moments/event/media-without-extension", "video/mp4"),
+    ).toBe(true);
+    expect(isVideoMedia("moments/event/photo.jpg", "video/quicktime")).toBe(
+      true,
+    );
   });
 
-  it("is case-insensitive", () => {
-    expect(isVideoUrl("clip.MP4")).toBe(true);
-    expect(isVideoUrl("clip.MOV")).toBe(true);
+  it("falls back to media extension when content_type is absent", () => {
+    expect(isVideoMedia("moments/event/clip.webm")).toBe(true);
+    expect(isVideoMedia("moments/event/photo.webp")).toBe(false);
+  });
+});
+
+describe("isRawMomentMediaPath", () => {
+  it("detects raw moment object keys in relative and signed URLs", () => {
+    expect(isRawMomentMediaPath("moments/event/raw/photo.jpg")).toBe(true);
+    expect(
+      isRawMomentMediaPath(
+        "https://cdn.example.com/moments/event/raw/photo.jpg?sig=fake",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not flag optimized moment object keys", () => {
+    expect(isRawMomentMediaPath("moments/event/optimized/photo.webp")).toBe(
+      false,
+    );
   });
 });

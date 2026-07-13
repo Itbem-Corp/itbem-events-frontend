@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ResourcesBySectionSingle, { type Section } from '../ResourcesBySectionSingle';
 import ImageWithLoader from '../ImageWithLoader';
 import type { SectionComponentProps } from '../engine/types';
+import { resourceAtPosition } from '../../lib/publicResources';
 
 function Skeleton() {
   return (
@@ -23,12 +24,18 @@ function Skeleton() {
   );
 }
 
-export default function PhotoGrid({ sectionId, EVENTS_URL }: SectionComponentProps) {
+export default function PhotoGrid({ sectionId, EVENTS_URL, publicAccess }: SectionComponentProps) {
   const [section, setSection] = useState<Section | null>(null);
+  const topImages = [0, 1]
+    .map((position) => resourceAtPosition(section?.sectionResources, position))
+    .filter((resource): resource is NonNullable<typeof resource> => Boolean(resource));
+  const bottomImages = [2, 3, 4]
+    .map((position) => resourceAtPosition(section?.sectionResources, position))
+    .filter((resource): resource is NonNullable<typeof resource> => Boolean(resource));
 
   return (
     <>
-      <ResourcesBySectionSingle sectionId={sectionId} EVENTS_URL={EVENTS_URL} onLoaded={setSection} />
+      <ResourcesBySectionSingle sectionId={sectionId} EVENTS_URL={EVENTS_URL} publicAccess={publicAccess} onLoaded={setSection} />
 
       <AnimatePresence mode="wait">
         {section ? (
@@ -47,7 +54,7 @@ export default function PhotoGrid({ sectionId, EVENTS_URL }: SectionComponentPro
               animate="visible"
               variants={{ visible: { transition: { staggerChildren: 0.1 } }, hidden: {} }}
             >
-              {section.sectionResources.slice(0, 2).map(r => (
+              {topImages.map(r => (
                 <motion.div
                   key={r.position}
                   variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } }}
@@ -66,7 +73,7 @@ export default function PhotoGrid({ sectionId, EVENTS_URL }: SectionComponentPro
               animate="visible"
               variants={{ visible: { transition: { staggerChildren: 0.1 } }, hidden: {} }}
             >
-              {section.sectionResources.slice(2, 5).map(r => (
+              {bottomImages.map(r => (
                 <motion.div
                   key={r.position}
                   variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } }}

@@ -1,32 +1,11 @@
 import { describe, it, expect } from "vitest";
-
-// Mirrors constants and validateFile() from SharedUploadPage.tsx (lines 43-90).
+import { validateUploadFile } from "../../src/lib/uploadFilePolicy";
 
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024; // 25 MB
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024; // 200 MB
 
-const ALLOWED_TYPES = [
-  "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif",
-  "image/heic", "image/heif", "image/avif",
-  "video/mp4", "video/webm", "video/quicktime", "video/x-m4v", "video/3gpp",
-];
-const ALLOWED_EXTENSIONS = [
-  "jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "avif",
-  "mp4", "mov", "webm", "m4v", "3gp",
-];
-
 function validateFile(name: string, type: string, size: number): string | null {
-  const isVideo = type.startsWith("video/");
-  const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
-  if (size > maxBytes) {
-    const maxMB = isVideo ? 200 : 25;
-    return `"${name}" excede ${maxMB} MB.`;
-  }
-  const ext = name.toLowerCase().split(".").pop() ?? "";
-  if (!ALLOWED_TYPES.includes(type) && !ALLOWED_EXTENSIONS.includes(ext)) {
-    return `"${name}" tiene formato no soportado.`;
-  }
-  return null;
+  return validateUploadFile({ name, type, size });
 }
 
 describe("validateFile — size limits", () => {
@@ -82,11 +61,18 @@ describe("validateFile — type/extension checks", () => {
     expect(validateFile("clip.mp4", "video/mp4", 1024)).toBeNull();
   });
 
+  it("accepts backend-supported avi and mkv videos", () => {
+    expect(validateFile("clip.avi", "video/x-msvideo", 1024)).toBeNull();
+    expect(validateFile("clip.mkv", "video/x-matroska", 1024)).toBeNull();
+  });
+
   it("accepts a file by extension even when MIME type is empty (iOS/Android quirk)", () => {
     // Some mobile browsers report type="" for HEIC/HEIF files.
     // validateFile falls back to extension matching.
     expect(validateFile("photo.heic", "", 1024)).toBeNull();
     expect(validateFile("photo.mov", "", 1024)).toBeNull();
+    expect(validateFile("clip.avi", "", 1024)).toBeNull();
+    expect(validateFile("clip.mkv", "", 1024)).toBeNull();
   });
 
   it("rejects an unsupported type with no recognised extension", () => {

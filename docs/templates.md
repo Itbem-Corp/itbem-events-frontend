@@ -177,7 +177,7 @@ export default function MiSeccion({ sectionId, config, EVENTS_URL }: SectionComp
 ```
 Mount
   ├─ Lee ?token= de URL (useEffect)
-  ├─ InvitationLoader → GET byToken → setInvData
+  ├─ InvitationLoader → GET ByToken → setInvData
   └─ ResourcesBySectionSingle (sectionId del spec) → setImages
 
 Estados de render:

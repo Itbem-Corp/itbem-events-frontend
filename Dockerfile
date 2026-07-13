@@ -1,45 +1,39 @@
 # ---------- Base image ----------
-FROM node:lts AS base
+FROM node:22.23.1-bookworm-slim AS base
 WORKDIR /app
-# Accept public API URL at build time
-ARG PUBLIC_EVENTS_URL
-ENV PUBLIC_EVENTS_URL=${PUBLIC_EVENTS_URL}
 
-# Copy only package files to install dependencies
+# Public URLs are compiled into the Astro client bundle during the build.
+ARG PUBLIC_EVENTS_URL=http://localhost:8080/
+ARG PUBLIC_DASHBOARD_URL=http://localhost:3000
+ENV PUBLIC_EVENTS_URL=${PUBLIC_EVENTS_URL}
+ENV PUBLIC_DASHBOARD_URL=${PUBLIC_DASHBOARD_URL}
+
+# Copy only package files to keep dependency layers cacheable.
 COPY package.json package-lock.json ./
 
 # ---------- Production dependencies ----------
 FROM base AS prod-deps
-RUN npm install --omit=dev
-
-# ---------- Full dependencies for build ----------
-FROM base AS build-deps
-RUN npm install
+RUN npm ci --omit=dev
 
 # ---------- Build step ----------
-FROM build-deps AS build
+FROM base AS build
+RUN npm ci
 COPY . .
-COPY public ./public
 RUN npm run build
 
 # ---------- Runtime image ----------
 FROM base AS runtime
 
-# Copy production node_modules
+# Wrangler is a declared runtime dependency and serves the Cloudflare Pages
+# artifact locally with the same worker semantics used in production.
 COPY --from=prod-deps /app/node_modules ./node_modules
-
-# Copy built app (server and client)
 COPY --from=build /app/dist ./dist
+COPY scripts/serve-cloudflare.mjs ./scripts/serve-cloudflare.mjs
 
-# Copy custom server with gzip/brotli compression middleware
-COPY server.mjs ./server.mjs
-
-# COPY estáticos del frontend a un volumen accesible por NGINX (nuevo paso)
-RUN mkdir -p /public
-COPY --from=build /app/dist/client /public
-
+ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=4321
+ENV WRANGLER_SEND_METRICS=false
 EXPOSE 4321
 
-CMD ["node", "./server.mjs"]
+CMD ["node", "./scripts/serve-cloudflare.mjs"]

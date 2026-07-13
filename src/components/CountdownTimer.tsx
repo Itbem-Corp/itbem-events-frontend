@@ -2,17 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getDateInTimeZone } from "../utils/getDateInTimeZone";
+import {
+    calculateCountdownTimeLeft,
+    type TimeLeft,
+} from "../lib/countdown";
 
 interface CountdownTimerProps {
     targetDate: string | Date;
-}
-
-interface TimeLeft {
-    days: number;
-    hours: number;
-    minutes: number;
-    seconds: number;
 }
 
 function AnimatedDigit({ value }: { value: number }) {
@@ -32,58 +28,50 @@ function AnimatedDigit({ value }: { value: number }) {
     );
 }
 
+const timerStyle = {
+    color: "var(--eventi-color-heading, #07293A)",
+};
+
+const digitStyle = {
+    color: "var(--eventi-color-accent, #07293A)",
+};
+
 export default function CountdownTimer({ targetDate }: CountdownTimerProps) {
-    const calculateTimeLeft = (): TimeLeft => {
-        const target = typeof targetDate === "string" ? getDateInTimeZone("America/Mexico_City", targetDate) : targetDate;
-
-        const now = getDateInTimeZone("America/Mexico_City");
-
-        const difference = target.getTime() - now.getTime();
-
-        if (difference > 0) {
-            return {
-                days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-                hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-                minutes: Math.floor((difference / 1000 / 60) % 60),
-                seconds: Math.floor((difference / 1000) % 60),
-            };
-        }
-
-        return { days: 0, hours: 0, minutes: 0, seconds: 0 };
-    };
-
-    const [timeLeft, setTimeLeft] = useState<TimeLeft>(calculateTimeLeft);
+    const [timeLeft, setTimeLeft] = useState<TimeLeft>(() =>
+        calculateCountdownTimeLeft(targetDate),
+    );
 
     useEffect(() => {
+        setTimeLeft(calculateCountdownTimeLeft(targetDate));
         const timer = setInterval(() => {
-            setTimeLeft(calculateTimeLeft());
+            setTimeLeft(calculateCountdownTimeLeft(targetDate));
         }, 1000);
 
         return () => clearInterval(timer);
     }, [targetDate]);
 
     return (
-        <div className="flex justify-center gap-4 sm:gap-8 md:gap-12 lg:gap-16 text-[#07293A]">
+        <div className="flex justify-center gap-4 sm:gap-8 md:gap-12 lg:gap-16" style={timerStyle}>
             <div className="text-center">
-                <div className="text-2xl sm:text-3xl font-bold text-blue">
+                <div className="text-2xl sm:text-3xl font-bold" style={digitStyle}>
                     <AnimatedDigit value={timeLeft.days} />
                 </div>
                 <div className="text-sm font-medium font-quicksand">Días</div>
             </div>
             <div className="text-center">
-                <div className="text-2xl sm:text-3xl font-bold text-blue">
+                <div className="text-2xl sm:text-3xl font-bold" style={digitStyle}>
                     <AnimatedDigit value={timeLeft.hours} />
                 </div>
                 <div className="text-sm font-medium font-quicksand">Horas</div>
             </div>
             <div className="text-center">
-                <div className="text-2xl sm:text-3xl font-bold text-blue">
+                <div className="text-2xl sm:text-3xl font-bold" style={digitStyle}>
                     <AnimatedDigit value={timeLeft.minutes} />
                 </div>
                 <div className="text-sm font-medium font-quicksand">Minutos</div>
             </div>
             <div className="text-center">
-                <div className="text-2xl sm:text-3xl font-bold text-blue">
+                <div className="text-2xl sm:text-3xl font-bold" style={digitStyle}>
                     <AnimatedDigit value={timeLeft.seconds} />
                 </div>
                 <div className="text-sm font-medium font-quicksand">Segundos</div>

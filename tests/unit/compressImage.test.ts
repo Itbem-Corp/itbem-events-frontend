@@ -1,62 +1,89 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import {
+  predictedMomentUploadContentType,
+  resolveMomentUploadContentType,
+  shouldCompressMomentUploadImage,
+} from "../../src/lib/momentUploadContentType";
 
-// Mirrors the skip logic inside compressImage() in SharedUploadPage.tsx (lines 195-202).
-// compressImage returns the original file unchanged when any of these conditions hold.
 const shouldSkipCompression = (mimeType: string): boolean =>
-  mimeType.startsWith("video/") ||
-  mimeType === "image/gif" ||
-  mimeType === "image/heic" ||
-  mimeType === "image/heif" ||
-  mimeType === "image/webp" ||
-  mimeType === "image/avif";
+  !shouldCompressMomentUploadImage(mimeType);
 
-describe("compression skip logic (mirrors compressImage in SharedUploadPage.tsx)", () => {
-  it("skips video/mp4", () => {
+describe("moment upload content type helpers", () => {
+  it("skips video files", () => {
     expect(shouldSkipCompression("video/mp4")).toBe(true);
-  });
-
-  it("skips video/quicktime (MOV)", () => {
     expect(shouldSkipCompression("video/quicktime")).toBe(true);
-  });
-
-  it("skips video/webm", () => {
     expect(shouldSkipCompression("video/webm")).toBe(true);
-  });
-
-  it("skips any video/* prefix", () => {
     expect(shouldSkipCompression("video/x-m4v")).toBe(true);
     expect(shouldSkipCompression("video/3gpp")).toBe(true);
+    expect(shouldSkipCompression("video/x-msvideo")).toBe(true);
+    expect(shouldSkipCompression("video/x-matroska")).toBe(true);
   });
 
-  it("skips image/gif", () => {
+  it("skips image formats that are kept as-is", () => {
     expect(shouldSkipCompression("image/gif")).toBe(true);
-  });
-
-  it("skips image/heic", () => {
     expect(shouldSkipCompression("image/heic")).toBe(true);
-  });
-
-  it("skips image/heif", () => {
     expect(shouldSkipCompression("image/heif")).toBe(true);
-  });
-
-  it("skips image/webp (already compressed format)", () => {
     expect(shouldSkipCompression("image/webp")).toBe(true);
-  });
-
-  it("skips image/avif (already compressed format)", () => {
     expect(shouldSkipCompression("image/avif")).toBe(true);
   });
 
-  it("does NOT skip image/jpeg — should be compressed", () => {
+  it("marks common raster images as compressible", () => {
     expect(shouldSkipCompression("image/jpeg")).toBe(false);
-  });
-
-  it("does NOT skip image/jpg — should be compressed", () => {
     expect(shouldSkipCompression("image/jpg")).toBe(false);
+    expect(shouldSkipCompression("image/png")).toBe(false);
   });
 
-  it("does NOT skip image/png — should be compressed", () => {
-    expect(shouldSkipCompression("image/png")).toBe(false);
+  it("predicts JPEG for compressible original images", () => {
+    expect(
+      predictedMomentUploadContentType({
+        name: "foto.png",
+        type: "image/png",
+      }),
+    ).toBe("image/jpeg");
+  });
+
+  it("resolves the content type from the actual file that will be uploaded", () => {
+    expect(
+      resolveMomentUploadContentType({
+        name: "foto.png",
+        type: "image/png",
+      }),
+    ).toBe("image/png");
+    expect(
+      resolveMomentUploadContentType({
+        name: "foto.jpg",
+        type: "image/jpeg",
+      }),
+    ).toBe("image/jpeg");
+  });
+
+  it("normalizes the browser image/jpg alias before requesting backend uploads", () => {
+    expect(
+      resolveMomentUploadContentType({
+        name: "foto.bin",
+        type: "image/jpg",
+      }),
+    ).toBe("image/jpeg");
+  });
+
+  it("falls back to extensions when browser file type is empty", () => {
+    expect(resolveMomentUploadContentType({ name: "clip.mov", type: "" })).toBe(
+      "video/quicktime",
+    );
+    expect(resolveMomentUploadContentType({ name: "foto.webp", type: "" })).toBe(
+      "image/webp",
+    );
+    expect(resolveMomentUploadContentType({ name: "foto.heic", type: "" })).toBe(
+      "image/heic",
+    );
+    expect(resolveMomentUploadContentType({ name: "foto.heif", type: "" })).toBe(
+      "image/heif",
+    );
+    expect(resolveMomentUploadContentType({ name: "clip.avi", type: "" })).toBe(
+      "video/x-msvideo",
+    );
+    expect(resolveMomentUploadContentType({ name: "clip.mkv", type: "" })).toBe(
+      "video/x-matroska",
+    );
   });
 });

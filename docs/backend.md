@@ -84,9 +84,9 @@ const spec = await fetchPageSpec(token, EVENTS_URL);
 
 ### GET — Invitation by token
 ```
-GET /api/invitations/ByToken/:token
+GET /api/invitations/ByToken?token={token}
 ```
-⚠️ **Case-sensitive:** `ByToken` con B y T mayúsculas. El frontend llama a `byToken` (minúscula) — validar si Echo tiene case-insensitive routing o si hay un mismatch.
+El contrato actual usa `ByToken` con B y T mayusculas. El frontend lo genera con `buildInvitationByTokenUrl`; Echo v4 es case-sensitive. Query param es la forma recomendada para tokens con `/`, `+`, `#` o espacios.
 
 **Response:**
 ```json
@@ -114,6 +114,8 @@ GET /api/resources/section/:key
 GET /api/resources/:id
 ```
 
+For password-protected public events, both endpoints require `X-Event-Access-Token` from `POST /api/events/:identifier/verify-access` unless the request carries a backend-authorized `preview_token`.
+
 **Response:**
 ```json
 {
@@ -129,6 +131,8 @@ GET /api/events/section/:sectionId/attendees
 ```
 
 Retorna los guests de un evento a partir del UUID del EventSection. Usado por el componente `GraduatesList` para mostrar los nombres desde la DB.
+
+For password-protected public events, this endpoint also requires `X-Event-Access-Token` unless `preview_token` is valid.
 
 **Response:**
 ```json
@@ -226,10 +230,9 @@ Cuando el usuario diga "valida con el backend" o dé una tarea de integración:
 
 | # | Issue | Estado |
 |---|---|---|
-| 1 | Frontend llama `byToken` (minúscula), backend define `ByToken` (mayúscula) — verificar si Echo es case-insensitive | ⚠️ A validar |
+| 1 | Endpoint de invitación es case-sensitive (`ByToken`) y debe aceptar tokens URL-sensitive por query param | Resuelto: `buildInvitationByTokenUrl` usa `ByToken?token=...` |
 | 2 | Frontend envía `Authorization: "1"` en rutas públicas — el backend no lo requiere ni valida | ✅ Sin impacto (ignorado) |
 | 3 | Auth real usa AWS Cognito JWT — cuando el admin panel se active, `src/utils/auth.ts` debe generar Bearer token de Cognito | 🔲 Pendiente |
 | 6 | Phase 2 SDUI: `GET /api/events/page-spec?token=...` implementado. Backend agrega `component_type` + `config` (JSONB) a `EventSection` y `music_url` a `Event`. AutoMigrate activo. | ✅ Implementado |
-| 7 | Frontend llamaba `byToken` (minúscula) pero backend define `ByToken` (mayúscula). Echo v4 es case-sensitive. | ✅ Corregido en `InvitationDataLoader.tsx` |
 | 4 | `pretty_token` vs `token`: URL usa `?token=` (raw), el POST de RSVP usa `pretty_token` (del response del GET) | ✅ Documentado |
 | 5 | `rsvp_status` posibles valores del backend: `"confirmed"`, `"declined"`, `""` | ✅ Alineado |

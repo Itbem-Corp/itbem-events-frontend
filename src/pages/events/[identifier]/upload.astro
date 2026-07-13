@@ -1,46 +1,42 @@
 ---
 /**
- * Dynamic upload page — /events/{identifier}/upload
- * Now fetches event data server-side for rich OG previews when shared.
+ * Dynamic upload page - /events/{identifier}/upload.
+ * Fetches event data server-side for rich OG previews when shared.
  */
 export const prerender = false
 
 import TemplateLayout from '../../../layouts/template.astro'
 import SharedUploadPage from '../../../components/SharedUploadPage'
-import { fetchEventOgData, buildOgImageUrl } from '../../../lib/og'
+import { buildSharedUploadOgMeta, fetchEventOgData } from '../../../lib/og'
+import { normalizeEventsUrl } from '../../../lib/eventsUrl'
+import { normalizePathIdentifier } from '../../../lib/pathIdentifier'
+import { readPublicAccessParams } from '../../../lib/publicPreview'
 
-const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string ?? 'http://localhost:8080/'
-const { identifier } = Astro.params
-
-let ogTitle = 'Comparte tu momento'
-let ogDesc  = 'Sube tus fotos y videos del evento. Tus recuerdos son parte de la historia.'
-let ogImage = ''
+const EVENTS_URL = normalizeEventsUrl(import.meta.env.PUBLIC_EVENTS_URL as string | undefined)
+const identifier = normalizePathIdentifier(Astro.params.identifier)
+const accessParams = readPublicAccessParams(Astro.url.search)
 const ogUrl = Astro.url.href
 
-if (identifier) {
-  const ev = await fetchEventOgData(EVENTS_URL, identifier)
-  if (ev) {
-    ogTitle = ev.name ? `Sube tus fotos — ${ev.name}` : ogTitle
-
-    if (ev.organizer_name) {
-      ogDesc = `Comparte tus mejores fotos y videos de ${ev.name}. Solo toma un segundo.`
-    }
-
-    ogImage = buildOgImageUrl({
-      title: ev.name,
-      cover: ev.cover_image_url,
-      type: ev.event_type,
-    })
-  }
-}
+const eventOg = identifier
+  ? await fetchEventOgData(
+      EVENTS_URL,
+      identifier,
+      accessParams.previewToken,
+      accessParams.cacheKey,
+      accessParams.invitationToken,
+      accessParams.accessToken
+    )
+  : null
+const ogMeta = buildSharedUploadOgMeta(eventOg, EVENTS_URL)
 ---
 
 <TemplateLayout
-  title={ogTitle}
-  ogTitle={ogTitle}
-  ogDescription={ogDesc}
-  ogImage={ogImage}
+  title={ogMeta.title}
+  ogTitle={ogMeta.title}
+  ogDescription={ogMeta.description}
+  ogImage={ogMeta.image}
   ogUrl={ogUrl}
+  language={eventOg?.language}
 >
   <SharedUploadPage
     client:only="react"

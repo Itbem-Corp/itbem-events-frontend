@@ -1,12 +1,67 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import SectionRenderer from './SectionRenderer';
-import MusicWidget from '../MusicWidget';
-import ShareWidget from '../ShareWidget';
-import Footer from '../common/Footer';
-import InstallPrompt from '../InstallPrompt';
-import type { PageSpec } from './types';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import { CalendarClock, PartyPopper } from "lucide-react";
+import SectionRenderer from "./SectionRenderer";
+import { isRsvpSectionType } from "./registry";
+import MusicWidget from "../MusicWidget";
+import ShareWidget from "../ShareWidget";
+import Footer from "../common/Footer";
+import PublicEventPasswordGate from "../common/PublicEventPasswordGate";
+import { PublicEventLoadError } from "../common/PublicEventLoadError";
+import InstallPrompt from "../InstallPrompt";
+import type { PageSpec } from "./types";
+import { normalizeEventsUrl } from "../../lib/eventsUrl";
+import { buildEventVerifyAccessUrl } from "../../lib/apiUrls";
+import {
+  buildTrackViewUrl,
+  viewTrackingWasAccepted,
+  viewTrackingSessionKey,
+} from "../../lib/eventTrackingUrl";
+import { fetchApiResult } from "../../lib/apiFetch";
+import { fetchApiResultWithRetry as fetchPageSpecWithRetry } from "../../lib/apiRetry";
+import {
+  buildIdentifierPageSpecUrl,
+  buildTokenPageSpecUrl,
+} from "../../lib/pageSpecUrl";
+import { shouldRenderFooter } from "../../lib/pageChrome";
+import {
+  publicAccessFetchInit,
+  readPublicAccessParams,
+} from "../../lib/publicPreview";
+import { shouldTrackPublicView } from "../../lib/publicViewTracking";
+import {
+  readStoredEventAccessToken,
+  removeStoredEventAccessToken,
+  storeEventAccessToken,
+} from "../../lib/publicEventAccessStorage";
+import { normalizeEventAccessVerification } from "../../lib/eventAccess";
+import { formatPublicAccessDateTime } from "../../lib/accessDates";
+import {
+  readPageSpecPayload,
+  readPageSpecCache,
+  removePageSpecCache,
+  shouldRenderCachedPageSpecBeforeRevalidate,
+  shouldRenderPageSpecCacheBeforeRevalidate,
+  sortPageSpecSections,
+  writePageSpecCache,
+  type PageSpecCacheMode,
+} from "../../lib/pageSpecCache";
+import {
+  buildPageThemeFontFaces,
+  buildPageThemeStyle,
+} from "../../lib/pageTheme";
+import {
+  resolvePublicLoadFailure,
+  type PublicLoadFailure,
+} from "../../lib/publicLoadFailure";
 
 interface Props {
   EVENTS_URL: string;
@@ -16,177 +71,175 @@ interface Props {
   rsvpMode?: boolean;
 }
 
-// ── Cache ────────────────────────────────────────────────────────────────────
-
-const SPEC_TTL_MS = 30 * 60 * 1000; // 30 minutes
-
-function readSpecCache(token: string): PageSpec | null {
-  try {
-    const raw = sessionStorage.getItem(`pageSpec-${token}`);
-    if (!raw) return null;
-    const { spec, ts } = JSON.parse(raw) as { spec: PageSpec; ts: number };
-    if (Date.now() - ts > SPEC_TTL_MS) {
-      sessionStorage.removeItem(`pageSpec-${token}`);
-      return null;
-    }
-    return spec;
-  } catch {
-    return null;
-  }
-}
-
-function writeSpecCache(token: string, spec: PageSpec) {
-  try {
-    sessionStorage.setItem(`pageSpec-${token}`, JSON.stringify({ spec, ts: Date.now() }));
-  } catch {
-    // sessionStorage full or unavailable — skip silently
-  }
-}
-
 // ── View Tracking ────────────────────────────────────────────────────────────
 // Fires once per session per event. Uses sessionStorage so returning to the
 // same tab within the session doesn't double-count.
 
-function trackView(eventsUrl: string, identifier: string) {
-  const key = `view-tracked-${identifier}`;
-  if (sessionStorage.getItem(key)) return; // already counted this session
-  try { sessionStorage.setItem(key, '1'); } catch { /* ignore */ }
-  // Fire-and-forget — never block the page
-  fetch(`${eventsUrl}api/events/${encodeURIComponent(identifier)}/view`, {
-    method: 'POST',
-    keepalive: true,
-  }).catch(() => { /* ignore network errors */ });
-}
-
-// ── Fetch with retry ─────────────────────────────────────────────────────────
-
-async function fetchWithRetry(url: string, retries = 3): Promise<Response> {
-  for (let i = 0; i < retries; i++) {
-    const res = await fetch(url);
-    // 404 = invalid token — don't retry, fail fast
-    if (res.ok || res.status === 404) return res;
-    if (i < retries - 1) {
-      await new Promise(r => setTimeout(r, 500 * (i + 1))); // 500ms, 1000ms, 1500ms
-    }
+function trackView(
+  eventsUrl: string,
+  identifier: string,
+  invitationToken?: string | null,
+  accessToken?: string | null,
+) {
+  const key = viewTrackingSessionKey(eventsUrl, identifier, invitationToken);
+  try {
+    const current = sessionStorage.getItem(key);
+    if (current === "1" || current === "pending") return;
+    sessionStorage.setItem(key, "pending");
+  } catch {
+    /* ignore */
   }
-  throw new Error('No se pudo conectar. Verifica tu conexión e intenta de nuevo.');
-}
 
-// ── Skeleton ─────────────────────────────────────────────────────────────────
+  const clearMarker = () => {
+    try {
+      sessionStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const confirmMarker = () => {
+    try {
+      sessionStorage.setItem(key, "1");
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // Fire-and-forget — never block the page
+  fetch(
+    buildTrackViewUrl(eventsUrl, identifier, invitationToken),
+    publicAccessFetchInit(
+      { invitationToken, accessToken },
+      {
+        method: "POST",
+        keepalive: true,
+      },
+    ),
+  )
+    .then(async (response) => {
+      if (!response.ok) {
+        clearMarker();
+        return;
+      }
+
+      let payload: unknown;
+      try {
+        payload = await response.clone().json();
+      } catch {
+        payload = undefined;
+      }
+
+      if (viewTrackingWasAccepted(payload)) {
+        confirmMarker();
+      } else {
+        clearMarker();
+      }
+    })
+    .catch(clearMarker);
+}
 
 function PageSkeleton() {
   return (
-    <main className="max-w-screen-md lg:max-w-[1024px] mx-auto px-4 py-2 space-y-20 animate-pulse">
-      <div className="h-64 bg-gray-100 rounded-lg" />
-      <div className="h-80 bg-gray-100 rounded-lg" />
-      <div className="h-64 bg-gray-100 rounded-lg" />
+    <main
+      className="mx-auto max-w-screen-md space-y-10 px-4 py-4 lg:max-w-[1024px] lg:space-y-16"
+      aria-busy="true"
+      aria-label="Preparando invitación"
+    >
+      <span className="sr-only">Preparando invitación…</span>
+      <div className="eventi-skeleton h-[min(68svh,42rem)] rounded-[2rem]" />
+      <div className="mx-auto grid max-w-3xl gap-4 sm:grid-cols-3">
+        <div className="eventi-skeleton h-28 rounded-3xl" />
+        <div className="eventi-skeleton h-28 rounded-3xl" />
+        <div className="eventi-skeleton h-28 rounded-3xl" />
+      </div>
+      <div className="eventi-skeleton h-72 rounded-[2rem]" />
     </main>
   );
 }
 
 // ── Date Gate ─────────────────────────────────────────────────────────────────
 
-function ComingSoonGate({ activeFrom }: { activeFrom: string }) {
-  const date = new Date(activeFrom);
-  const formatted = date.toLocaleDateString('es-MX', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
-  });
-  return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4 text-center space-y-6 bg-white">
-      <div className="text-6xl">🗓️</div>
-      <h1 className="text-2xl font-semibold text-gray-800">Esta invitación aún no está disponible</h1>
-      <p className="text-gray-500 max-w-sm">
-        La página estará disponible el <strong>{formatted}</strong>.
-        <br />Guarda este enlace y vuelve entonces.
-      </p>
-    </main>
-  );
-}
-
-function EventEndedGate({ activeUntil }: { activeUntil: string }) {
-  const date = new Date(activeUntil);
-  const formatted = date.toLocaleDateString('es-MX', {
-    year: 'numeric', month: 'long', day: 'numeric',
-  });
-  return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4 text-center space-y-6 bg-white">
-      <div className="text-6xl">✨</div>
-      <h1 className="text-2xl font-semibold text-gray-800">¡El evento ya concluyó!</h1>
-      <p className="text-gray-500 max-w-sm">
-        Esta página estuvo disponible hasta el <strong>{formatted}</strong>.
-        <br />Gracias por haber sido parte de este momento especial.
-      </p>
-    </main>
-  );
-}
-
-// ── Password Gate ─────────────────────────────────────────────────────────────
-
-function PasswordGate({
-  eventsUrl,
-  identifier,
-  onSuccess,
+function PublicEventLifecycleGate({
+  eyebrow,
+  title,
+  description,
+  Icon,
 }: {
-  eventsUrl: string;
-  identifier: string;
-  onSuccess: () => void;
+  eyebrow: string;
+  title: string;
+  description: ReactNode;
+  Icon: typeof CalendarClock;
 }) {
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const verify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `${eventsUrl}api/events/${encodeURIComponent(identifier)}/verify-access`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password }),
-        }
-      );
-      if (res.ok) {
-        try { sessionStorage.setItem(`event-verified-${identifier}`, '1'); } catch { /* ignore */ }
-        onSuccess();
-      } else {
-        setError('Contraseña incorrecta. Intenta de nuevo.');
-      }
-    } catch {
-      setError('Error al verificar. Intenta de nuevo.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4 bg-white">
-      <form onSubmit={verify} className="w-full max-w-xs space-y-5 text-center">
-        <div className="text-5xl">🔒</div>
-        <h1 className="text-xl font-semibold text-gray-800">Esta invitación es privada</h1>
-        <p className="text-gray-500 text-sm">Ingresa la contraseña que recibiste junto con tu invitación.</p>
-        <input
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          placeholder="Contraseña"
-          autoFocus
-          required
-          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-        />
-        {error && <p className="text-red-500 text-xs">{error}</p>}
-        <button
-          type="submit"
-          disabled={loading || !password}
-          className="w-full bg-gray-900 text-white rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50 hover:bg-gray-700 transition-colors"
-        >
-          {loading ? 'Verificando…' : 'Acceder'}
-        </button>
-      </form>
+    <main className="eventi-product-canvas flex min-h-[100svh] items-center justify-center px-4 py-10 text-center">
+      <section className="eventi-product-card w-full max-w-md px-6 py-9 sm:px-10 sm:py-11">
+        <div className="eventi-brand-mark mx-auto" aria-hidden="true">
+          <Icon className="size-5" strokeWidth={1.8} />
+        </div>
+        <p className="eventi-eyebrow mt-6">{eyebrow}</p>
+        <h1 className="mt-3 text-balance text-2xl font-semibold tracking-[-0.025em] text-gray-950 sm:text-3xl">
+          {title}
+        </h1>
+        <p className="mx-auto mt-4 max-w-sm text-pretty text-sm leading-6 text-gray-600 sm:text-base sm:leading-7">
+          {description}
+        </p>
+        <div className="mx-auto mt-8 h-px w-12 bg-gradient-to-r from-transparent via-pink-500/60 to-transparent" />
+        <p className="mt-5 text-xs font-medium tracking-wide text-gray-400">
+          EventiApp · Tu invitación digital
+        </p>
+      </section>
     </main>
+  );
+}
+
+function ComingSoonGate({
+  activeFrom,
+  timeZone,
+}: {
+  activeFrom: string;
+  timeZone?: string | null;
+}) {
+  const formatted = formatPublicAccessDateTime(activeFrom, timeZone, {
+    weekday: true,
+  });
+  return (
+    <PublicEventLifecycleGate
+      eyebrow="Próximamente"
+      title="Esta invitación aún no está disponible"
+      description={
+        <>
+          Podrás abrirla el{" "}
+          <strong className="font-semibold text-gray-900">{formatted}</strong>.
+          Guarda este enlace para volver cuando llegue el momento.
+        </>
+      }
+      Icon={CalendarClock}
+    />
+  );
+}
+
+function EventEndedGate({
+  activeUntil,
+  timeZone,
+}: {
+  activeUntil: string;
+  timeZone?: string | null;
+}) {
+  const formatted = formatPublicAccessDateTime(activeUntil, timeZone);
+  return (
+    <PublicEventLifecycleGate
+      eyebrow="Gracias por acompañarnos"
+      title="El evento ya concluyó"
+      description={
+        <>
+          Esta invitación estuvo disponible hasta el{" "}
+          <strong className="font-semibold text-gray-900">{formatted}</strong>.
+          Gracias por haber sido parte de este momento especial.
+        </>
+      }
+      Icon={PartyPopper}
+    />
   );
 }
 
@@ -196,186 +249,575 @@ function PasswordGate({
  * Root event page renderer — Phase 2 (SDUI dynamic).
  *
  * 1. Reads ?token= from the URL.
- * 2. Checks sessionStorage cache (30 min TTL) — instant render on return visits.
+ * 2. Checks sessionStorage cache with mode-specific TTLs for fast but fresh renders.
  * 3. If no cache: fetches GET {EVENTS_URL}api/events/page-spec?token=...
  *    with up to 3 retries (500ms / 1000ms / 1500ms linear backoff).
- *    404 responses are not retried (invalid token).
+ *    403/404 responses are not retried (access/token decisions).
  * 4. Stores result in cache, then renders sections via SectionRenderer.
  * 5. Each section is wrapped in SectionErrorBoundary.
  * 6. After load: tracks view (once per session) + enforces date/password gates.
  */
-export default function EventPage({ EVENTS_URL: rawEventsUrl, identifier: identifierProp, rsvpMode }: Props) {
-  // Normalize: ensure trailing slash so `${EVENTS_URL}api/...` always produces a valid URL.
-  const EVENTS_URL = rawEventsUrl.endsWith('/') ? rawEventsUrl : rawEventsUrl + '/';
+export default function EventPage({
+  EVENTS_URL: rawEventsUrl,
+  identifier: identifierProp,
+  rsvpMode,
+}: Props) {
+  const EVENTS_URL = normalizeEventsUrl(rawEventsUrl);
   const [spec, setSpec] = useState<PageSpec | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PublicLoadFailure | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [invitationToken, setInvitationToken] = useState("");
   const [passwordVerified, setPasswordVerified] = useState(false);
+  const [passwordAccessToken, setPasswordAccessToken] = useState("");
+  const passwordAccessTokenRef = useRef("");
 
-  // Dashboard Studio sends ?preview=1 — skip tracking, cache, and gates.
+  // Raw preview requests skip cache while the backend validates the signed token.
   const [isPreview, setIsPreview] = useState(false);
+  const previewAuthorized = Boolean(
+    isPreview && spec?.meta?.access?.previewAuthorized,
+  );
 
-  const loadSpec = useCallback(async (tok: string, byIdentifier = false, skipCache = false) => {
-    setError(null);
+  const loadSpec = useCallback(
+    async (
+      tok: string,
+      byIdentifier = false,
+      skipCache = false,
+      previewToken = "",
+      previewCacheKey = "",
+      inviteToken = "",
+      accessProofToken = "",
+    ) => {
+      setError(null);
+      const cacheMode: PageSpecCacheMode = byIdentifier
+        ? "identifier"
+        : "token";
+      const cacheId =
+        byIdentifier && inviteToken ? `${tok}:${inviteToken}` : tok;
+      const scopedCacheId = accessProofToken
+        ? `${cacheId}:access:${accessProofToken}`
+        : cacheId;
+      const canRenderCachedSpec = shouldRenderPageSpecCacheBeforeRevalidate(
+        cacheMode,
+        Boolean(inviteToken),
+      );
 
-    // Cache hit — render immediately (skip in preview mode)
-    if (!skipCache) {
-      const cached = readSpecCache(tok);
-      if (cached) {
-        if (cached.meta?.pageTitle) document.title = cached.meta.pageTitle;
-        setSpec(cached);
-        return;
+      let renderedCachedSpec = false;
+
+      // Cache hit — render immediately, then revalidate so dashboard changes
+      // propagate without waiting for the full client-side TTL.
+      // Full-content cached specs wait for backend access revalidation.
+      if (!skipCache && canRenderCachedSpec) {
+        const cached = readPageSpecCache(
+          scopedCacheId,
+          cacheMode,
+          undefined,
+          Date.now(),
+          EVENTS_URL,
+        );
+        if (cached) {
+          if (
+            shouldRenderCachedPageSpecBeforeRevalidate(
+              cacheMode,
+              cached,
+              Boolean(inviteToken),
+            )
+          ) {
+            if (cached.meta?.pageTitle) document.title = cached.meta.pageTitle;
+            setSpec(cached);
+            renderedCachedSpec = true;
+          }
+        }
       }
-    }
 
-    // Cache miss (or preview mode) — fetch with retry
-    try {
-      const url = byIdentifier
-        ? `${EVENTS_URL}api/events/${encodeURIComponent(tok)}/page-spec`
-        : `${EVENTS_URL}api/events/page-spec?token=${encodeURIComponent(tok)}`;
-      const res = await fetchWithRetry(url);
-      if (res.status === 404) {
-        setError(byIdentifier
-          ? 'Evento no encontrado. Verifica el enlace.'
-          : 'Invitación no encontrada. Verifica el enlace que recibiste.');
-        return;
+      // Cache miss, preview mode, or background revalidation after a cache hit.
+      try {
+        const url = byIdentifier
+          ? buildIdentifierPageSpecUrl(
+              EVENTS_URL,
+              tok,
+              previewToken,
+              previewCacheKey,
+              inviteToken,
+            )
+          : buildTokenPageSpecUrl(EVENTS_URL, tok);
+        const result = await fetchPageSpecWithRetry<unknown>(
+          url,
+          3,
+          publicAccessFetchInit({
+            previewToken,
+            invitationToken: byIdentifier ? inviteToken : tok,
+            accessToken: accessProofToken,
+          }),
+          byIdentifier
+            ? "No pudimos cargar este evento."
+            : "No pudimos cargar esta invitación.",
+        );
+        const clearStalePageSpecCache = () => {
+          removePageSpecCache(scopedCacheId, cacheMode, undefined, EVENTS_URL);
+        };
+        if (result.status === 404) {
+          clearStalePageSpecCache();
+          setSpec(null);
+          setError(
+            resolvePublicLoadFailure({
+              status: result.status,
+              resource: byIdentifier ? "event" : "invitation",
+              backendMessage: result.message,
+            }),
+          );
+          return;
+        }
+        if (result.status === 401) {
+          clearStalePageSpecCache();
+          setSpec(null);
+          setError(
+            resolvePublicLoadFailure({
+              status: result.status,
+              resource: byIdentifier ? "event" : "invitation",
+              backendMessage: result.message,
+            }),
+          );
+          return;
+        }
+        if (result.status === 403) {
+          clearStalePageSpecCache();
+          setSpec(null);
+          setError(
+            resolvePublicLoadFailure({
+              status: result.status,
+              resource: byIdentifier ? "event" : "invitation",
+              backendMessage: result.message,
+            }),
+          );
+          return;
+        }
+        if (!result.ok) {
+          throw new Error(
+            result.message || `Error del servidor (${result.status})`,
+          );
+        }
+
+        const pageSpec = readPageSpecPayload(result.data);
+        if (!pageSpec) throw new Error("Respuesta de invitación inválida.");
+        const access = pageSpec.meta.access;
+        if (
+          accessProofToken &&
+          (!access?.passwordProtected ||
+            access.passwordVerified ||
+            access.previewAuthorized)
+        ) {
+          passwordAccessTokenRef.current = accessProofToken;
+          setPasswordAccessToken(accessProofToken);
+        }
+        if (
+          accessProofToken &&
+          access?.passwordProtected &&
+          !access.passwordVerified &&
+          !access.previewAuthorized
+        ) {
+          const specIdentifier = pageSpec.meta.identifier ?? "";
+          if (specIdentifier) {
+            removeStoredEventAccessToken({
+              eventsUrl: EVENTS_URL,
+              identifier: specIdentifier,
+              accessVersion: access.accessVersion,
+              invitationToken: byIdentifier ? inviteToken : tok,
+            });
+          }
+          passwordAccessTokenRef.current = "";
+          setPasswordAccessToken("");
+          setPasswordVerified(false);
+        }
+        if (pageSpec.meta.pageTitle) document.title = pageSpec.meta.pageTitle;
+        if (!skipCache) {
+          writePageSpecCache(
+            scopedCacheId,
+            pageSpec,
+            cacheMode,
+            undefined,
+            Date.now(),
+            EVENTS_URL,
+          );
+        }
+        setSpec(pageSpec);
+      } catch (err) {
+        if (renderedCachedSpec) return;
+        setError(
+          resolvePublicLoadFailure({
+            resource: byIdentifier ? "event" : "invitation",
+            backendMessage:
+              err instanceof Error
+                ? err.message
+                : "Error al cargar la invitación.",
+          }),
+        );
       }
-      if (!res.ok) throw new Error(`Error del servidor (${res.status})`);
-
-      const json = await res.json();
-      const pageSpec: PageSpec = json.data;
-      if (pageSpec?.meta?.pageTitle) document.title = pageSpec.meta.pageTitle;
-      if (!skipCache) writeSpecCache(tok, pageSpec);
-      setSpec(pageSpec);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar la invitación.');
-    }
-  }, [EVENTS_URL]);
+    },
+    [EVENTS_URL],
+  );
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const preview = params.get('preview') === '1';
-    setIsPreview(preview);
+    const accessParams = readPublicAccessParams(window.location.search);
+    const initialAccessToken = accessParams.accessToken?.trim() ?? "";
+    passwordAccessTokenRef.current = initialAccessToken;
+    setPasswordAccessToken(initialAccessToken);
+    setPasswordVerified(Boolean(initialAccessToken));
+    setInvitationToken(accessParams.invitationToken);
+    setIsPreview(accessParams.isPreview);
 
     // Identifier mode — load by event slug directly
     if (identifierProp) {
       setToken(identifierProp);
-      loadSpec(identifierProp, true, preview);
+      loadSpec(
+        identifierProp,
+        true,
+        accessParams.isPreview || Boolean(initialAccessToken),
+        accessParams.previewToken,
+        accessParams.cacheKey,
+        accessParams.invitationToken,
+        initialAccessToken,
+      );
       return;
     }
 
     // Token mode — read from query string
-    const tok = params.get('token');
+    const tok = accessParams.invitationToken;
     if (!tok) {
-      setError('Token requerido. Verifica el enlace de tu invitación.');
+      setError(
+        resolvePublicLoadFailure({
+          status: 400,
+          resource: "invitation",
+        }),
+      );
       return;
     }
     setToken(tok);
-    loadSpec(tok, false, preview);
+    setInvitationToken(tok);
+    loadSpec(
+      tok,
+      false,
+      accessParams.isPreview || Boolean(initialAccessToken),
+      "",
+      "",
+      "",
+      initialAccessToken,
+    );
   }, [loadSpec, identifierProp]);
+
+  const retryLoadSpec = useCallback(() => {
+    if (!token) return;
+    const accessParams = readPublicAccessParams(window.location.search);
+    loadSpec(
+      token,
+      Boolean(identifierProp),
+      accessParams.isPreview ||
+        Boolean(passwordAccessToken || accessParams.accessToken),
+      accessParams.previewToken,
+      accessParams.cacheKey,
+      identifierProp ? invitationToken : "",
+      passwordAccessToken || accessParams.accessToken || "",
+    );
+  }, [identifierProp, invitationToken, loadSpec, passwordAccessToken, token]);
+
+  const verifyEventPassword = useCallback(
+    async (password: string) => {
+      const eventIdentifier = spec?.meta.identifier?.trim() ?? "";
+      const currentAccessVersion =
+        spec?.meta.access?.accessVersion?.trim() ?? "";
+      if (!eventIdentifier || !token) {
+        return {
+          ok: false,
+          message: "No pudimos abrir la invitación. Intenta de nuevo.",
+        };
+      }
+
+      const accessParams = readPublicAccessParams(window.location.search);
+      const result = await fetchApiResult<unknown>(
+        buildEventVerifyAccessUrl(
+          EVENTS_URL,
+          eventIdentifier,
+          invitationToken,
+          accessParams.previewToken,
+        ),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        },
+        "Contraseña incorrecta. Intenta de nuevo.",
+      );
+
+      if (!result.ok) {
+        return {
+          ok: false,
+          message: result.message || "Contraseña incorrecta. Intenta de nuevo.",
+        };
+      }
+
+      const access = normalizeEventAccessVerification(result.data);
+      const accessToken = access.accessToken;
+      if (!accessToken) {
+        return {
+          ok: false,
+          message: "No pudimos abrir la invitación. Intenta de nuevo.",
+        };
+      }
+
+      const verifiedAccessVersion =
+        access.accessVersion || currentAccessVersion;
+      storeEventAccessToken(
+        {
+          eventsUrl: EVENTS_URL,
+          identifier: eventIdentifier,
+          accessVersion: verifiedAccessVersion,
+          invitationToken,
+        },
+        accessToken,
+      );
+      passwordAccessTokenRef.current = accessToken;
+      setPasswordAccessToken(accessToken);
+      setPasswordVerified(true);
+
+      void loadSpec(
+        token,
+        Boolean(identifierProp),
+        true,
+        accessParams.previewToken,
+        accessParams.cacheKey,
+        identifierProp ? invitationToken : "",
+        accessToken,
+      );
+
+      return { ok: true };
+    },
+    [
+      EVENTS_URL,
+      identifierProp,
+      invitationToken,
+      loadSpec,
+      spec?.meta.access?.accessVersion,
+      spec?.meta.identifier,
+      token,
+    ],
+  );
 
   // Track view + restore password verification after spec loads
   useEffect(() => {
     if (!spec?.meta?.identifier) return;
 
     const id = spec.meta.identifier;
+    const access = spec.meta.access;
 
-    // Restore verified state from sessionStorage
-    try {
-      if (sessionStorage.getItem(`event-verified-${id}`) === '1') {
-        setPasswordVerified(true);
-      }
-    } catch { /* ignore */ }
+    // Restore signed password proof from sessionStorage. Legacy "1" entries
+    // are ignored because the backend now requires the proof token.
+    let storedAccessToken = access?.passwordProtected
+      ? readStoredEventAccessToken({
+          eventsUrl: EVENTS_URL,
+          identifier: id,
+          accessVersion: access.accessVersion,
+          invitationToken,
+        })
+      : "";
+    if (!storedAccessToken && access?.passwordVerified) {
+      storedAccessToken = passwordAccessTokenRef.current;
+    }
+    const storedPasswordVerified = Boolean(
+      access?.passwordVerified || storedAccessToken,
+    );
+    passwordAccessTokenRef.current = storedAccessToken;
+    setPasswordAccessToken(storedAccessToken);
+    setPasswordVerified(storedPasswordVerified);
 
-    // Track view (fire-and-forget, once per session) — skip in preview mode
-    if (!isPreview) trackView(EVENTS_URL, id);
-  }, [spec?.meta?.identifier, EVENTS_URL, isPreview]);
+    if (
+      access?.passwordProtected &&
+      storedAccessToken &&
+      !access.passwordVerified &&
+      token
+    ) {
+      const accessParams = readPublicAccessParams(window.location.search);
+      loadSpec(
+        token,
+        Boolean(identifierProp),
+        true,
+        accessParams.previewToken,
+        accessParams.cacheKey,
+        identifierProp ? invitationToken : "",
+        storedAccessToken,
+      );
+      return;
+    }
+
+    // Track view only after public gates allow real content.
+    if (
+      shouldTrackPublicView({
+        access,
+        passwordVerified: passwordVerified || storedPasswordVerified,
+        previewAuthorized,
+      })
+    ) {
+      trackView(
+        EVENTS_URL,
+        id,
+        invitationToken,
+        passwordAccessToken || storedAccessToken,
+      );
+    }
+  }, [
+    spec?.meta?.identifier,
+    spec?.meta?.access?.activeFrom,
+    spec?.meta?.access?.activeUntil,
+    spec?.meta?.access?.accessVersion,
+    spec?.meta?.access?.passwordProtected,
+    spec?.meta?.access?.passwordVerified,
+    EVENTS_URL,
+    identifierProp,
+    invitationToken,
+    loadSpec,
+    passwordAccessToken,
+    passwordVerified,
+    previewAuthorized,
+    token,
+  ]);
 
   // RSVP mode — auto-scroll to the RSVPConfirmation section after render
   useEffect(() => {
     if (!rsvpMode || !spec) return;
-    const rsvpSection = spec.sections.find(s => s.type === 'RSVPConfirmation');
+    const rsvpSection = spec.sections.find((s) => isRsvpSectionType(s.type));
     if (!rsvpSection) return;
     // Wait for section to render + hydrate
     const timer = setTimeout(() => {
       const el = document.getElementById(`section-${rsvpSection.sectionId}`);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 800);
     return () => clearTimeout(timer);
   }, [rsvpMode, spec]);
 
   if (error) {
     return (
-      <main className="max-w-screen-md mx-auto px-4 py-20 text-center space-y-4">
-        <p className="text-red-500 text-sm">{error}</p>
-        {token && (
-          <button
-            onClick={() => loadSpec(token)}
-            className="text-xs underline text-gray-500 hover:text-gray-700"
-          >
-            Reintentar
-          </button>
-        )}
-      </main>
+      <PublicEventLoadError
+        title={error.title}
+        message={error.message}
+        supportText={error.supportText}
+        onRetry={
+          error.retryable && (token || identifierProp)
+            ? retryLoadSpec
+            : undefined
+        }
+      />
     );
   }
 
   if (!spec) return <PageSkeleton />;
 
-  // Preview mode (dashboard Studio) — bypass all gates
-  if (!isPreview) {
-    const { access } = spec.meta;
+  // Dashboard Studio preview bypasses gates only when the backend validated the signed token.
+  if (!previewAuthorized) {
+    const access = spec.meta.access;
     const now = new Date();
 
     // Date gate: coming soon
     if (access?.activeFrom) {
       const from = new Date(access.activeFrom);
-      if (now < from) return <ComingSoonGate activeFrom={access.activeFrom} />;
+      if (now < from)
+        return (
+          <ComingSoonGate
+            activeFrom={access.activeFrom}
+            timeZone={spec.meta.timezone}
+          />
+        );
     }
 
     // Date gate: event ended
     if (access?.activeUntil) {
       const until = new Date(access.activeUntil);
-      if (now > until) return <EventEndedGate activeUntil={access.activeUntil} />;
+      if (now > until)
+        return (
+          <EventEndedGate
+            activeUntil={access.activeUntil}
+            timeZone={spec.meta.timezone}
+          />
+        );
     }
 
     // Password gate
-    if (access?.passwordProtected && !passwordVerified && spec.meta.identifier) {
+    if (
+      access?.passwordProtected &&
+      passwordVerified &&
+      !access.passwordVerified
+    ) {
+      return <PageSkeleton />;
+    }
+
+    if (
+      access?.passwordProtected &&
+      !(passwordVerified || access.passwordVerified) &&
+      spec.meta.identifier
+    ) {
       return (
-        <PasswordGate
-          eventsUrl={EVENTS_URL}
-          identifier={spec.meta.identifier}
-          onSuccess={() => setPasswordVerified(true)}
+        <PublicEventPasswordGate
+          title="Esta invitación es privada"
+          description="Ingresa la contraseña que recibiste junto con tu invitación."
+          passwordPlaceholder="Contraseña"
+          submitLabel="Acceder"
+          onVerify={verifyEventPassword}
         />
       );
     }
   }
 
-  const sorted = [...spec.sections].sort((a, b) => a.order - b.order);
+  const sorted = sortPageSpecSections(spec.sections);
+  const themeStyle = buildPageThemeStyle(spec.meta.theme);
+  const themeFontFaces = buildPageThemeFontFaces(spec.meta.theme, EVENTS_URL);
+  const accessParams = readPublicAccessParams();
+  const publicSpecCacheKey =
+    spec.meta.contentVersion || spec.meta.access?.accessVersion || "";
+  const sectionCacheKey = accessParams.cacheKey || publicSpecCacheKey;
+  const sectionPublicAccess = {
+    previewToken: accessParams.previewToken,
+    cacheKey: sectionCacheKey,
+    sendCacheKey: Boolean(sectionCacheKey && !accessParams.cacheKey),
+    invitationToken: invitationToken || (!identifierProp && token ? token : ""),
+    accessToken:
+      passwordAccessToken ||
+      passwordAccessTokenRef.current ||
+      accessParams.accessToken ||
+      "",
+  };
 
   return (
-    <>
+    <div
+      className="eventi-product-canvas"
+      style={themeStyle as CSSProperties | undefined}
+      data-design-template={spec.meta.theme?.designTemplateIdentifier}
+    >
+      {themeFontFaces && <style>{themeFontFaces}</style>}
+
       {spec.meta.musicUrl && (
         <MusicWidget audioUrl={spec.meta.musicUrl} volume={0.3} />
       )}
 
-      <ShareWidget eventTitle={spec.meta.pageTitle} />
+      <ShareWidget
+        eventTitle={spec.meta.pageTitle}
+        eventIdentifier={spec.meta.identifier}
+      />
 
-      <main className="max-w-screen-md lg:max-w-[1024px] mx-auto px-3 sm:px-4 py-2 space-y-12 sm:space-y-20 overflow-x-hidden">
-        {sorted.map(section => (
+      <main className="eventi-event-page mx-auto max-w-screen-md space-y-10 overflow-x-hidden px-3 py-4 sm:space-y-16 sm:px-4 lg:max-w-[1024px]">
+        {sorted.map((section) => (
           <SectionRenderer
             key={section.sectionId || `${section.type}-${section.order}`}
             spec={section}
             EVENTS_URL={EVENTS_URL}
+            publicAccess={sectionPublicAccess}
           />
         ))}
 
-        <div className="overflow-x-hidden">
-          <Footer contact={spec.meta.contact} />
-        </div>
+        {shouldRenderFooter(spec.meta) && (
+          <div className="overflow-x-hidden">
+            <Footer contact={spec.meta.contact} />
+          </div>
+        )}
       </main>
 
       <InstallPrompt />
-    </>
+    </div>
   );
 }

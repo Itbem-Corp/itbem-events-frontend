@@ -79,7 +79,7 @@ Context7 ≈ 1,000 tokens. Web search ≈ 15,000+ tokens.
 A task is **not complete** until ALL of the following pass:
 
 ### Every task
-- [ ] `npm run build` — production build succeeds (no SSR APIs, static output only)
+- [ ] `npm run build` — production build succeeds (Astro SSR + Cloudflare adapter)
 - [ ] Affected E2E tests pass: `npx playwright test <spec.ts>`
 - [ ] Relevant `docs/` file updated
 
@@ -93,7 +93,7 @@ A task is **not complete** until ALL of the following pass:
 - [ ] Registered in `src/components/engine/registry.ts`
 - [ ] Config type added to `src/components/engine/types.ts`
 - [ ] Hydration strategy correct (`immediate` vs `visible`)
-- [ ] Cloudflare `_redirects` updated if new URL pattern
+- [ ] Public URL helpers/routes updated if the section adds a new public entry point
 
 ### Cross-project feature
 - [ ] Backend health-checked before frontend push
@@ -106,20 +106,20 @@ Write current state to `docs/session-state.md`. Check it at session start. Clear
 
 ## Project Overview
 
-Astro 5 static site (Cloudflare Pages) — guest-facing event experience. React islands architecture: countdown timers, RSVP, MomentWall (photo/video wall). Framer Motion, Tailwind CSS, Sonner toasts, Lucide icons.
+Astro 5 SSR site (Cloudflare Pages Functions) — guest-facing event experience. React islands architecture: countdown timers, RSVP, MomentWall (photo/video wall). Framer Motion, Tailwind CSS, Sonner toasts, Lucide icons.
 
 ## Development Commands
 
 ```bash
 npm run dev       # http://localhost:4321
-npm run build     # static output
+npm run build     # SSR output for Cloudflare
 npm run preview
 npm run test:e2e  # Playwright E2E
 ```
 
 ## Architecture
 
-- **Static only** — `output: 'static'` in `astro.config.mjs`. No SSR, no `Astro.request`, no server middleware.
+- **Cloudflare SSR** — `output: 'server'` in `astro.config.mjs`; dynamic routes (`/e/[identifier]`, `/rsvp/[identifier]`, `/events/[identifier]/upload`) run through the Cloudflare worker for OG tags and public access context.
 - **Section registry** — sections registered in `src/components/engine/registry.ts` with `loader` + hydration (`'immediate'` = `client:only="react"`, `'visible'` = `client:visible`).
 - **Standard section props:** `{ sectionId: string; config: SectionConfig; EVENTS_URL: string }`
 - **New section:** component → `types.ts` → `registry.ts`. See `docs/CODE_INDEX.md` for step-by-step.
@@ -133,11 +133,11 @@ npm run test:e2e  # Playwright E2E
 | `src/components/engine/EventPage.tsx` | Top-level orchestrator; fetches sections, renders them |
 | `src/components/sections/MomentWall.tsx` | Photo/video wall with pagination, lightbox, 429 handling |
 | `src/components/SharedUploadPage.tsx` | QR upload flow; reads identifier from `window.location.pathname` |
-| `public/_redirects` | Cloudflare rewrite rules |
+| `public/_redirects` | Static fallback redirects only; dynamic public routes are SSR |
 
 ## Critical Gotchas
 
-- **Cloudflare rewrites** — new `/events/*/X` URL patterns need a `_redirects` rule (e.g., `/events/*/upload /events/upload 200`). Extract path params client-side, not server-side.
+- **Public routes** — prefer real Astro routes plus helpers in `src/lib/*Url*.ts`. Do not add `_redirects` for SSR routes unless it is a true static fallback.
 - **Env vars** — use `PUBLIC_` prefix (`PUBLIC_EVENTS_URL`). Add to `.env` locally AND Cloudflare Pages environment settings. Access via `import.meta.env.PUBLIC_YOUR_VAR`.
 - **GitHub MCP** — `owner: "Itbem-Corp"`, `repo: "itbem-events-frontend"`.
 - **Deployment** — push to `main` → Cloudflare Pages auto-builds (~2–3 min). Production API: `https://api.eventiapp.com.mx`.

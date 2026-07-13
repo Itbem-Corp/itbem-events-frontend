@@ -1,0 +1,424 @@
+---
+export const prerender = true;
+
+import TemplateLayout from "../layouts/template.astro";
+
+const productionDashboardUrl = "https://dashboard.eventiapp.com.mx";
+const configuredDashboardUrl = (
+  import.meta.env.PUBLIC_DASHBOARD_URL as string | undefined
+)?.trim();
+
+let dashboardUrl = productionDashboardUrl;
+if (configuredDashboardUrl) {
+  try {
+    const candidate = new URL(configuredDashboardUrl);
+    if (candidate.protocol === "https:" || candidate.hostname === "localhost") {
+      dashboardUrl = candidate.toString().replace(/\/$/, "");
+    }
+  } catch {
+    // Keep the safe production destination when local configuration is invalid.
+  }
+}
+
+const pageUrl = Astro.site ? new URL("/", Astro.site).toString() : Astro.url.href;
+---
+
+<TemplateLayout
+  title="EventiApp — Tu evento, en un solo lugar"
+  ogTitle="EventiApp — Tu evento, en un solo lugar"
+  ogDescription="Invitaciones, confirmaciones y recuerdos en una experiencia digital creada para celebrar."
+  ogUrl={pageUrl}
+>
+  <main class="eventi-home" data-eventi-home>
+    <header class="eventi-home__nav" aria-label="Navegación principal">
+      <a class="eventi-home__brand" href="/" aria-label="EventiApp, inicio">
+        <span class="eventi-home__mark" aria-hidden="true">
+          <img src="/favicon.svg" alt="" width="30" height="32" />
+        </span>
+        <span>EventiApp</span>
+      </a>
+
+      <a class="eventi-home__nav-link" href={dashboardUrl}>Entrar al dashboard</a>
+    </header>
+
+    <section class="eventi-home__hero" aria-labelledby="home-title">
+      <div class="eventi-home__copy">
+        <p class="eventi-home__eyebrow">Experiencias digitales para eventos</p>
+        <h1 id="home-title">Cada momento,<br /><em>en un solo lugar.</em></h1>
+        <p class="eventi-home__lead">
+          Crea una invitación que se sienta personal, confirma a tus invitados y
+          reúne las fotos del día en una experiencia simple y memorable.
+        </p>
+
+        <div class="eventi-home__actions">
+          <a class="eventi-home__primary" href={dashboardUrl}>Crear mi evento</a>
+          <a class="eventi-home__secondary" href="#experiencia">Descubrir EventiApp</a>
+        </div>
+
+        <p class="eventi-home__trust">
+          Diseñado para bodas, graduaciones y celebraciones que merecen algo especial.
+        </p>
+      </div>
+
+      <aside class="eventi-home__story" aria-label="La experiencia EventiApp">
+        <p class="eventi-home__story-label">Antes · Durante · Después</p>
+        <ol>
+          <li>
+            <span>01</span>
+            <div>
+              <strong>Invita</strong>
+              <p>Comparte cada detalle con una presencia digital a la altura del evento.</p>
+            </div>
+          </li>
+          <li>
+            <span>02</span>
+            <div>
+              <strong>Conecta</strong>
+              <p>Recibe confirmaciones y mantén a todos informados desde un mismo lugar.</p>
+            </div>
+          </li>
+          <li>
+            <span>03</span>
+            <div>
+              <strong>Recuerda</strong>
+              <p>Convierte las fotos de tus invitados en una memoria compartida.</p>
+            </div>
+          </li>
+        </ol>
+      </aside>
+    </section>
+
+    <section class="eventi-home__value" id="experiencia" aria-labelledby="value-title">
+      <div>
+        <p class="eventi-home__eyebrow">Todo fluye contigo</p>
+        <h2 id="value-title">Menos coordinación.<br />Más celebración.</h2>
+      </div>
+      <p>
+        Una experiencia cuidada de principio a fin: rápida en cualquier dispositivo,
+        fácil para tus invitados y flexible para contar tu evento a tu manera.
+      </p>
+    </section>
+
+    <footer class="eventi-home__footer">
+      <p>© {new Date().getFullYear()} EventiApp · Una experiencia digital de ITBEM.</p>
+      <a href={dashboardUrl}>Comenzar ahora</a>
+    </footer>
+  </main>
+</TemplateLayout>
+
+<style>
+  .eventi-home {
+    --home-ink: #102f3f;
+    --home-muted: #5f7480;
+    --home-pink: #dd2284;
+    position: relative;
+    isolation: isolate;
+    min-height: 100svh;
+    overflow: hidden;
+    padding: 1.25rem clamp(1.25rem, 4vw, 4.5rem) 2rem;
+    color: var(--home-ink);
+    background:
+      radial-gradient(circle at 7% 8%, rgba(221, 34, 132, 0.13), transparent 29rem),
+      radial-gradient(circle at 94% 10%, rgba(42, 75, 154, 0.1), transparent 31rem),
+      linear-gradient(145deg, #fffdfd 0%, #fbfaf9 52%, #f5f8f8 100%);
+  }
+
+  .eventi-home::before {
+    position: absolute;
+    z-index: -1;
+    top: 7.5rem;
+    right: -11rem;
+    width: 30rem;
+    height: 30rem;
+    border: 1px solid rgba(16, 47, 63, 0.08);
+    border-radius: 50%;
+    content: "";
+  }
+
+  .eventi-home__nav,
+  .eventi-home__hero,
+  .eventi-home__value,
+  .eventi-home__footer {
+    width: min(100%, 76rem);
+    margin-inline: auto;
+  }
+
+  .eventi-home__nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .eventi-home__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+    color: inherit;
+    font-size: 1.05rem;
+    font-weight: 750;
+    letter-spacing: -0.03em;
+    text-decoration: none;
+  }
+
+  .eventi-home__mark {
+    display: grid;
+    width: 2.65rem;
+    height: 2.65rem;
+    place-items: center;
+    border: 1px solid rgba(221, 34, 132, 0.16);
+    border-radius: 0.9rem;
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 14px 35px -24px rgba(16, 47, 63, 0.62);
+  }
+
+  .eventi-home__mark img {
+    width: 1.55rem;
+    height: auto;
+  }
+
+  .eventi-home__nav-link,
+  .eventi-home__footer a {
+    color: var(--home-ink);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-underline-offset: 0.35rem;
+  }
+
+  .eventi-home__hero {
+    display: grid;
+    min-height: min(46rem, calc(100svh - 5rem));
+    align-items: center;
+    gap: clamp(3rem, 8vw, 8rem);
+    padding-block: clamp(4.75rem, 10vw, 8.5rem);
+  }
+
+  .eventi-home__copy {
+    max-width: 43rem;
+  }
+
+  .eventi-home__eyebrow,
+  .eventi-home__story-label {
+    margin: 0 0 1.25rem;
+    color: #b91468;
+    font-size: 0.69rem;
+    font-weight: 800;
+    letter-spacing: 0.19em;
+    text-transform: uppercase;
+  }
+
+  h1,
+  h2 {
+    margin: 0;
+    color: var(--home-ink);
+    font-family: "Bigilla", Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.055em;
+  }
+
+  h1 {
+    max-width: 13ch;
+    font-size: clamp(3.45rem, 8vw, 7.6rem);
+    line-height: 0.86;
+  }
+
+  h1 em {
+    color: var(--home-pink);
+    font-style: normal;
+  }
+
+  .eventi-home__lead {
+    max-width: 38rem;
+    margin: clamp(1.7rem, 4vw, 2.4rem) 0 0;
+    color: var(--home-muted);
+    font-size: clamp(1rem, 2vw, 1.17rem);
+    line-height: 1.75;
+  }
+
+  .eventi-home__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    margin-top: 2rem;
+  }
+
+  .eventi-home__primary,
+  .eventi-home__secondary {
+    display: inline-flex;
+    min-height: 3.2rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.85rem 1.4rem;
+    font-size: 0.85rem;
+    font-weight: 750;
+    text-decoration: none;
+    transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+  }
+
+  .eventi-home__primary {
+    color: #fff;
+    background: linear-gradient(135deg, #dd2284, #b91468);
+    box-shadow: 0 18px 38px -20px rgba(185, 20, 104, 0.82);
+  }
+
+  .eventi-home__secondary {
+    border: 1px solid rgba(16, 47, 63, 0.12);
+    color: var(--home-ink);
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .eventi-home__primary:hover,
+  .eventi-home__secondary:hover {
+    transform: translateY(-2px);
+  }
+
+  .eventi-home__trust {
+    margin: 1.35rem 0 0;
+    color: rgba(16, 47, 63, 0.58);
+    font-size: 0.74rem;
+    line-height: 1.6;
+  }
+
+  .eventi-home__story {
+    position: relative;
+    align-self: center;
+    padding: clamp(1.5rem, 4vw, 2.35rem);
+    border: 1px solid rgba(16, 47, 63, 0.1);
+    border-radius: 2rem;
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 30px 80px -55px rgba(16, 47, 63, 0.64);
+    backdrop-filter: blur(20px);
+  }
+
+  .eventi-home__story::before {
+    position: absolute;
+    top: 0;
+    right: 2rem;
+    left: 2rem;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(221, 34, 132, 0.62), transparent);
+    content: "";
+  }
+
+  .eventi-home__story ol {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .eventi-home__story li {
+    display: grid;
+    grid-template-columns: 2.25rem 1fr;
+    gap: 1rem;
+    padding: 1.35rem 0;
+    border-top: 1px solid rgba(16, 47, 63, 0.09);
+  }
+
+  .eventi-home__story li:first-child {
+    border-top: 0;
+  }
+
+  .eventi-home__story li > span {
+    padding-top: 0.2rem;
+    color: var(--home-pink);
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+  }
+
+  .eventi-home__story strong {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-size: 1.05rem;
+    letter-spacing: -0.025em;
+  }
+
+  .eventi-home__story p {
+    margin: 0;
+    color: var(--home-muted);
+    font-size: 0.83rem;
+    line-height: 1.65;
+  }
+
+  .eventi-home__value {
+    display: grid;
+    gap: 2rem;
+    padding-block: clamp(4.5rem, 10vw, 7.5rem);
+    border-top: 1px solid rgba(16, 47, 63, 0.1);
+  }
+
+  .eventi-home__value h2 {
+    font-size: clamp(2.65rem, 5vw, 4.8rem);
+    line-height: 0.95;
+  }
+
+  .eventi-home__value > p {
+    max-width: 37rem;
+    margin: 0;
+    align-self: end;
+    color: var(--home-muted);
+    font-size: clamp(0.95rem, 2vw, 1.08rem);
+    line-height: 1.8;
+  }
+
+  .eventi-home__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(16, 47, 63, 0.1);
+    color: rgba(16, 47, 63, 0.58);
+    font-size: 0.72rem;
+  }
+
+  @media (min-width: 860px) {
+    .eventi-home__hero {
+      grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.65fr);
+    }
+
+    .eventi-home__value {
+      grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.75fr);
+    }
+  }
+
+  @media (max-width: 540px) {
+    .eventi-home {
+      padding-inline: 1rem;
+    }
+
+    .eventi-home__nav-link {
+      font-size: 0.72rem;
+    }
+
+    .eventi-home__hero {
+      padding-block: 4.5rem;
+    }
+
+    .eventi-home__actions,
+    .eventi-home__primary,
+    .eventi-home__secondary {
+      width: 100%;
+    }
+
+    .eventi-home__footer {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .eventi-home__primary,
+    .eventi-home__secondary {
+      transition: none;
+    }
+
+    .eventi-home__primary:hover,
+    .eventi-home__secondary:hover {
+      transform: none;
+    }
+  }
+</style>

@@ -1,69 +1,120 @@
 "use client";
 import { useEffect, useRef } from "react";
+import {
+  normalizeInvitationPayload,
+  type InvitationData,
+} from "../lib/invitationData";
+import { normalizeEventsUrl } from "../lib/eventsUrl";
+import { buildInvitationByTokenUrl } from "../lib/apiUrls";
+import { fetchApiData } from "../lib/apiFetch";
+import { buildInvitationLoadKey } from "../lib/invitationLoadKey";
+import {
+  publicAccessFetchInit,
+  resolvePublicAccessParams,
+  type PublicAccessFetchParams,
+  type ResolvedPublicAccessParams,
+} from "../lib/publicPreview";
 
-export interface InvitationData {
-    id: string;
-    eventId: string;
-    guestName: string;
-    maxGuests: number;
-    prettyToken: string;
-    rsvpStatus: string;
-    eventDate: string;
+export type { InvitationData };
+
+export function resolveInvitationLoaderPublicAccess(
+  token: string,
+  publicAccess?: PublicAccessFetchParams,
+  search?: string,
+): ResolvedPublicAccessParams {
+  const accessParams = resolvePublicAccessParams(publicAccess, search);
+  return {
+    ...accessParams,
+    invitationToken: accessParams.invitationToken || token.trim(),
+  };
 }
 
 interface Props {
-    token: string;
-    EVENTS_URL: string;
-    onLoaded: (data: InvitationData) => void;
-    onError?: (message: string) => void;
+  token: string;
+  EVENTS_URL: string;
+  publicAccess?: PublicAccessFetchParams;
+  onLoaded: (data: InvitationData) => void;
+  onError?: (message: string) => void;
 }
 
-export default function InvitationLoader({ token, EVENTS_URL, onLoaded, onError }: Props) {
-    // Ref guard: prevents re-fetching if parent re-renders and recreates onLoaded/onError refs
-    const loadedRef = useRef(false);
+export default function InvitationLoader({
+  token,
+  EVENTS_URL,
+  publicAccess,
+  onLoaded,
+  onError,
+}: Props) {
+  // Ref guard: prevents duplicate fetches for the same backend/token pair.
+  const loadedKeyRef = useRef("");
+  const eventsUrl = normalizeEventsUrl(EVENTS_URL);
+  const cleanToken = token.trim();
+  const accessParams = resolveInvitationLoaderPublicAccess(
+    cleanToken,
+    publicAccess,
+  );
+  const previewToken = accessParams.previewToken;
+  const cacheKey = accessParams.cacheKey;
+  const sendCacheKey = Boolean(accessParams.sendCacheKey);
+  const invitationToken = accessParams.invitationToken;
+  const accessToken = accessParams.accessToken;
+  const loadKey = [
+    buildInvitationLoadKey(eventsUrl, cleanToken),
+    previewToken,
+    cacheKey,
+    sendCacheKey,
+    invitationToken,
+    accessToken,
+  ].join("\0");
 
-    useEffect(() => {
-        if (!token || loadedRef.current) return;
+  useEffect(() => {
+    if (!loadKey || loadedKeyRef.current === loadKey) return;
 
-        const controller = new AbortController();
+    const controller = new AbortController();
 
-        const loadInvitation = async () => {
-            try {
-                const res = await fetch(`${EVENTS_URL}api/invitations/ByToken/${token}`, {
-                    signal: controller.signal,
-                });
+    const loadInvitation = async () => {
+      try {
+        const payload = await fetchApiData<unknown>(
+          buildInvitationByTokenUrl(eventsUrl, cleanToken),
+          publicAccessFetchInit(
+            {
+              previewToken,
+              cacheKey,
+              sendCacheKey,
+              invitationToken,
+              accessToken,
+            },
+            { signal: controller.signal },
+          ),
+        );
+        const data = normalizeInvitationPayload(payload, cleanToken);
 
-                if (!res.ok) throw new Error(`API error: ${res.status}`);
+        loadedKeyRef.current = loadKey;
+        onLoaded(data);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        const message =
+          err instanceof Error ? err.message : "Error cargando invitación";
+        console.error("Error loading invitation:", err);
+        onError?.(message);
+      }
+    };
 
-                const json = await res.json();
-                const inv = json.data?.invitation;
-                const guest = json.data?.guest;
+    loadInvitation();
 
-                const data: InvitationData = {
-                    id: inv?.ID ?? "",
-                    eventId: inv?.EventID ?? "",
-                    guestName: `${guest?.first_name ?? ""} ${guest?.last_name ?? ""}`.trim(),
-                    maxGuests: inv?.max_guests ?? 1,
-                    prettyToken: json.data?.pretty_token ?? "",
-                    rsvpStatus: guest?.rsvp_status ?? "",
-                    eventDate: inv?.Event?.EventDateTime ?? "",
-                };
+    // Cleanup: cancela la petición si el componente se desmonta antes de terminar
+    return () => {
+      controller.abort();
+    };
+  }, [
+    accessToken,
+    cacheKey,
+    cleanToken,
+    eventsUrl,
+    invitationToken,
+    loadKey,
+    previewToken,
+    sendCacheKey,
+  ]); // onLoaded/onError excluded: stable setters/handlers.
 
-                loadedRef.current = true;
-                onLoaded(data);
-            } catch (err: unknown) {
-                if (err instanceof Error && err.name === "AbortError") return;
-                const message = err instanceof Error ? err.message : "Error cargando invitación";
-                console.error("Error loading invitation:", err);
-                onError?.(message);
-            }
-        };
-
-        loadInvitation();
-
-        // Cleanup: cancela la petición si el componente se desmonta antes de terminar
-        return () => { controller.abort(); };
-    }, [token, EVENTS_URL]); // onLoaded/onError excluidos: son estables (setter useState / handler inline)
-
-    return null;
+  return null;
 }

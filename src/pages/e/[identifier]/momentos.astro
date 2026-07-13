@@ -1,54 +1,56 @@
 ---
-export const prerender = false
+export const prerender = false;
 
-import TemplateLayout from '../../../layouts/template.astro'
-import MomentsGallery from '../../../components/moments/MomentsGallery'
-import { fetchEventOgData, buildOgImageUrl } from '../../../lib/og'
+import TemplateLayout from '../../../layouts/template.astro';
+import MomentsGallery from '../../../components/moments/MomentsGallery';
+import { buildMomentsOgMeta, fetchEventOgData } from '../../../lib/og';
+import { normalizeEventsUrl } from '../../../lib/eventsUrl';
+import { normalizePathIdentifier } from '../../../lib/pathIdentifier';
+import { readPublicAccessParams } from '../../../lib/publicPreview';
 
-const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string ?? 'http://localhost:8080/'
-const { identifier } = Astro.params
-// Admin preview token — passed from dashboard, validated by backend on each request.
-const previewToken = Astro.url.searchParams.get('preview_token') ?? ''
+const EVENTS_URL = normalizeEventsUrl(import.meta.env.PUBLIC_EVENTS_URL as string | undefined);
+const identifier = normalizePathIdentifier(Astro.params.identifier);
+const accessParams = readPublicAccessParams(Astro.url.search);
+const ogUrl = Astro.url.href;
 
-let ogTitle = 'Momentos del evento'
-let ogDesc  = 'Las mejores fotos y videos del evento. Revive cada momento.'
-let ogImage = ''
-const ogUrl = Astro.url.href
-
-if (identifier) {
-  const ev = await fetchEventOgData(EVENTS_URL, identifier)
-  if (ev) {
-    ogTitle = ev.name ? `Momentos — ${ev.name}` : ogTitle
-
-    if (ev.organizer_name) {
-      ogDesc = `Galeria de fotos y videos de ${ev.name}. Revive los mejores momentos.`
-    }
-
-    ogImage = buildOgImageUrl({
-      title: `Momentos — ${ev.name}`,
-      cover: ev.cover_image_url,
-      type: ev.event_type,
-    })
-  }
-}
+const eventOg = identifier
+  ? await fetchEventOgData(
+      EVENTS_URL,
+      identifier,
+      accessParams.previewToken,
+      accessParams.cacheKey,
+      accessParams.invitationToken,
+      accessParams.accessToken
+    )
+  : null;
+const ogMeta = buildMomentsOgMeta(eventOg, EVENTS_URL);
+const publicMomentsCacheKey = accessParams.cacheKey || eventOg?.content_version || "";
+const momentsPublicAccess = {
+  previewToken: accessParams.previewToken,
+  cacheKey: publicMomentsCacheKey,
+  sendCacheKey: Boolean(publicMomentsCacheKey && !accessParams.cacheKey),
+  invitationToken: accessParams.invitationToken,
+  accessToken: accessParams.accessToken ?? "",
+};
 ---
 
 <TemplateLayout
-  title={ogTitle}
-  ogTitle={ogTitle}
-  ogDescription={ogDesc}
-  ogImage={ogImage}
+  title={ogMeta.title}
+  ogTitle={ogMeta.title}
+  ogDescription={ogMeta.description}
+  ogImage={ogMeta.image}
   ogUrl={ogUrl}
+  language={eventOg?.language}
 >
   <MomentsGallery
     client:only="react"
     EVENTS_URL={EVENTS_URL}
-    previewToken={previewToken}
+    previewToken={accessParams.previewToken}
+    publicAccess={momentsPublicAccess}
   />
 
-  <!-- Black shield: covers content when app goes to background (recent-apps  -->
-  <!-- screenshot on iOS/Android, desktop screen-share detection).            -->
-  <!-- Only active on the moments wall — NOT on upload or RSVP pages.         -->
+  <!-- Black shield: covers content when app goes to background. -->
+  <!-- Only active on the moments wall, not on upload or RSVP pages. -->
   <script is:inline>
     (function () {
       var shield = document.createElement('div')
@@ -59,15 +61,11 @@ if (identifier) {
       function show() { shield.style.display = 'block' }
       function hide() { shield.style.display = 'none'  }
 
-      // visibilitychange: tab-switch, minimise, Android app-switcher
       document.addEventListener('visibilitychange', function () {
         document.hidden ? show() : hide()
       })
-      // pagehide/pageshow: iOS Safari backgrounding / back-forward cache
       window.addEventListener('pagehide', show)
       window.addEventListener('pageshow', hide)
-      // NOTE: blur/focus intentionally omitted — fires on DevTools open,
-      // OS popups, and any window losing focus, causing false positives.
     })()
   </script>
 </TemplateLayout>

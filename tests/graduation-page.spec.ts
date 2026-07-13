@@ -17,7 +17,9 @@ import {
   API_BASE,
 } from './helpers/mocks';
 import { installStorageClearScript } from './helpers/storage';
-import { SECTION_IDS, TEST_TOKENS, TEST_GRADUATION_ATTENDEES } from './fixtures/api-data';
+import { SECTION_IDS, TEST_TOKENS, TEST_GRADUATION_ATTENDEES, makeGraduationPageSpec } from './fixtures/api-data';
+import { pageSpecCacheKey } from '../src/lib/pageSpecCache';
+import { publicAccessCacheScope, publicAccessScopedCacheKey, sectionResourcesCacheKey } from '../src/lib/resourceCache';
 
 const PAGE_URL = `/graduacion-izapa?token=${TEST_TOKENS.graduation}`;
 
@@ -150,6 +152,15 @@ test.describe('Secciones below-fold (visible hydration)', () => {
     await expect(page.getByText('Valeria Trujillo Iniesta')).toBeVisible({ timeout: 15_000 });
   });
 
+  test('Section 4 muestra perfil enriquecido de graduado cuando viene del API', async ({ page }) => {
+    await scrollToFraction(page, 1.0);
+    await expect(page.getByText('Ingeniería en Sistemas')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Apasionada por la tecnología y el diseño de experiencias.')).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText('Gracias por acompañarme')).toBeVisible({ timeout: 15_000 });
+  });
+
   test('Section 5 hidrata y renderiza grids de fotos', async ({ page }) => {
     await scrollToFraction(page, 1);
     const grids = page.locator('.grid-cols-2, .grid-cols-3');
@@ -178,12 +189,48 @@ test.describe('Comportamiento de API y caché', () => {
 
     const cached = await page.evaluate(
       (k) => sessionStorage.getItem(k),
-      `pageSpec-${TEST_TOKENS.graduation}`
+      pageSpecCacheKey(TEST_TOKENS.graduation, 'token', `${API_BASE}/`)
     );
     expect(cached).not.toBeNull();
     const { spec } = JSON.parse(cached!);
     expect(spec.meta.pageTitle).toBe('Nos Graduamos 2022-2025 | El Gran Día');
     expect(Array.isArray(spec.sections)).toBe(true);
+  });
+
+  test('revalida page-spec cacheado y aplica cambios frescos del backend', async ({ page }) => {
+    const cacheKey = pageSpecCacheKey(TEST_TOKENS.graduation, 'token', `${API_BASE}/`);
+    await page.evaluate(
+      ({ key }) => {
+        sessionStorage.setItem(
+          key,
+          JSON.stringify({
+            ts: Date.now(),
+            spec: {
+              meta: { pageTitle: 'Titulo cacheado', footerVisible: true },
+              sections: [],
+            },
+          }),
+        );
+      },
+      { key: cacheKey },
+    );
+
+    await page.route(`${API_BASE}/api/events/page-spec?token=${TEST_TOKENS.graduation}`, async (route) => {
+      const fresh = makeGraduationPageSpec();
+      fresh.data.meta.pageTitle = 'Titulo fresco del backend';
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(fresh),
+      });
+    });
+
+    await page.goto(PAGE_URL);
+    await expect(page).toHaveTitle('Titulo fresco del backend', { timeout: 10_000 });
+
+    const cached = await page.evaluate((key) => sessionStorage.getItem(key), cacheKey);
+    expect(cached).not.toBeNull();
+    expect(JSON.parse(cached!).spec.meta.pageTitle).toBe('Titulo fresco del backend');
   });
 
   test('sessionStorage almacena attendees después de cargar GraduatesList', async ({ page }) => {
@@ -193,7 +240,13 @@ test.describe('Comportamiento de API y caché', () => {
     await page.waitForTimeout(600);
     await expect(page.getByRole('heading', { name: 'Graduados' })).toBeVisible({ timeout: 15_000 });
 
-    const cacheKey = `attendees-${SECTION_IDS.graduation.s4}`;
+    const accessScope = publicAccessCacheScope({ invitationToken: TEST_TOKENS.graduation });
+    const cacheKey = publicAccessScopedCacheKey(
+      'attendees',
+      SECTION_IDS.graduation.s4,
+      accessScope,
+      `${API_BASE}/`,
+    );
     const cached = await page.evaluate((k) => sessionStorage.getItem(k), cacheKey);
     expect(cached).not.toBeNull();
     const { data } = JSON.parse(cached!);
@@ -205,7 +258,12 @@ test.describe('Comportamiento de API y caché', () => {
     await expect(page.getByRole('heading', { name: 'NOS GRADUAMOS' }))
       .toBeVisible({ timeout: 10_000 });
 
-    const cacheKey = `resourcesBySection-${SECTION_IDS.graduation.s1}`;
+    const accessScope = publicAccessCacheScope({ invitationToken: TEST_TOKENS.graduation });
+    const cacheKey = sectionResourcesCacheKey(
+      SECTION_IDS.graduation.s1,
+      accessScope,
+      `${API_BASE}/`,
+    );
     const cached = await page.evaluate((k) => sessionStorage.getItem(k), cacheKey);
     expect(cached).not.toBeNull();
     const parsed = JSON.parse(cached!);
@@ -216,7 +274,11 @@ test.describe('Comportamiento de API y caché', () => {
   test('sin token muestra error "Token requerido"', async ({ page }) => {
     await installStorageClearScript(page);
     await page.goto('/graduacion-izapa');
+    await expect(
+      page.getByRole('heading', { name: 'Este enlace está incompleto' }),
+    ).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/Token requerido/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: 'Reintentar' })).not.toBeVisible();
   });
 
   test('page-spec 404 muestra mensaje de invitación no encontrada', async ({ page }) => {
@@ -226,11 +288,12 @@ test.describe('Comportamiento de API y caché', () => {
     });
     await page.goto('/graduacion-izapa?token=invalid');
     await expect(page.getByText(/Invitación no encontrada/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: 'Reintentar' })).toBeVisible();
   });
 
   test('error de API de resources mantiene skeleton sin crashear', async ({ page }) => {
     await page.route(
-      `${API_BASE}/api/resources/section/${SECTION_IDS.graduation.s1}`,
+      `${API_BASE}/api/resources/section/${SECTION_IDS.graduation.s1}**`,
       async (route) => { await route.fulfill({ status: 500, body: 'error' }); }
     );
     await page.goto(PAGE_URL);

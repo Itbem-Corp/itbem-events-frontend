@@ -76,15 +76,21 @@ return <MainContent data={invData} />;
 
 ## Fetch & API Calls
 
-- Always pass `Authorization: "1"` header (use `getAuthHeaders()` from `src/utils/auth.ts`).
+- Public backend routes do not use `Authorization`; never send placeholder auth headers from Cafetton.
+- Use the URL builders in `src/lib/apiUrls.ts` / `src/lib/pageSpecUrl.ts` instead of hardcoded backend paths.
+- Use `publicAccessFetchInit()` whenever a public request may carry `preview_token`, invitation `token`, or `X-Event-Access-Token`; it sets `cache: "no-store"` for scoped traffic.
+- Keep credential aliases centralized in `publicAccessParams.ts`; the global middleware uses the same list to emit `private, no-store` and `no-referrer` for scoped SSR requests.
+- Third-party embeds must use `referrerPolicy="no-referrer"`. Never weaken the global referrer policy on token-bearing public pages.
+- Anonymous `GET /api/events/:identifier/meta` is public-safe metadata and may use the PWA fresh-first cache; scoped meta requests still need `publicAccessFetchInit()`.
 - Check `res.ok` before accessing response data.
 - Parse error message from `json.message` before falling back to generic message.
 - Never fetch in render — always inside `useEffect`.
 
 ```tsx
-const res = await fetch(`${EVENTS_URL}api/...`, {
-  headers: { Authorization: "1" },
-});
+const res = await fetch(
+  buildIdentifierPageSpecUrl(EVENTS_URL, identifier, previewToken, cacheKey, invitationToken),
+  publicAccessFetchInit({ previewToken, cacheKey, invitationToken, accessToken })
+);
 if (!res.ok) throw new Error(json.message || "Error de red");
 ```
 
@@ -157,10 +163,10 @@ className={`px-6 ${isSelected ? 'bg-gold' : 'bg-white'} py-3`}
 
 | Archivo | Problema | Contexto | Acción |
 |---|---|---|---|
-| `utils/auth.ts` | `Authorization: "1"` — backend no lo requiere en rutas públicas | **Activo** | Se puede eliminar sin efecto |
+| API docs antiguos | Algunos planes viejos mencionan `Authorization: "1"` — backend no lo requiere en rutas públicas | Resuelto en código | No reintroducir; usar `publicAccessFetchInit()` solo para preview/invitación/proof |
 | `InvitationDataLoader` | Sin prop `onError` en la interfaz oficial | ✅ Resuelto | `onError?: (message: string) => void` agregado |
 | `Section4Wrapper` | `nameList` de 14 graduados hardcodeada en el componente | **Activo** | Mover a API o config externa |
-| API endpoint | Frontend llama `byToken` (lowercase b), backend define `ByToken` (Go case-sensitive) | **Activo** | Validar — ver `docs/backend.md` issue #1 |
+| API endpoint | Invitation token endpoint is case-sensitive (`ByToken`) | Resuelto | Use `buildInvitationByTokenUrl` instead of hardcoded route strings |
 | `LoginForm.tsx` | Logo placeholder Tailwind CSS + link `/register` inexistente | Admin inactivo | Irrelevante scope actual |
 | `AppLayout.tsx` | Sidebar/navbar vacíos, placeholder "Sidebar aquí" | Admin inactivo | Irrelevante scope actual |
 | `api/auth/login.ts` | Credenciales hardcoded demo | Admin inactivo | Irrelevante scope actual |

@@ -2,48 +2,41 @@
 export const prerender = false;
 
 /**
- * RSVP portal page — /rsvp/{identifier}
- * Loads the same SDUI EventPage but auto-scrolls to the RSVPConfirmation section.
- * Used by the dashboard when sharing RSVP links via WhatsApp/Email.
+ * RSVP portal page - /rsvp/{identifier}.
+ * Loads the SDUI EventPage and auto-scrolls to RSVP.
  */
 import TemplateLayout from '../../layouts/template.astro';
 import EventPage from '../../components/engine/EventPage';
-import { fetchEventOgData, buildOgImageUrl } from '../../lib/og';
+import { buildRsvpOgMeta, fetchEventOgData } from '../../lib/og';
+import { normalizeEventsUrl } from '../../lib/eventsUrl';
+import { normalizePathIdentifier } from '../../lib/pathIdentifier';
+import { readPublicAccessParams } from '../../lib/publicPreview';
 
-const EVENTS_URL = import.meta.env.PUBLIC_EVENTS_URL as string;
-const { identifier } = Astro.params;
-
-let ogTitle = 'Confirma tu asistencia';
-let ogDesc  = 'Te esperamos. Confirma en un tap y no te pierdas ningún detalle.';
-let ogImage = '';
+const EVENTS_URL = normalizeEventsUrl(import.meta.env.PUBLIC_EVENTS_URL as string | undefined);
+const identifier = normalizePathIdentifier(Astro.params.identifier);
+const accessParams = readPublicAccessParams(Astro.url.search);
 const ogUrl = Astro.url.href;
 
-if (identifier) {
-  const ev = await fetchEventOgData(EVENTS_URL, identifier);
-  if (ev) {
-    ogTitle = ev.name ? `Confirma | ${ev.name}` : ogTitle;
-
-    if (ev.organizer_name) {
-      ogDesc = `${ev.organizer_name} te espera. Confirma tu asistencia en segundos.`;
-    }
-
-    ogImage = buildOgImageUrl({
-      title: ev.name,
-      date: ev.event_date_time,
-      address: ev.address,
-      cover: ev.cover_image_url,
-      type: ev.event_type,
-    });
-  }
-}
+const eventOg = identifier
+  ? await fetchEventOgData(
+      EVENTS_URL,
+      identifier,
+      accessParams.previewToken,
+      accessParams.cacheKey,
+      accessParams.invitationToken,
+      accessParams.accessToken
+    )
+  : null;
+const ogMeta = buildRsvpOgMeta(eventOg, EVENTS_URL);
 ---
 
 <TemplateLayout
-  title={ogTitle}
-  ogTitle={ogTitle}
-  ogDescription={ogDesc}
-  ogImage={ogImage}
+  title={ogMeta.title}
+  ogTitle={ogMeta.title}
+  ogDescription={ogMeta.description}
+  ogImage={ogMeta.image}
   ogUrl={ogUrl}
+  language={eventOg?.language}
 >
   <EventPage
     client:only="react"

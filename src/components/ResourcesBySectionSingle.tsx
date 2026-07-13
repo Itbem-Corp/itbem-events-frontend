@@ -1,126 +1,210 @@
 "use client";
+
 import { useEffect, useRef } from "react";
+import { buildSectionResourcesUrl } from "../lib/apiUrls";
+import { fetchApiData } from "../lib/apiFetch";
+import { normalizeEventsUrl } from "../lib/eventsUrl";
+import {
+  normalizeSectionResourcesPayload,
+  type SectionResource,
+  type SectionResourcesPayload,
+} from "../lib/publicResources";
+import {
+  getSectionResourcesCacheExpiry,
+  getSectionResourcesRefreshDelay,
+  publicAccessCacheScope,
+  sectionResourcesCacheKey,
+  sectionResourcesExpiryKey,
+  sectionResourcesMediaRefreshKey,
+} from "../lib/resourceCache";
+import {
+  publicAccessFetchInit,
+  publicAccessQueryParams,
+  resolvePublicAccessParams,
+  type PublicAccessFetchParams,
+} from "../lib/publicPreview";
 
-export interface Resource {
-    view_url: string;
-    title: string;
-    position: number;
-}
-
-export interface Section {
-    sectionId: string;
-    sectionResources: Resource[];
-}
+export type Resource = SectionResource;
+export type Section = SectionResourcesPayload;
 
 interface Props {
-    sectionId: string;
-    EVENTS_URL: string;
-    onLoaded: (section: Section) => void;
+  sectionId: string;
+  EVENTS_URL: string;
+  onLoaded: (section: Section) => void;
+  publicAccess?: PublicAccessFetchParams;
 }
 
-function getPresignedExpiry(viewUrl: string): Date | null {
-    try {
-        const url = new URL(viewUrl);
-        const dateStr = url.searchParams.get("X-Amz-Date");
-        const expires = parseInt(url.searchParams.get("X-Amz-Expires") || "0");
+export default function ResourcesBySectionSingle({
+  sectionId,
+  EVENTS_URL,
+  onLoaded,
+  publicAccess,
+}: Props) {
+  // Ref guard scoped to the concrete source. If sectionId/base URL changes,
+  // resources are allowed to load again.
+  const loadedKeyRef = useRef("");
+  const refreshTimerRef = useRef<number | null>(null);
+  const lastRefreshKeyRef = useRef<string | null>(null);
+  const eventsUrl = normalizeEventsUrl(EVENTS_URL);
 
-        if (!dateStr || !expires) return null;
+  useEffect(() => {
+    const accessParams = resolvePublicAccessParams(
+      publicAccess,
+      window.location.search,
+    );
+    const accessScope = publicAccessCacheScope({
+      previewToken: accessParams.previewToken,
+      cacheKey: accessParams.cacheKey,
+      invitationToken: accessParams.invitationToken,
+      accessToken: accessParams.accessToken,
+    });
+    const loadedKey = `${eventsUrl}|${sectionId}|${accessScope}|${accessParams.cacheKey}`;
+    if (loadedKeyRef.current === loadedKey) return;
 
-        const signedDate = new Date(
-            Date.UTC(
-                parseInt(dateStr.substring(0, 4)),
-                parseInt(dateStr.substring(4, 6)) - 1,
-                parseInt(dateStr.substring(6, 8)),
-                parseInt(dateStr.substring(9, 11)),
-                parseInt(dateStr.substring(11, 13)),
-                parseInt(dateStr.substring(13, 15))
-            )
+    const controller = new AbortController();
+    const cacheKey = sectionResourcesCacheKey(
+      sectionId,
+      accessScope,
+      eventsUrl,
+    );
+    const expiryKey = sectionResourcesExpiryKey(
+      sectionId,
+      accessScope,
+      eventsUrl,
+    );
+    const legacyCacheKey = sectionResourcesCacheKey(sectionId, accessScope);
+    const legacyExpiryKey = sectionResourcesExpiryKey(sectionId, accessScope);
+    const skipCache = accessParams.isPreview;
+
+    const clearRefreshTimer = () => {
+      if (refreshTimerRef.current !== null) {
+        window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+
+    const scheduleMediaRefresh = (section: Section) => {
+      clearRefreshTimer();
+      const refreshDelay = getSectionResourcesRefreshDelay(
+        section.sectionResources,
+      );
+      const refreshKey = sectionResourcesMediaRefreshKey(
+        section.sectionResources,
+      );
+      if (refreshDelay === null || !refreshKey) return;
+
+      const refreshResources = () => {
+        lastRefreshKeyRef.current = refreshKey;
+        void loadResources(true);
+      };
+
+      if (refreshDelay <= 0) {
+        if (lastRefreshKeyRef.current === refreshKey) return;
+        refreshResources();
+        return;
+      }
+
+      refreshTimerRef.current = window.setTimeout(
+        refreshResources,
+        refreshDelay,
+      );
+    };
+
+    const loadResources = async (forceNetwork = false) => {
+      const now = new Date();
+
+      if (!skipCache && !forceNetwork) {
+        try {
+          if (legacyCacheKey !== cacheKey)
+            sessionStorage.removeItem(legacyCacheKey);
+          if (legacyExpiryKey !== expiryKey)
+            localStorage.removeItem(legacyExpiryKey);
+
+          const cachedExpiry = localStorage.getItem(expiryKey);
+          if (cachedExpiry) {
+            const expiryDate = new Date(cachedExpiry);
+            if (expiryDate > now) {
+              const cached = sessionStorage.getItem(cacheKey);
+              if (cached) {
+                try {
+                  const parsed = JSON.parse(cached);
+                  const section = normalizeSectionResourcesPayload(
+                    parsed,
+                    sectionId,
+                    eventsUrl,
+                  );
+                  loadedKeyRef.current = loadedKey;
+                  onLoaded(section);
+                  scheduleMediaRefresh(section);
+                  return;
+                } catch {
+                  // Corrupt cache - fall through to fetch.
+                }
+              }
+            }
+            sessionStorage.removeItem(cacheKey);
+            localStorage.removeItem(expiryKey);
+          }
+        } catch {
+          // Storage unavailable - fetch normally without cache.
+        }
+      }
+
+      try {
+        const payload = await fetchApiData<unknown>(
+          buildSectionResourcesUrl(
+            eventsUrl,
+            sectionId,
+            publicAccessQueryParams(accessParams),
+          ),
+          publicAccessFetchInit(accessParams, {
+            signal: controller.signal,
+          }),
+          `API error loading section ${sectionId}`,
+        );
+        const section = normalizeSectionResourcesPayload(
+          payload,
+          sectionId,
+          eventsUrl,
         );
 
-        return new Date(signedDate.getTime() + expires * 1000);
-    } catch {
-        return null;
-    }
-}
+        if (!skipCache) {
+          try {
+            const expiry = getSectionResourcesCacheExpiry(
+              section.sectionResources,
+              now,
+            );
+            sessionStorage.setItem(cacheKey, JSON.stringify(section));
+            localStorage.setItem(expiryKey, expiry.toISOString());
+          } catch {
+            // Storage full or unavailable - render without cache.
+          }
+        }
 
-export default function ResourcesBySectionSingle({ sectionId, EVENTS_URL, onLoaded }: Props) {
-    // Ref guard: prevents duplicate fetches when parent re-renders and recreates onLoaded
-    const loadedRef = useRef(false);
+        loadedKeyRef.current = loadedKey;
+        onLoaded(section);
+        scheduleMediaRefresh(section);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        console.error(`Error loading section ${sectionId}:`, err);
+      }
+    };
 
-    useEffect(() => {
-        if (loadedRef.current) return;
+    loadResources();
 
-        const controller = new AbortController();
-        const cacheKey = `resourcesBySection-${sectionId}`;
-        const expiryKey = `resourcesExpiry-${sectionId}`;
+    return () => {
+      controller.abort();
+      clearRefreshTimer();
+    };
+  }, [
+    sectionId,
+    eventsUrl,
+    publicAccess?.previewToken,
+    publicAccess?.cacheKey,
+    publicAccess?.sendCacheKey,
+    publicAccess?.invitationToken,
+    publicAccess?.accessToken,
+  ]);
 
-        const loadResources = async () => {
-            const now = new Date();
-
-            // Check sessionStorage cache with localStorage expiry
-            const cachedExpiry = localStorage.getItem(expiryKey);
-            if (cachedExpiry) {
-                const expiryDate = new Date(cachedExpiry);
-                if (expiryDate > now) {
-                    const cached = sessionStorage.getItem(cacheKey);
-                    if (cached) {
-                        try {
-                            const parsed = JSON.parse(cached);
-                            loadedRef.current = true;
-                            onLoaded(parsed);
-                            return;
-                        } catch {
-                            // Corrupt cache — fall through to fetch
-                        }
-                    }
-                    // sessionStorage vacío (pestaña cerrada y reabierta) — limpiar expiry y refetch
-                }
-                // Expirado o sessionStorage vacío: limpiar ambas keys juntas para mantener sincronía
-                sessionStorage.removeItem(cacheKey);
-                localStorage.removeItem(expiryKey);
-            }
-
-            try {
-                const res = await fetch(`${EVENTS_URL}api/resources/section/${sectionId}`, {
-                    signal: controller.signal,
-                });
-
-                if (!res.ok) throw new Error(`API error: ${res.status}`);
-
-                const json = await res.json();
-                const data = Array.isArray(json?.data) ? json.data : [];
-
-                const section: Section = {
-                    sectionId,
-                    sectionResources: data.sort((a: Resource, b: Resource) => a.position - b.position),
-                };
-
-                // Detectar la expiración más cercana entre todas las URLs
-                const expirations = section.sectionResources
-                    .map((r) => getPresignedExpiry(r.view_url))
-                    .filter((d): d is Date => d instanceof Date);
-
-                const minExpiry = expirations.length
-                    ? new Date(Math.min(...expirations.map((d) => d.getTime())))
-                    : new Date(Date.now() + 6 * 60 * 60 * 1000); // fallback: 6 horas
-
-                // Siempre almacenar ambas keys juntas para evitar desincronización
-                sessionStorage.setItem(cacheKey, JSON.stringify(section));
-                localStorage.setItem(expiryKey, minExpiry.toISOString());
-
-                loadedRef.current = true;
-                onLoaded(section);
-            } catch (err: unknown) {
-                if (err instanceof Error && err.name === "AbortError") return;
-                console.error(`Error loading section ${sectionId}:`, err);
-            }
-        };
-
-        loadResources();
-
-        // Cleanup: cancela la petición si el componente se desmonta antes de terminar
-        return () => { controller.abort(); };
-    }, [sectionId, EVENTS_URL]); // onLoaded excluido: es estable (setter de useState)
-
-    return null;
+  return null;
 }

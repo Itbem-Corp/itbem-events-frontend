@@ -4,7 +4,7 @@
 
 Set via `.env`: `PUBLIC_EVENTS_URL=https://api.eventiapp.com.mx/`
 
-> Siempre con trailing slash. Las URLs se construyen como `${EVENTS_URL}api/...`
+Trailing slash is optional. Runtime code normalizes this value with `normalizeEventsUrl()`, strips a trailing `/api` if someone configures it by mistake, and builds backend URLs through `src/lib/apiUrls.ts`.
 
 Backend repo: `git@github.com:Itbem-Corp/itbem-events-backend.git` (Go + Echo v4). Ver `docs/backend.md`.
 
@@ -12,9 +12,21 @@ Backend repo: `git@github.com:Itbem-Corp/itbem-events-backend.git` (Go + Echo v4
 
 ## Auth en rutas públicas
 
-Las rutas públicas del backend **no requieren autenticación**. El header `Authorization: "1"` que envía el frontend es ignorado por el backend — las rutas públicas no tienen middleware de auth. Se puede eliminar sin efecto.
+Las rutas publicas del backend **no requieren autenticacion**. Cafetton no debe mandar `Authorization` en llamadas publicas.
 
-Para las rutas admin (protegidas) se usa `Authorization: Bearer <cognito-jwt>` — gestionado por `src/utils/auth.ts` cuando se implemente.
+El acceso publico se expresa con query params cuando aplica:
+- `token`: canonical invitation/RSVP token. Accepted aliases: `Token`, `invitation_token`, `invitationToken`, `InvitationToken`, `pretty_token`, `prettyToken`, `PrettyToken`.
+- `preview_token`: canonical signed preview token emitted by the dashboard. Accepted aliases: `previewToken`, `PreviewToken`.
+- `t`: cache-buster asociado al preview.
+- `event_access_token`: password-proof token for shared public links. Accepted aliases: `eventAccessToken`, `EventAccessToken`; Cafetton sends the value to the backend as `X-Event-Access-Token`.
+
+Las respuestas SSR que reciben cualquiera de esas credenciales se entregan con
+`Cache-Control: private, no-store` y `Pragma: no-cache`. Todas las páginas usan
+`Referrer-Policy: no-referrer`; los iframes de mapas repiten la misma política.
+Así, una URL de invitación o preview no termina en cachés compartidos ni en el
+encabezado `Referer` de un tercero.
+
+Las rutas admin/protegidas pertenecen al dashboard y usan `Authorization: Bearer <cognito-jwt>`.
 
 ---
 
@@ -22,9 +34,9 @@ Para las rutas admin (protegidas) se usa `Authorization: Bearer <cognito-jwt>` �
 
 ### GET — Invitation by token
 ```
-GET {EVENTS_URL}api/invitations/ByToken/{token}
+GET {EVENTS_URL}api/invitations/ByToken?token={token}
 ```
-⚠️ El backend define `ByToken` con **B y T mayúsculas** (Go/Echo, case-sensitive). El frontend llama `byToken` — validar si hay mismatch activo. Ver issue #1 en `docs/backend.md`.
+El frontend construye esta URL con `buildInvitationByTokenUrl`, respetando el casing `ByToken` que define Echo.
 
 **Response shape:**
 ```ts
@@ -66,8 +78,9 @@ interface InvitationData {
 ### GET — Section resources
 ```
 GET {EVENTS_URL}api/resources/section/{sectionId}
-Authorization: 1
 ```
+
+For password-protected public events, send `X-Event-Access-Token` with the `accessToken` returned by `POST /api/events/:identifier/verify-access`. Studio preview may use `preview_token` only when PageSpec returned `access.previewAuthorized=true`.
 
 **Response shape:**
 ```ts
@@ -98,7 +111,6 @@ interface Section {
 ### POST — RSVP confirmation
 ```
 POST {EVENTS_URL}api/invitations/rsvp
-Authorization: 1
 Content-Type: application/json
 ```
 
@@ -120,22 +132,22 @@ Content-Type: application/json
 
 Section resources (S3 presigned URLs) are cached to avoid redundant API calls:
 
-- **Cache store:** `sessionStorage` (key: `resourcesBySection-{sectionId}`)
-- **Expiry store:** `localStorage` (key: `resourcesExpiry-{sectionId}`)
+- **Cache store:** `sessionStorage` (key includes backend URL, section ID, and public access scope: preview token, invitation token, and password proof when present)
+- **Expiry store:** `localStorage` (same scoped key family)
 - **TTL source:** Parsed from S3 presigned URL params (`X-Amz-Date` + `X-Amz-Expires`)
 - **Fallback TTL:** 6 hours if no presigned params detected
-- **Invalidation:** Automatic on expiry; corrupt cache is cleared and re-fetched
+- **Invalidation:** Automatic on expiry; corrupt cache is cleared and re-fetched. Preview traffic (`preview_token`) bypasses storage cache with `cache: "no-store"`.
 
 Cache check sequence:
 1. Read `expiryKey` from localStorage
-2. If valid and not expired → load from `sessionStorage` → call `onLoaded()`
-3. If expired or missing → fetch API → parse expiry → store both → call `onLoaded()`
+2. If valid and not expired -> load from `sessionStorage` -> call `onLoaded()`
+3. If expired or missing -> fetch API -> parse expiry -> store both -> call `onLoaded()`
 
 ---
 
 ## Section IDs
 
-Section UUIDs viven en los archivos `src/events/*.ts` (PageSpec). Ya no están hardcodeados en componentes.
+Section UUIDs vienen del PageSpec dinamico del backend. Los componentes reciben `sectionId` desde `SectionRenderer`; no deben hardcodear IDs.
 
 Keep a record here:
 
@@ -148,21 +160,15 @@ Keep a record here:
 | Izapa Graduation | Section 4 — Lista graduados + foto grupal | `af03cf82-72d3-4d8c-8838-4cfcc6bf287b` |
 | Izapa Graduation | Section 5 — Final | `61202ab3-adaf-405f-8ff4-7bc75d1afc52` |
 
-> Cuando agregues un evento nuevo, actualiza esta tabla Y el archivo `src/events/*.ts` correspondiente.
+> Esta tabla es historica/de referencia. El flujo actual se administra desde dashboard/backend y se consume via PageSpec.
 
 ---
 
-## Auth Header (Current State)
+## Public access params
 
-All API calls use `Authorization: "1"` as a bypass token. This is defined in `src/utils/auth.ts`:
+Dashboard preview and invitation context are read with `readPublicAccessParams()` and forwarded to backend GETs with `publicAccessQueryParams()`. Preview mode only activates when a backend-supported preview token alias is present; `preview=1` alone is normal public traffic.
 
-```ts
-export const getAuthHeaders = () => ({
-  'Authorization': '1'   // TODO: implement real JWT
-});
-```
-
-When implementing real auth, update `getAuthHeaders()` and replace all manual header objects in fetch calls.
+`GET /api/events/:identifier/meta` returns a public-safe metadata shape and may use the PWA fresh-first cache when anonymous. If the request carries `preview_token`, invitation `token`, `event_access_token`, or `X-Event-Access-Token`, treat it as scoped public access and use `cache: "no-store"`.
 
 ---
 
@@ -174,17 +180,6 @@ When implementing real auth, update `getAuthHeaders()` and replace all manual he
 | Hotel Holiday Inn — Salón Barista (Recepción) | Section 3 | `14.874759, -92.286864` — embed completo en Section3Wrapper |
 
 > Los iframes de Google Maps tienen el embed URL completo hardcodeado directamente en cada `SectionNWrapper`. Para cambiar la ubicación, editar el `src` del `<iframe>` en el wrapper correspondiente.
-
----
-
-## POST — Drink registration (Internal — incomplete)
-```
-POST /api/drink
-{ "bebida": string }
-```
-Used by `DrinkForm.tsx`. Backend route not yet implemented.
-
----
 
 ### PageSpec meta.contact (added 2026-02-21)
 

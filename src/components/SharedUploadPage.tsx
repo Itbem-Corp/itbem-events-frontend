@@ -1,24 +1,103 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
+import {
+  lazy,
+  Suspense,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  createContext,
+  useContext,
+} from "react";
 import { flushSync } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { Sparkles } from "lucide-react";
 import { useToast } from "../hooks/useToast";
 import ToastList from "./common/Toast";
+import PublicEventPasswordGate from "./common/PublicEventPasswordGate";
+import { InvalidUploadLinkState } from "./InvalidUploadLinkState";
+import { UploadStatusErrorState } from "./shared-upload/UploadStatusErrorState";
+import { UploadStatusLoadingState } from "./shared-upload/UploadStatusLoadingState";
+import { UploadThemeToggle } from "./shared-upload/UploadThemeToggle";
+import { usePublicEventAccess } from "../hooks/usePublicEventAccess";
+import { normalizeEventsUrl } from "../lib/eventsUrl";
+import {
+  publicAccessFetchInit,
+  publicAccessQueryParams,
+  readPublicAccessParams,
+  resolvePublicAccessParams,
+} from "../lib/publicPreview";
+import {
+  buildEventMomentsPath,
+  getSharedUploadIdentifier,
+} from "../lib/sharedUploadIdentifier";
+import {
+  getSharedUploadGate,
+  isSharedUploadOpen,
+} from "../lib/sharedUploadAccess";
+import { buildEventMomentsUrl } from "../lib/apiUrls";
+import { fetchApiData, isApiFetchError } from "../lib/apiFetch";
+import {
+  classifyUploadStatusError,
+  type UploadStatusError,
+} from "../lib/uploadStatusError";
+import {
+  normalizePublicMomentsPage,
+  normalizePublicMomentUploadResponse,
+  type PublicMoment,
+} from "../lib/publicMoments";
+import {
+  getSelectableUploadSlots,
+  getSelectableUploadSlotsWithPending,
+  getUploadDisplayLimit,
+  readUploadQuota,
+  reconcileUploadQuotaRemaining,
+} from "../lib/uploadQuota";
+import {
+  UPLOAD_FILE_ACCEPT as FILE_ACCEPT,
+  validateUploadFile as validateFile,
+} from "../lib/uploadFilePolicy";
+import {
+  loadSharedUploadEngineForAction,
+  preloadSharedUploadEngine,
+} from "./shared-upload/loadSharedUploadEngine";
+import type { SharedUploadFileEntry } from "./shared-upload/SharedUploadEngine";
+const loadUploadMediaPreviewGrid = () => import("./UploadMediaPreviewGrid");
+const UploadMediaPreviewGrid = lazy(async () => {
+  const module = await loadUploadMediaPreviewGrid();
+  return { default: module.UploadMediaPreviewGrid };
+});
+
+function preloadUploadMediaPreviewGrid() {
+  void loadUploadMediaPreviewGrid().catch(() => {
+    // File validation remains usable if speculative chunk loading is interrupted.
+  });
+}
+
+const CAMERA_FILE_ACCEPT = `${FILE_ACCEPT},image/*,video/*`;
 
 // ── Theme toggle ──────────────────────────────────────────────────────────────
-type Theme = 'dark' | 'light';
+type Theme = "dark" | "light";
 
 function useTheme(): [Theme, () => void] {
   const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === 'undefined') return 'dark';
-    const stored = localStorage.getItem('upload-theme');
-    return (stored === 'dark' || stored === 'light') ? stored : 'dark';
+    if (typeof window === "undefined") return "dark";
+    try {
+      const stored = localStorage.getItem("upload-theme");
+      return stored === "dark" || stored === "light" ? stored : "dark";
+    } catch {
+      return "dark";
+    }
   });
   const toggle = useCallback(() => {
-    setTheme(t => {
-      const next: Theme = t === 'dark' ? 'light' : 'dark';
-      localStorage.setItem('upload-theme', next);
+    setTheme((t) => {
+      const next: Theme = t === "dark" ? "light" : "dark";
+      try {
+        localStorage.setItem("upload-theme", next);
+      } catch {
+        // Keep the in-memory preference when storage is restricted.
+      }
       return next;
     });
   }, []);
@@ -26,467 +105,150 @@ function useTheme(): [Theme, () => void] {
 }
 
 const ThemeCtx = createContext<{ theme: Theme; toggle: () => void }>({
-  theme: 'dark',
+  theme: "dark",
   toggle: () => {},
 });
 
 function getIdentifierFromURL(): string {
   if (typeof window === "undefined") return "";
-  const match = window.location.pathname.match(/\/events\/([^/]+)\/upload/);
-  if (match) return match[1];
-  const params = new URLSearchParams(window.location.search);
-  return params.get("e") ?? params.get("identifier") ?? "";
+  return getSharedUploadIdentifier(
+    window.location.pathname,
+    window.location.search,
+  );
+}
+
+function getPublicUploadBaseUrl(): string {
+  if (typeof window === "undefined") return "";
+  const match = window.location.pathname.match(
+    /^(.*?)\/events(?:\/[^/]+)?\/upload\/?$/,
+  );
+  return match?.[1] ?? "";
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const MAX_FILES = 10;
-const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
-const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
-const MAX_VIDEO_DURATION_S = 300; // 5 minutes
-const ALLOWED_TYPES = [
-  "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif",
-  "image/heic", "image/heif", "image/avif",
-  "video/mp4", "video/webm", "video/quicktime", "video/x-m4v", "video/3gpp",
-];
-const ALLOWED_EXTENSIONS = [
-  "jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "avif",
-  "mp4", "mov", "webm", "m4v", "3gp",
-];
-const FILE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,image/avif,video/mp4,video/webm,video/quicktime,video/x-m4v,video/3gpp,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif,.avif,.mp4,.mov,.webm,.m4v,.3gp";
 
-// ── Multipart upload constants ─────────────────────────────────────────────
-const MULTIPART_THRESHOLD = 10 * 1024 * 1024;  // 10 MB — below this, use single PUT
-const PART_SIZE           = 8 * 1024 * 1024;   // 8 MB per part (S3 minimum is 5 MB)
+// ── Upload state ───────────────────────────────────────────────────────────────
+type SharedUploadPublicationHint =
+  "published" | "processing" | "pending_review";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface FileEntry {
-  id: string;
-  file: File;
-  previewUrl: string;
-  isVideo: boolean;
-  isHeic: boolean;
-  status: "pending" | "uploading" | "done" | "error";
-  errorMsg?: string;
-  progress?: number; // 0-100 during upload
-  subtitle?: string; // e.g. "Subiendo parte 3/12..." during multipart uploads
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function validateFile(f: File): string | null {
-  const isVideo = f.type.startsWith("video/");
-  const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
-  if (f.size > maxBytes) {
-    const maxMB = isVideo ? 200 : 25;
-    return `"${f.name}" excede ${maxMB} MB.`;
+function uploadHintForMoment(
+  moment: PublicMoment | null,
+): SharedUploadPublicationHint {
+  if (moment?.publication_status === "published") return "published";
+  if (
+    moment?.publication_status === "processing" ||
+    moment?.approval_status === "approved"
+  ) {
+    return "processing";
   }
-  const ext = f.name.toLowerCase().split(".").pop() ?? "";
-  if (!ALLOWED_TYPES.includes(f.type) && !ALLOWED_EXTENSIONS.includes(ext)) {
-    return `"${f.name}" tiene formato no soportado.`;
+  return "pending_review";
+}
+
+function mergeUploadPublicationHint(
+  current: SharedUploadPublicationHint,
+  next: SharedUploadPublicationHint,
+): SharedUploadPublicationHint {
+  if (current === "pending_review" || next === "pending_review") {
+    return "pending_review";
   }
-  return null;
-}
-
-function buildEntry(f: File): FileEntry {
-  const ext = f.name.toLowerCase().split(".").pop() ?? "";
-  const isVideo = f.type.startsWith("video/") || ["mp4", "mov", "webm", "m4v", "3gp"].includes(ext);
-  const isHeic = ext === "heic" || ext === "heif";
-  let previewUrl: string;
-  if (isVideo) {
-    previewUrl = URL.createObjectURL(f); // blob URL — used for <video> playback too
-  } else if (isHeic) {
-    previewUrl = "heic";
-  } else {
-    previewUrl = URL.createObjectURL(f);
+  if (current === "processing" || next === "processing") {
+    return "processing";
   }
-  return { id: crypto.randomUUID(), file: f, previewUrl, isVideo, isHeic, status: "pending" };
+  return "published";
 }
 
-/** Extract a thumbnail from a video file using a hidden <video> + <canvas>. */
-function extractVideoThumbnail(blobUrl: string): Promise<string> {
-  return new Promise((resolve) => {
-    const video = document.createElement("video");
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = "metadata";
-    video.src = blobUrl;
-
-    const fallback = () => resolve("");
-
-    video.addEventListener("loadeddata", () => {
-      video.currentTime = Math.min(0.5, video.duration * 0.1);
-    }, { once: true });
-
-    video.addEventListener("seeked", () => {
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.min(video.videoWidth, 400);
-        canvas.height = Math.min(video.videoHeight, 400);
-        const ctx = canvas.getContext("2d");
-        if (!ctx) { fallback(); return; }
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", 0.6));
-      } catch { fallback(); }
-    }, { once: true });
-
-    video.addEventListener("error", fallback, { once: true });
-    setTimeout(fallback, 2000);
-  });
-}
-
-/**
- * Reads the duration of a video file via a hidden <video> element.
- * Returns 0 if duration cannot be determined — callers treat 0 as "unknown / allow".
- */
-function getVideoDuration(file: File): Promise<number> {
-  return new Promise((resolve) => {
-    const video = document.createElement("video");
-    video.preload = "metadata";
-    video.onloadedmetadata = () => {
-      URL.revokeObjectURL(video.src);
-      resolve(video.duration);
-    };
-    video.onerror = () => {
-      URL.revokeObjectURL(video.src);
-      resolve(0); // can't read duration — allow upload (backend size limit acts as proxy)
-    };
-    video.src = URL.createObjectURL(file);
-  });
-}
-
-/**
- * Attempts to decode a HEIC/HEIF file using createImageBitmap() and re-encode
- * as JPEG at 2048px / 85%. Returns null if the browser doesn't support HEIC
- * decode (Safari <17, Firefox) — caller falls back to the existing icon.
- */
-async function tryConvertHeic(file: File): Promise<File | null> {
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale  = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width  = Math.round(bitmap.width  * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) { bitmap.close(); return null; }
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-    return await new Promise<File | null>((resolve) => {
-      canvas.toBlob(
-        (blob) => resolve(blob
-          ? new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" })
-          : null),
-        "image/jpeg",
-        0.85
-      );
-    });
-  } catch {
-    return null; // browser doesn't support HEIC decode — keep icon placeholder
-  }
-}
-
-/**
- * Compress an image File to ≤maxDimension px at JPEG quality before upload.
- * Returns the original File unchanged if: it's a video, GIF, HEIC/HEIF, WebP,
- * AVIF (already compressed), or if Canvas compression makes it bigger.
- */
-async function compressImage(file: File, maxDimension = 2048, quality = 0.85): Promise<File> {
-  const skip =
-    file.type.startsWith("video/") ||
-    file.type === "image/gif" ||
-    file.type === "image/heic" ||
-    file.type === "image/heif" ||
-    file.type === "image/webp" ||
-    file.type === "image/avif";
-  if (skip) return file;
-
-  return new Promise((resolve) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const { naturalWidth: w, naturalHeight: h } = img;
-      const scale = Math.min(1, maxDimension / Math.max(w, h));
-      const canvas = document.createElement("canvas");
-      canvas.width  = Math.round(w * scale);
-      canvas.height = Math.round(h * scale);
-      const ctx = canvas.getContext("2d");
-      if (!ctx) { resolve(file); return; }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(
-        (blob) => {
-          if (!blob || blob.size >= file.size) {
-            resolve(file); // compression didn't help — keep original
-          } else {
-            resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
-          }
-        },
-        "image/jpeg",
-        quality
-      );
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
-    img.src = url;
-  });
-}
-
-/** Yields to the browser event loop so the UI can repaint between heavy operations. */
-const yield_ = () => new Promise<void>((r) => setTimeout(r, 0));
-
-/**
- * Retry an async operation up to maxAttempts times with exponential backoff.
- * Does NOT retry:
- *   - Silent abort errors ({ silent: true }) — user-cancelled or abortActiveXHRs
- *   - TypeError = full connection loss — surface immediately so pool stops
- *   - 4xx HTTP errors — client errors, retrying won't help
- */
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  maxAttempts = 3,
-  baseDelayMs = 1000
-): Promise<T> {
-  let lastErr: unknown;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastErr = err;
-      if ((err as { silent?: boolean }).silent) throw err;           // abort
-      if (err instanceof TypeError) throw err;                       // connection down
-      if (err instanceof Error && /\(4\d\d\)/.test(err.message)) throw err; // 4xx
-      if (attempt < maxAttempts) {
-        await new Promise(r => setTimeout(r, baseDelayMs * 2 ** (attempt - 1)));
-      }
-    }
-  }
-  throw lastErr ?? new Error("withRetry: maxAttempts must be >= 1");
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
+type FileEntry = SharedUploadFileEntry;
 
 // ── Reusable icons ─────────────────────────────────────────────────────────────
 
 function IconCamera({ className = "w-5 h-5" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
-    </svg>
-  );
-}
-
-function IconPlay({ className = "w-5 h-5" }: { className?: string }) {
-  return (
-    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
-      <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={1.5}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"
+      />
     </svg>
   );
 }
 
 function IconCheck({ className = "w-5 h-5" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-    </svg>
-  );
-}
-
-function IconX({ className = "w-4 h-4" }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2.5}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4.5 12.75l6 6 9-13.5"
+      />
     </svg>
   );
 }
 
 function IconUpload({ className = "w-6 h-6" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={1.5}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
+      />
     </svg>
   );
 }
 
 function Spinner({ className = "w-5 h-5" }: { className?: string }) {
   return (
-    <svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-    </svg>
-  );
-}
-
-// ── Preview Lightbox ───────────────────────────────────────────────────────────
-
-function PreviewLightbox({
-  entry,
-  onClose,
-}: {
-  entry: FileEntry;
-  onClose: () => void;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-      onClick={onClose}
+    <svg
+      className={`animate-spin ${className}`}
+      fill="none"
+      viewBox="0 0 24 24"
     >
-      <button
-        onClick={onClose}
-        className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
-      >
-        <IconX className="w-6 h-6" />
-      </button>
-
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        transition={{ type: "spring", damping: 25, stiffness: 300 }}
-        className="max-w-full max-h-full"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {entry.isVideo ? (
-          <video
-            src={entry.previewUrl}
-            controls
-            autoPlay
-            playsInline
-            className="max-h-[85vh] max-w-full rounded-2xl"
-          />
-        ) : entry.previewUrl === "heic" ? (
-          <div className="flex flex-col items-center gap-3 text-white/60">
-            <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-            </svg>
-            <p className="text-sm">{entry.file.name}</p>
-            <p className="text-xs text-white/40">Vista previa no disponible para HEIC</p>
-          </div>
-        ) : (
-          <img
-            src={entry.previewUrl}
-            alt={entry.file.name}
-            className="max-h-[85vh] max-w-full rounded-2xl object-contain"
-          />
-        )}
-      </motion.div>
-
-      {/* File info bar */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-lg rounded-full px-5 py-2 flex items-center gap-3">
-        <span className="text-white/80 text-sm font-medium truncate max-w-[200px]">{entry.file.name}</span>
-        <span className="text-white/40 text-xs">{formatSize(entry.file.size)}</span>
-      </div>
-    </motion.div>
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+      />
+    </svg>
   );
 }
 
 // ── Upload worker pool ─────────────────────────────────────────────────────────
 
-const POOL_SIZE       = 8;
-const PART_CONCURRENCY = 4;
-
-/**
- * Returns the number of concurrent upload workers appropriate for the current
- * network quality. Falls back to POOL_SIZE (8) when the Network Information API
- * is unavailable (iOS Safari, Firefox private mode, etc.).
- */
-function getAdaptivePoolSize(): number {
-  const conn = (navigator as unknown as {
-    connection?: { effectiveType?: string }
-  }).connection;
-  if (!conn?.effectiveType) return POOL_SIZE;
-  switch (conn.effectiveType) {
-    case "slow-2g":
-    case "2g":  return 2;
-    case "3g":  return 4;
-    default:    return POOL_SIZE; // "4g" or any future type
-  }
-}
-
-/** Resolves the content-type for a FileEntry — falls back to extension sniffing when file.type is empty. */
-function resolveContentType(entry: FileEntry): string {
-  if (entry.file.type) return entry.file.type;
-  const ext = entry.file.name.toLowerCase().split(".").pop() ?? "";
-  if (ext === "heic" || ext === "heif") return "image/heic";
-  if (ext === "mp4") return "video/mp4";
-  if (ext === "mov") return "video/quicktime";
-  if (ext === "webm") return "video/webm";
-  if (ext === "m4v") return "video/x-m4v";
-  if (ext === "3gp") return "video/3gpp";
-  return "application/octet-stream";
-}
-
-/**
- * Returns the content-type that will actually be used when uploading.
- * compressImage() re-encodes all non-exempt images as JPEG, so we must
- * request presigned URLs for "image/jpeg" — not the original type.
- * Exempt types (video, GIF, HEIC, HEIF, WebP, AVIF) are returned as-is.
- */
-function effectiveBatchContentType(entry: FileEntry): string {
-  const ct = resolveContentType(entry);
-  if (
-    ct.startsWith("video/") ||
-    ct === "image/gif" ||
-    ct === "image/heic" ||
-    ct === "image/heif" ||
-    ct === "image/webp" ||
-    ct === "image/avif"
-  ) {
-    return ct; // compressImage will skip these — type is unchanged
-  }
-  if (ct.startsWith("image/")) {
-    return "image/jpeg"; // compressImage will re-encode as JPEG
-  }
-  return ct; // application/octet-stream fallback — no compression
-}
-
-/**
- * Worker pool: starts up to `concurrency` workers, each draining the shared queue
- * immediately when they finish — no waiting for other workers to complete.
- */
-async function runPool(tasks: Array<() => Promise<void>>, concurrency = POOL_SIZE): Promise<void> {
-  if (tasks.length === 0) return
-  const queue = [...tasks]
-  const workers = Array.from(
-    { length: Math.min(concurrency, queue.length) },
-    async () => {
-      while (queue.length > 0) {
-        const task = queue.shift()!
-        await task()
-      }
-    }
-  )
-  await Promise.all(workers)
-}
-
 // ── Multipart helpers ─────────────────────────────────────────────────────────
-
-/** Split a file into part descriptors for S3 multipart upload. */
-function calcParts(fileSize: number, partSize: number): Array<{ partNumber: number; start: number; end: number }> {
-  const parts: Array<{ partNumber: number; start: number; end: number }> = [];
-  let offset = 0;
-  let partNumber = 1;
-  while (offset < fileSize) {
-    const end = Math.min(offset + partSize, fileSize);
-    parts.push({ partNumber, start: offset, end });
-    offset = end;
-    partNumber++;
-  }
-  return parts;
-}
-
-/** Compute overall 0-90 progress from per-part byte counters. */
-function calcProgress(bytesPerPart: number[], totalBytes: number): number {
-  if (totalBytes === 0) return 0;
-  const uploaded = bytesPerPart.reduce((a, b) => a + b, 0);
-  return Math.min(90, Math.round((uploaded / totalBytes) * 90));
-}
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -494,12 +256,42 @@ interface UploadPageProps {
   EVENTS_URL: string;
 }
 
-export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPageProps) {
-  const EVENTS_URL = rawEventsUrl.endsWith('/') ? rawEventsUrl : rawEventsUrl + '/';
+export default function SharedUploadPage({
+  EVENTS_URL: rawEventsUrl,
+}: UploadPageProps) {
+  const EVENTS_URL = normalizeEventsUrl(rawEventsUrl);
   const [theme, toggleTheme] = useTheme();
-  const [identifier, setIdentifier] = useState("");
+  const identifier = getIdentifierFromURL();
+  const initialAccessParams =
+    typeof window === "undefined"
+      ? {
+          previewToken: "",
+          cacheKey: "",
+          invitationToken: "",
+          accessToken: "",
+        }
+      : readPublicAccessParams(window.location.search);
+  const eventAccess = usePublicEventAccess({
+    eventsUrl: EVENTS_URL,
+    identifier,
+    previewToken: initialAccessParams.previewToken,
+    previewCacheKey: initialAccessParams.cacheKey,
+    invitationToken: initialAccessParams.invitationToken,
+    accessToken: initialAccessParams.accessToken,
+    enabled: Boolean(identifier),
+  });
+  const accessToken = eventAccess.accessToken;
   const [files, setFiles] = useState<FileEntry[]>([]);
-  const [videoThumbs, setVideoThumbs] = useState<Map<string, string>>(new Map());
+  const filesRef = useRef<FileEntry[]>([]);
+  const uploadAbortControllerRef = useRef<AbortController | null>(null);
+  const pendingSelectionSlotsRef = useRef(0);
+  const selectionPreparationCountRef = useRef(0);
+  const selectionAbortControllersRef = useRef(new Set<AbortController>());
+  const mountedRef = useRef(true);
+  const quotaAbortControllerRef = useRef<AbortController | null>(null);
+  const [videoThumbs, setVideoThumbs] = useState<Map<string, string>>(
+    new Map(),
+  );
   const [description, setDescription] = useState("");
   const [uploading, setUploading] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
@@ -507,52 +299,191 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [uploadedCount, setUploadedCount] = useState(0);
-  const [previewEntry, setPreviewEntry] = useState<FileEntry | null>(null);
+  const [uploadsRemaining, setUploadsRemaining] = useState<number | null>(null);
+  const [quotaLoaded, setQuotaLoaded] = useState(false);
   const [wallPublished, setWallPublished] = useState(false);
   const [wallEventName, setWallEventName] = useState("");
   const [uploadsNotEnabled, setUploadsNotEnabled] = useState(false);
+  const [uploadStatusError, setUploadStatusError] =
+    useState<UploadStatusError | null>(null);
+  const [quotaRetrying, setQuotaRetrying] = useState(false);
+  const [allowMessages, setAllowMessages] = useState(true);
+  const [uploadPublicationHint, setUploadPublicationHint] =
+    useState<SharedUploadPublicationHint>("pending_review");
+  const uploadPublicationHintRef =
+    useRef<SharedUploadPublicationHint>("published");
+
+  const commitFiles = useCallback(
+    (updater: (entries: FileEntry[]) => FileEntry[]) => {
+      setFiles((previous) => {
+        const next = updater(previous);
+        filesRef.current = next;
+        return next;
+      });
+    },
+    [],
+  );
 
   const { toasts, addToast, removeToast } = useToast();
 
-  const [isPreparing, setIsPreparing] = useState(false)
-  const pickerOpenRef = useRef(false)
-  const preparingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [isPreparing, setIsPreparing] = useState(false);
+  const pickerOpenRef = useRef(false);
+  const preparingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    setIdentifier(getIdentifierFromURL());
+  const applyUploadQuota = useCallback((payload: unknown) => {
+    const quota = readUploadQuota(payload);
+    if (quota.remaining !== null) {
+      setUploadsRemaining((prev) =>
+        reconcileUploadQuotaRemaining(prev, quota.remaining),
+      );
+    }
   }, []);
 
-  const checkQuota = useCallback(async (id: string) => {
-    if (!id) return;
+  const currentPublicAccessFetchInit = useCallback(
+    (init?: RequestInit): RequestInit | undefined => {
+      const accessParams =
+        typeof window === "undefined"
+          ? { previewToken: "", invitationToken: "", accessToken: "" }
+          : resolvePublicAccessParams({ accessToken }, window.location.search);
+      return publicAccessFetchInit(accessParams, init);
+    },
+    [accessToken],
+  );
+
+  const fetchUploadApiData = useCallback(
+    async <T,>(
+      input: RequestInfo | URL,
+      init?: RequestInit,
+      fallbackMessage?: string,
+    ): Promise<T> => {
+      try {
+        const data = await fetchApiData<T>(
+          input,
+          currentPublicAccessFetchInit(init),
+          fallbackMessage,
+        );
+        applyUploadQuota(data);
+        return data;
+      } catch (error) {
+        if (isApiFetchError(error)) {
+          applyUploadQuota(error.payload);
+        }
+        throw error;
+      }
+    },
+    [applyUploadQuota, currentPublicAccessFetchInit],
+  );
+
+  const currentPublicAccessQuery = useCallback(() => {
+    if (typeof window === "undefined") return {};
+    return publicAccessQueryParams(
+      resolvePublicAccessParams({ accessToken }, window.location.search),
+    );
+  }, [accessToken]);
+
+  const recordUploadPublicationHint = useCallback((payload: unknown) => {
+    const moment = normalizePublicMomentUploadResponse(payload);
+    const next = mergeUploadPublicationHint(
+      uploadPublicationHintRef.current,
+      uploadHintForMoment(moment),
+    );
+    uploadPublicationHintRef.current = next;
+    setUploadPublicationHint(next);
+    return moment;
+  }, []);
+
+  const checkQuota = useCallback(
+    async (id: string) => {
+      if (!id) return;
+      quotaAbortControllerRef.current?.abort();
+      const controller = new AbortController();
+      quotaAbortControllerRef.current = controller;
+      try {
+        const data = normalizePublicMomentsPage(
+          await fetchUploadApiData<unknown>(
+            buildEventMomentsUrl(EVENTS_URL, id, {
+              page: 1,
+              limit: 1,
+              purpose: "upload",
+              ...currentPublicAccessQuery(),
+            }),
+            { cache: "no-store", signal: controller.signal },
+          ),
+        );
+        const quota = readUploadQuota(data);
+        if (quota.remaining !== null) {
+          setUploadsRemaining(quota.remaining);
+        }
+        const shareEnabled = isSharedUploadOpen({
+          allowUploads: data.allow_uploads,
+          shareUploadsEnabled: data.share_uploads_enabled,
+        });
+        setAllowMessages(data.allow_messages !== false);
+        setUploadsNotEnabled(!shareEnabled);
+        setUploadStatusError(null);
+        const wallIsPublished =
+          data.moments_wall_published ?? data.published ?? false;
+        setWallPublished(wallIsPublished);
+        if (wallIsPublished) {
+          if (typeof data.event_name === "string")
+            setWallEventName(data.event_name);
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setUploadStatusError(classifyUploadStatusError(error));
+      } finally {
+        if (quotaAbortControllerRef.current === controller) {
+          quotaAbortControllerRef.current = null;
+          if (mountedRef.current) setQuotaLoaded(true);
+        }
+      }
+    },
+    [EVENTS_URL, currentPublicAccessQuery, fetchUploadApiData],
+  );
+
+  async function retryQuota() {
+    if (!identifier || quotaRetrying) return;
+    setQuotaRetrying(true);
     try {
-      const res = await fetch(`${EVENTS_URL}api/events/${id}/moments?page=1&limit=1`);
-      if (!res.ok) return;
-      const json = await res.json();
-      // Check if shared uploads are enabled
-      const shareEnabled = json.data?.share_uploads_enabled;
-      if (shareEnabled === false) {
-        setUploadsNotEnabled(true);
-      }
-      const wp = json.data?.moments_wall_published;
-      if (wp === true) {
-        setWallPublished(true);
-        if (json.data?.event_name) setWallEventName(json.data.event_name);
-      }
-    } catch { /* silent */ }
-  }, [EVENTS_URL]);
+      await checkQuota(identifier);
+    } finally {
+      if (mountedRef.current) setQuotaRetrying(false);
+    }
+  }
 
   useEffect(() => {
-    if (identifier) checkQuota(identifier);
-  }, [identifier, checkQuota]);
+    if (!identifier) return;
+    if (!eventAccess.ready) return;
+    if (eventAccess.passwordRequired) {
+      setQuotaLoaded(true);
+      return;
+    }
+    setQuotaLoaded(false);
+    setUploadStatusError(null);
+    void checkQuota(identifier);
+  }, [identifier, eventAccess.ready, eventAccess.passwordRequired, checkQuota]);
 
-  // Cleanup object URLs on unmount
   useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+
+  // Cleanup the latest object URLs on unmount without revoking live previews.
+  useEffect(() => {
+    mountedRef.current = true;
     return () => {
-      files.forEach((e) => {
-        if (e.previewUrl && e.previewUrl !== "heic") URL.revokeObjectURL(e.previewUrl);
+      mountedRef.current = false;
+      quotaAbortControllerRef.current?.abort();
+      uploadAbortControllerRef.current?.abort();
+      selectionAbortControllersRef.current.forEach((controller) =>
+        controller.abort(),
+      );
+      selectionAbortControllersRef.current.clear();
+      filesRef.current.forEach((e) => {
+        if (e.previewUrl && e.previewUrl !== "heic")
+          URL.revokeObjectURL(e.previewUrl);
       });
     };
   }, []);
@@ -561,477 +492,351 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
   useEffect(() => {
     const onFocus = () => {
       if (pickerOpenRef.current) {
-        setIsPreparing(true)
-        pickerOpenRef.current = false
+        setIsPreparing(true);
+        pickerOpenRef.current = false;
         // Safety valve: auto-dismiss if onChange never fires (e.g. picker cancelled, permission denied)
-        if (preparingTimerRef.current) clearTimeout(preparingTimerRef.current)
-        preparingTimerRef.current = setTimeout(() => setIsPreparing(false), 8000)
+        if (preparingTimerRef.current) clearTimeout(preparingTimerRef.current);
+        preparingTimerRef.current = setTimeout(
+          () => setIsPreparing(false),
+          8000,
+        );
       }
-    }
+    };
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        onFocus()
+      if (document.visibilityState === "visible") {
+        onFocus();
       }
-    }
-    window.addEventListener('focus', onFocus)
-    document.addEventListener('visibilitychange', onVisibilityChange)
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
-      window.removeEventListener('focus', onFocus)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-      if (preparingTimerRef.current) clearTimeout(preparingTimerRef.current)
-    }
-  }, [])
-
-  // Generate video thumbnails in background
-  const generateVideoThumb = useCallback(async (entry: FileEntry) => {
-    if (!entry.isVideo || entry.previewUrl === "heic") return;
-    const thumb = await extractVideoThumbnail(entry.previewUrl);
-    if (thumb) {
-      setVideoThumbs((prev) => new Map(prev).set(entry.id, thumb));
-    }
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (preparingTimerRef.current) clearTimeout(preparingTimerRef.current);
+    };
   }, []);
 
   const addFiles = async (incoming: File[]) => {
+    if (uploading) return;
+    preloadUploadMediaPreviewGrid();
     setError("");
-    const remaining = MAX_FILES - files.length;
+
+    const pendingSlots = pendingSelectionSlotsRef.current;
+    const currentFiles = filesRef.current;
+    const reservedQuotaCount = currentFiles.filter(
+      (entry) => entry.status !== "done",
+    ).length;
+    const remaining = getSelectableUploadSlotsWithPending({
+      currentBatchCount: currentFiles.length,
+      reservedQuotaCount,
+      pendingSelectionCount: pendingSlots,
+      perBatchLimit: MAX_FILES,
+      quotaRemaining: uploadsRemaining,
+    });
     if (remaining <= 0) {
-      setError(`Máximo ${MAX_FILES} archivos por subida.`);
-      addToast(`Ya alcanzaste el límite de ${MAX_FILES} archivos`, "error");
+      const quotaReached =
+        uploadsRemaining !== null &&
+        uploadsRemaining <= reservedQuotaCount + pendingSlots;
+      const message = quotaReached
+        ? "Ya alcanzaste el límite de archivos permitidos para este evento."
+        : "Máximo " + MAX_FILES + " archivos por subida.";
+      setError(message);
+      addToast(message, "error");
       return;
     }
 
     const toAdd = incoming.slice(0, remaining);
     const errors: string[] = [];
-    const entries: FileEntry[] = [];
-
-    for (const f of toAdd) {
-      const err = validateFile(f);
-      if (err) {
-        errors.push(err);
-      } else {
-        entries.push(buildEntry(f));
-      }
+    const acceptedFiles: File[] = [];
+    for (const file of toAdd) {
+      const validationError = validateFile(file);
+      if (validationError) errors.push(validationError);
+      else acceptedFiles.push(file);
     }
 
     if (incoming.length > remaining) {
-      errors.push(`Se ignoraron ${incoming.length - remaining} archivo(s) — máximo ${MAX_FILES}.`);
-      if (remaining <= 0) {
-        addToast(`Ya alcanzaste el límite de ${MAX_FILES} archivos`, "error");
-      } else {
-        addToast(`Solo se agregaron ${remaining} de ${incoming.length} archivos (límite: ${MAX_FILES})`, "error");
-      }
+      const ignoredCount = incoming.length - remaining;
+      errors.push(
+        uploadsRemaining === null
+          ? "Se ignoraron " +
+              ignoredCount +
+              " archivo(s) — máximo " +
+              MAX_FILES +
+              "."
+          : "Se ignoraron " +
+              ignoredCount +
+              " archivo(s) — cupo disponible: " +
+              remaining +
+              ".",
+      );
+      addToast(
+        uploadsRemaining === null
+          ? "Solo se agregaron " +
+              remaining +
+              " de " +
+              incoming.length +
+              " archivos (límite: " +
+              MAX_FILES +
+              ")"
+          : "Solo se agregaron " +
+              remaining +
+              " de " +
+              incoming.length +
+              " archivos (cupo disponible)",
+        "error",
+      );
     }
 
-    // ── Video duration check ────────────────────────────────────────────────
-    // Read durations for all video entries in parallel before adding to state.
-    const videoEntries = entries.filter((e) => e.isVideo);
-    const nonVideoEntries = entries.filter((e) => !e.isVideo);
+    if (acceptedFiles.length === 0) {
+      if (errors.length > 0) setError(errors.join(" "));
+      return;
+    }
 
-    let validVideoEntries = videoEntries;
-    if (videoEntries.length > 0) {
-      const videosWithDuration = await Promise.all(
-        videoEntries.map(async (e) => ({
-          entry: e,
-          duration: await getVideoDuration(e.file),
-        }))
-      );
+    const reservedSlots = acceptedFiles.length;
+    pendingSelectionSlotsRef.current += reservedSlots;
+    selectionPreparationCountRef.current += 1;
+    setIsPreparing(true);
+    const preparationController = new AbortController();
+    selectionAbortControllersRef.current.add(preparationController);
 
-      const tooLong = videosWithDuration.filter(({ duration }) => duration > MAX_VIDEO_DURATION_S);
-      validVideoEntries = videosWithDuration
-        .filter(({ duration }) => duration <= MAX_VIDEO_DURATION_S || duration === 0)
-        .map(({ entry }) => entry);
+    try {
+      const engine = await loadSharedUploadEngineForAction();
+      if (preparationController.signal.aborted) return;
 
-      if (tooLong.length > 0) {
-        // Revoke blob URLs for rejected entries to avoid leaking object URLs
-        tooLong.forEach(({ entry }) => {
-          if (entry.previewUrl && entry.previewUrl !== "heic") URL.revokeObjectURL(entry.previewUrl);
+      const { validEntries, rejectedVideoEntries } =
+        await engine.prepareSharedUploadEntries(
+          acceptedFiles,
+          preparationController.signal,
+        );
+      if (preparationController.signal.aborted || !mountedRef.current) {
+        validEntries.forEach((entry) => {
+          if (entry.previewUrl && entry.previewUrl !== "heic") {
+            URL.revokeObjectURL(entry.previewUrl);
+          }
         });
+        return;
+      }
+
+      if (rejectedVideoEntries.length > 0) {
         addToast(
-          tooLong.length === 1
-            ? `Un video supera el límite de 5 minutos y no fue agregado`
-            : `${tooLong.length} videos superan el límite de 5 minutos y no fueron agregados`,
-          "error"
+          rejectedVideoEntries.length === 1
+            ? "Un video supera el límite de 5 minutos y no fue agregado"
+            : rejectedVideoEntries.length +
+                " videos superan el límite de 5 minutos y no fueron agregados",
+          "error",
         );
       }
-    }
 
-    const validEntries = [...nonVideoEntries, ...validVideoEntries];
+      if (validEntries.length > 0) {
+        commitFiles((previous) => [...previous, ...validEntries]);
 
-    if (validEntries.length > 0) {
-      setFiles((prev) => [...prev, ...validEntries]);
-      // Generate video thumbnails async
-      validEntries.filter((e) => e.isVideo).forEach((e) => generateVideoThumb(e));
-      // Attempt async HEIC → JPEG conversion for preview + compression
-      validEntries.filter((e) => e.isHeic).forEach(async (e) => {
-        const converted = await tryConvertHeic(e.file);
-        if (!converted) return; // browser unsupported — icon stays
-        setFiles((prev) => {
-          const match = prev.find((x) => x.id === e.id);
-          if (!match) return prev; // entry removed — nothing to update, no URL created
-          const newPreview = URL.createObjectURL(converted);
-          return prev.map((x) =>
-            x.id === e.id ? { ...x, file: converted, previewUrl: newPreview, isHeic: false } : x
-          );
-        });
-      });
-    }
-    if (errors.length > 0) {
-      setError(errors.join(" "));
+        validEntries
+          .filter((entry) => entry.isVideo)
+          .forEach((entry) => {
+            void engine
+              .extractSharedUploadVideoThumbnail(entry.previewUrl)
+              .then((thumbnail) => {
+                if (!thumbnail || !mountedRef.current) return;
+                setVideoThumbs((previous) => {
+                  if (
+                    !filesRef.current.some(
+                      (candidate) => candidate.id === entry.id,
+                    )
+                  ) {
+                    return previous;
+                  }
+                  return new Map(previous).set(entry.id, thumbnail);
+                });
+              });
+          });
+
+        validEntries
+          .filter((entry) => entry.isHeic)
+          .forEach((entry) => {
+            void engine
+              .convertSharedUploadHeic(entry.file)
+              .then((converted) => {
+                if (!converted || !mountedRef.current) return;
+                commitFiles((previous) => {
+                  const match = previous.find(
+                    (candidate) => candidate.id === entry.id,
+                  );
+                  if (!match) return previous;
+                  const newPreview = URL.createObjectURL(converted);
+                  return previous.map((candidate) =>
+                    candidate.id === entry.id
+                      ? {
+                          ...candidate,
+                          file: converted,
+                          previewUrl: newPreview,
+                          isHeic: false,
+                        }
+                      : candidate,
+                  );
+                });
+              });
+          });
+      }
+
+      if (errors.length > 0) setError(errors.join(" "));
+    } catch (preparationError) {
+      if (
+        preparationController.signal.aborted ||
+        (preparationError instanceof Error &&
+          preparationError.name === "AbortError")
+      ) {
+        return;
+      }
+      const message =
+        "No pudimos preparar tus archivos. Revisa tu conexión e intenta de nuevo.";
+      if (mountedRef.current) {
+        setError(message);
+        addToast(message, "error");
+      }
+    } finally {
+      pendingSelectionSlotsRef.current = Math.max(
+        0,
+        pendingSelectionSlotsRef.current - reservedSlots,
+      );
+      selectionAbortControllersRef.current.delete(preparationController);
+      selectionPreparationCountRef.current = Math.max(
+        0,
+        selectionPreparationCountRef.current - 1,
+      );
+      if (selectionPreparationCountRef.current === 0 && mountedRef.current) {
+        setIsPreparing(false);
+      }
     }
   };
 
   const removeFile = (id: string) => {
-    setFiles((prev) => {
+    if (uploading || selectionPreparationCountRef.current > 0) return;
+    commitFiles((prev) => {
       const entry = prev.find((e) => e.id === id);
       if (entry?.previewUrl && entry.previewUrl !== "heic") {
         URL.revokeObjectURL(entry.previewUrl);
       }
       return prev.filter((e) => e.id !== id);
     });
-    setVideoThumbs((prev) => { const next = new Map(prev); next.delete(id); return next; });
+    setVideoThumbs((prev) => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
+    if (uploading || selectionPreparationCountRef.current > 0) return;
     const dropped = Array.from(e.dataTransfer.files);
     if (dropped.length > 0) addFiles(dropped);
   };
 
-  const uploadMultipart = useCallback(async (entry: FileEntry, isFirst: boolean): Promise<void> => {
-    setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "uploading" as const } : e));
-    const { file } = entry;
-    const ext = file.name.toLowerCase().split(".").pop() ?? "";
-    const contentType = file.type ||
-      (ext === "mp4" ? "video/mp4" : ext === "mov" ? "video/quicktime" : ext === "webm" ? "video/webm" : "video/mp4");
-
-    // ── Step 1: start multipart upload ──────────────────────────────────────
-    const startRes = await withRetry(() =>
-      fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/multipart/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content_type: contentType, filename: file.name, file_size: file.size }),
-      })
-    );
-    if (startRes.status === 403) throw Object.assign(new Error("uploads-disabled"), { uploadsDisabled: true });
-    if (!startRes.ok) {
-      const json = await startRes.json().catch(() => ({}));
-      throw new Error(json.message ?? `Error iniciando subida (${startRes.status})`);
-    }
-    const { data: startData } = await startRes.json();
-    const uploadId: string = startData.upload_id;
-    const s3Key: string = startData.s3_key;
-    const partUrls: Array<{ part_number: number; url: string }> = startData.part_urls;
-
-    const doAbort = () => fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/multipart/abort`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ upload_id: uploadId, s3_key: s3Key }),
-    }).catch(() => {});
-
-    try {
-      // ── Step 2: upload parts in parallel ────────────────────────────────
-      const parts = calcParts(file.size, PART_SIZE);
-      const bytesUploaded = new Array<number>(parts.length).fill(0);
-      const etags = new Array<{ part_number: number; etag: string }>(parts.length);
-
-      const uploadPart = async ({ partNumber, start, end }: { partNumber: number; start: number; end: number }): Promise<void> => {
-        const urlEntry = partUrls.find(u => u.part_number === partNumber)!;
-        const blob = file.slice(start, end);
-        // Show which part is being uploaded
-        setFiles(prev => prev.map(e => e.id === entry.id
-          ? { ...e, subtitle: `Subiendo parte ${partNumber}/${parts.length}...` }
-          : e));
-        bytesUploaded[partNumber - 1] = 0; // reset before first attempt
-        const etag = await withRetry(() => new Promise<string>((resolve, reject) => {
-          bytesUploaded[partNumber - 1] = 0; // reset on each retry to avoid stale progress
-          const xhr = new XMLHttpRequest();
-          xhr.open("PUT", urlEntry.url);
-          xhr.timeout = 10 * 60 * 1000; // 10 minutes per part
-          xhr.upload.onprogress = (ev) => {
-            if (ev.lengthComputable) {
-              bytesUploaded[partNumber - 1] = ev.loaded;
-              const pct = calcProgress(bytesUploaded, file.size);
-              setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, progress: pct } : e));
-            }
-          };
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              const etag = xhr.getResponseHeader("ETag") ?? xhr.getResponseHeader("etag") ?? "";
-              // Empty ETag = CORS bucket is missing ExposeHeaders:ETag — fail fast with a clear message.
-              if (!etag) {
-                reject(Object.assign(new Error(`Part ${partNumber}: S3 no devolvió ETag (configura ExposeHeaders en CORS del bucket)`), { permanent: true }));
-              } else {
-                resolve(etag);
-              }
-            } else if (xhr.status === 403 || xhr.status === 401) {
-              // Presigned URL expired or IAM denied — not retryable, fail fast.
-              reject(new Error(`Part ${partNumber}: sin permiso o URL expirada (${xhr.status})`));
-            } else {
-              reject(new Error(`Part ${partNumber} failed (${xhr.status})`));
-            }
-          };
-          xhr.onerror = () => reject(new TypeError(`Part ${partNumber}: connection error`));
-          xhr.ontimeout = () => reject(new Error(`Part ${partNumber}: timeout`));
-          xhr.send(blob);
-        }));
-        bytesUploaded[partNumber - 1] = end - start;
-        etags[partNumber - 1] = { part_number: partNumber, etag };
-      };
-
-      const partTasks = parts.map(p => () => uploadPart(p));
-      await runPool(partTasks, PART_CONCURRENCY);
-
-      // ── Step 3: complete ────────────────────────────────────────────────
-      setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, progress: 90, subtitle: undefined } : e));
-      const completeUrl = `${EVENTS_URL}api/events/${identifier}/moments/shared/multipart/complete`;
-      const completeOpts: RequestInit = {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          upload_id: uploadId,
-          s3_key: s3Key,
-          parts: etags,
-          description: isFirst && description.trim() ? description.trim() : "",
-        }),
-      };
-      let completeRes = await fetch(completeUrl, completeOpts);
-      if (!completeRes.ok) {
-        await new Promise(r => setTimeout(r, 2000));
-        completeRes = await fetch(completeUrl, completeOpts); // retry once — CompleteMultipartUpload is idempotent
-      }
-      if (!completeRes.ok) {
-        doAbort();
-        const json = await completeRes.json().catch(() => ({}));
-        throw new Error(json.message ?? `Error completando subida (${completeRes.status})`);
-      }
-      setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, status: "done" as const, progress: 100 } : e));
-
-    } catch (err) {
-      doAbort(); // best-effort cleanup — fire and forget
-      throw err;
-    }
-  }, [EVENTS_URL, identifier, description]);
-
   const handleUpload = async () => {
-    if (files.length === 0 || !identifier || uploading) return;
-    // flushSync forces a synchronous paint so the button disables in the same frame as the click (INP fix).
-    // IMPORTANT: must remain before any `await` — flushSync is unsafe inside async continuations.
+    if (
+      files.length === 0 ||
+      !identifier ||
+      uploading ||
+      selectionPreparationCountRef.current > 0
+    ) {
+      return;
+    }
+    const completedBeforeAttempt = files.filter(
+      (entry) => entry.status === "done",
+    ).length;
+    const startsFreshBatch = completedBeforeAttempt === 0;
+
+    // Preserve the same-frame INP guarantee: no await may move above this block.
     flushSync(() => {
       setUploading(true);
       setError("");
+      setUploadedCount(completedBeforeAttempt);
+      if (startsFreshBatch) setUploadPublicationHint("published");
     });
+    if (startsFreshBatch) uploadPublicationHintRef.current = "published";
+    uploadAbortControllerRef.current?.abort();
+    const uploadController = new AbortController();
+    uploadAbortControllerRef.current = uploadController;
 
-    let uploaded = 0;
-    let connectionError = false;
-    let uploadsDisabled = false;
-
-    // Track in-flight S3 XHRs so we can abort them immediately on connection failure,
-    // instead of waiting up to 2 minutes for each video timeout.
-    const activeXHRs = new Set<XMLHttpRequest>();
-    const abortActiveXHRs = () => { activeXHRs.forEach((x) => x.abort()); activeXHRs.clear(); };
-
-    // Populated by the sequential pre-compression pass below, before the pool starts.
-    const compressedFiles = new Map<string, File>(); // entry.id → compressed File
-
-    const uploadOne = async (
-      entry: FileEntry,
-      isFirst: boolean,
-      cachedPresign?: { uploadUrl: string; s3Key: string }
-    ): Promise<void> => {
-      if (entry.status === "done") { uploaded++; return; }
-
-      setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "uploading" as const } : e));
-
-      // Compression was done in the sequential pre-compression pass before the pool started.
-      const fileToUpload = compressedFiles.get(entry.id) ?? entry.file;
-      const ext = entry.file.name.toLowerCase().split(".").pop() ?? "";
-      const effectiveContentType = compressedFiles.get(entry.id) !== entry.file && compressedFiles.get(entry.id) !== undefined
-        ? "image/jpeg"
-        : (entry.file.type ||
-           (ext === "heic" || ext === "heif" ? "image/heic" :
-            ext === "mp4" ? "video/mp4" :
-            ext === "mov" ? "video/quicktime" :
-            "application/octet-stream"));
-
-      try {
-        // ── Step 1: Get presigned PUT URL (from batch cache or individual fetch) ──────
-        let uploadUrl: string;
-        let s3Key: string;
-
-        if (cachedPresign) {
-          uploadUrl = cachedPresign.uploadUrl;
-          s3Key = cachedPresign.s3Key;
-        } else {
-          const urlRes = await withRetry(() =>
-            fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/upload-url`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content_type: effectiveContentType, filename: entry.file.name }),
-            })
-          );
-          if (urlRes.status === 403) { uploadsDisabled = true; return; }
-          if (!urlRes.ok) {
-            const json = await urlRes.json().catch(() => ({}));
-            throw new Error(json.message ?? `Error obteniendo URL (${urlRes.status})`);
-          }
-          const { data } = await urlRes.json();
-          uploadUrl = data.upload_url;
-          s3Key = data.s3_key;
-        }
-
-        // ── Step 2: PUT file bytes directly to S3 with XHR for progress ─────
-        const xhr = new XMLHttpRequest();
-        activeXHRs.add(xhr);
-        try {
-          await new Promise<void>((resolve, reject) => {
-            xhr.open("PUT", uploadUrl);
-            xhr.setRequestHeader("Content-Type", effectiveContentType);
-            xhr.timeout = 120_000; // 2 min for large videos
-            xhr.upload.onprogress = (ev) => {
-              if (ev.lengthComputable) {
-                const pct = Math.round((ev.loaded / ev.total) * 90); // reserve last 10% for confirm
-                setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, progress: pct } : e));
-              }
-            };
-            xhr.onload = () => {
-              if (xhr.status >= 200 && xhr.status < 300) resolve();
-              else reject(new Error(`Error subiendo archivo a S3 (${xhr.status})`));
-            };
-            xhr.onerror = () => reject(new Error("Error de conexión al subir el archivo"));
-            xhr.ontimeout = () => reject(new Error("La subida tardó demasiado. Revisa tu conexión."));
-            xhr.onabort = () => reject(Object.assign(new Error("abort"), { silent: true }));
-            xhr.send(fileToUpload);
-          });
-        } finally {
-          activeXHRs.delete(xhr);
-        }
-
-        // ── Step 3: Confirm with backend — save DB record + queue Lambda ──────
-        setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, progress: 95 } : e));
-        const confirmRes = await withRetry(() =>
-          fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/confirm`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              s3_key: s3Key,
-              content_type: effectiveContentType,
-              description: isFirst && description.trim() ? description.trim() : "",
-            }),
-          })
-        );
-
-        if (!confirmRes.ok) {
-          const json = await confirmRes.json().catch(() => ({}));
-          throw new Error(json.message ?? `Error confirmando subida (${confirmRes.status})`);
-        }
-
-        setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "done" as const, progress: 100 } : e));
-        uploaded++;
-        setUploadedCount(uploaded);
-      } catch (err) {
-        if ((err as { silent?: boolean }).silent) return; // silently dropped by abortActiveXHRs()
-        let msg: string;
-        if (err instanceof Error && err.name === "AbortError") {
-          msg = "La subida tardó demasiado. Revisa tu conexión.";
-        } else if (err instanceof TypeError) {
-          msg = "No se pudo conectar al servidor. Verifica tu conexión a internet.";
-          connectionError = true;
-          abortActiveXHRs(); // kill other in-flight S3 uploads immediately
-        } else if (err instanceof Error) {
-          msg = err.message;
-        } else {
-          msg = "Ocurrió un error inesperado. Intenta de nuevo.";
-        }
-        setFiles((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: "error" as const, errorMsg: msg } : e));
+    let engine: Awaited<ReturnType<typeof loadSharedUploadEngineForAction>>;
+    try {
+      engine = await loadSharedUploadEngineForAction();
+    } catch {
+      if (uploadAbortControllerRef.current === uploadController) {
+        uploadAbortControllerRef.current = null;
       }
-    };
+      if (uploadController.signal.aborted) return;
+      setError(
+        "No pudimos iniciar la subida. Revisa tu conexión e intenta de nuevo.",
+      );
+      setUploading(false);
+      return;
+    }
+    if (uploadController.signal.aborted) return;
 
-    const pendingEntries = files.filter((e) => e.status !== "done");
-
-    // ── Batch-fetch presigned URLs for all single-PUT files upfront ───────────────
-    // Replaces N serial API calls with a single request before the pool starts.
-    const singleEntries = pendingEntries.filter(
-      (e) => !(e.isVideo && e.file.size > MULTIPART_THRESHOLD)
-    );
-    const presignCache = new Map<string, { uploadUrl: string; s3Key: string }>();
-
-    if (singleEntries.length > 0 && identifier && !connectionError) {
-      try {
-        const batchRes = await withRetry(() =>
-          fetch(`${EVENTS_URL}api/events/${identifier}/moments/shared/batch-upload-urls`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              files: singleEntries.map((e) => ({
-                content_type: effectiveBatchContentType(e),
-                filename: e.file.name,
-              })),
-            }),
-          }).then(async (r) => {
-            if (r.status === 403) { uploadsDisabled = true; return null; }
-            if (!r.ok) throw new Error(`Batch presign failed (${r.status})`);
-            return r.json();
-          })
-        );
-        if (batchRes?.data?.urls && batchRes.data.urls.length === singleEntries.length) {
-          (batchRes.data.urls as Array<{ upload_url: string; s3_key: string }>).forEach(
-            (u, i) => {
-              presignCache.set(singleEntries[i].id, { uploadUrl: u.upload_url, s3Key: u.s3_key });
-            }
-          );
-        }
-        // If lengths differ: presignCache stays empty → uploadOne falls back to per-file presign for all files
-      } catch {
-        // Batch presign failed — fall back silently to per-file presign in uploadOne
+    let result: Awaited<ReturnType<typeof engine.uploadSharedFiles>>;
+    try {
+      result = await engine.uploadSharedFiles({
+        eventsUrl: EVENTS_URL,
+        identifier,
+        files,
+        description,
+        descriptionEntryId: files[0]?.id ?? "",
+        allowMessages,
+        initialUploadedCount: completedBeforeAttempt,
+        signal: uploadController.signal,
+        fetchUploadApiData,
+        publicAccessQuery: currentPublicAccessQuery,
+        publicAccessFetchInit: currentPublicAccessFetchInit,
+        updateFiles: commitFiles,
+        onUploadedCount: setUploadedCount,
+        onError: setError,
+        onPublicationResponse: (payload) => {
+          recordUploadPublicationHint(payload);
+        },
+      });
+    } catch (uploadError) {
+      if (uploadAbortControllerRef.current === uploadController) {
+        uploadAbortControllerRef.current = null;
       }
+      if (uploadController.signal.aborted) return;
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Ocurrió un error inesperado. Intenta de nuevo.",
+      );
+      setUploading(false);
+      return;
+    }
+    if (uploadAbortControllerRef.current === uploadController) {
+      uploadAbortControllerRef.current = null;
     }
 
-    // ── Sequential pre-compression pass ──────────────────────────────────────────
-    // canvas.toBlob() is synchronous CPU work — running all compressions concurrently
-    // (inside the upload pool) blocks the main thread for 2–10 seconds on batch uploads.
-    // Compressing one-at-a-time with a yield between each keeps the UI responsive.
-    for (const entry of pendingEntries) {
-      const compressed = await compressImage(entry.file);
-      compressedFiles.set(entry.id, compressed);
-      await yield_();
+    if (result.abortedEarly) {
+      setUploading(false);
+      return;
     }
-
-    const uploadTasks = pendingEntries.map((entry, idx) => async () => {
-      if (connectionError || uploadsDisabled) return;
-      try {
-        if (entry.isVideo && entry.file.size > MULTIPART_THRESHOLD) {
-          await uploadMultipart(entry, idx === 0);
-          uploaded++;
-          setUploadedCount(uploaded);
-        } else {
-          await uploadOne(entry, idx === 0, presignCache.get(entry.id));
-        }
-      } catch (err) {
-        if ((err as { uploadsDisabled?: boolean }).uploadsDisabled) {
-          uploadsDisabled = true;
-          return;
-        }
-        // uploadOne handles its own errors internally via setFiles.
-        // multipart errors bubble up here — map them to the entry's error state.
-        if (entry.isVideo && entry.file.size > MULTIPART_THRESHOLD) {
-          const msg = err instanceof Error ? err.message : "Ocurrió un error inesperado.";
-          setFiles(prev => prev.map(e => e.id === entry.id ? { ...e, status: "error" as const, errorMsg: msg } : e));
-        }
-      }
-    });
-    await runPool(uploadTasks, getAdaptivePoolSize());
-
-    if (connectionError) setError("No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.");
-    if (uploadsDisabled) { setUploadsNotEnabled(true); setUploading(false); return; }
+    if (result.connectionError) {
+      setError(
+        "No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.",
+      );
+    }
+    if (result.uploadsDisabled) {
+      setUploadsNotEnabled(true);
+      setUploading(false);
+      return;
+    }
 
     setUploading(false);
-    setFiles((prev) => {
-      const allOk = prev.every((e) => e.status === "done");
-      if (allOk && prev.length > 0) {
-        const hadVideos = prev.some((e) => e.isVideo);
-        if (hadVideos) {
+    commitFiles((previous) => {
+      const allUploadsSucceeded = previous.every(
+        (entry) => entry.status === "done",
+      );
+      if (allUploadsSucceeded && previous.length > 0) {
+        if (uploadPublicationHintRef.current === "processing") {
           setOptimizing(true);
-          setTimeout(() => {
+          window.setTimeout(() => {
             setOptimizing(false);
             setAllDone(true);
           }, 2000);
@@ -1039,18 +844,21 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
           setAllDone(true);
         }
       }
-      return prev;
+      return previous;
     });
   };
 
   const handleUploadAnother = () => {
     files.forEach((e) => {
-      if (e.previewUrl && e.previewUrl !== "heic") URL.revokeObjectURL(e.previewUrl);
+      if (e.previewUrl && e.previewUrl !== "heic")
+        URL.revokeObjectURL(e.previewUrl);
     });
-    setFiles([]);
+    commitFiles(() => []);
     setVideoThumbs(new Map());
     setDescription("");
     setAllDone(false);
+    setUploadPublicationHint("pending_review");
+    uploadPublicationHintRef.current = "published";
     setUploadedCount(0);
     setError("");
   };
@@ -1060,29 +868,129 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
   if (!identifier) {
     return (
       <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
-        <ThemeToggleButton />
-        <div className={`min-h-screen flex items-center justify-center px-6 relative${theme === 'light' ? ' bg-gray-50' : ''}`}>
+        <UploadThemeToggle theme={theme} onToggle={toggleTheme} />
+        <div
+          className={`relative isolate flex min-h-screen items-center justify-center px-6${theme === "light" ? " bg-gray-50" : ""}`}
+        >
           <DarkBackground />
-          <p className="text-gray-500 text-sm text-center">Enlace inválido. Escanea el código QR de nuevo.</p>
+          <InvalidUploadLinkState theme={theme} />
         </div>
       </ThemeCtx.Provider>
     );
   }
 
-  if (uploadsNotEnabled) {
+  if (!eventAccess.ready) {
     return (
       <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
-        <ThemeToggleButton />
-        <ComingSoonScreen identifier={identifier} />
+        <UploadThemeToggle theme={theme} onToggle={toggleTheme} />
+        <div
+          className={`relative isolate flex min-h-screen items-center justify-center px-6${theme === "light" ? " bg-gray-50" : ""}`}
+        >
+          <DarkBackground />
+          <Spinner className="w-6 h-6 text-violet-400" />
+        </div>
       </ThemeCtx.Provider>
     );
   }
 
-  if (wallPublished) {
+  if (eventAccess.passwordRequired) {
     return (
       <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
-        <ThemeToggleButton />
-        <ThankYouScreen eventName={wallEventName} identifier={identifier} />
+        <UploadThemeToggle theme={theme} onToggle={toggleTheme} />
+        <PublicEventPasswordGate
+          title="Uploads privados"
+          description="Ingresa la contrasena del evento para compartir tus momentos."
+          className={theme === "dark" ? "bg-gray-950" : "bg-gray-50"}
+          onVerify={eventAccess.verifyPassword}
+        />
+      </ThemeCtx.Provider>
+    );
+  }
+
+  if (allDone) {
+    return (
+      <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
+        <UploadThemeToggle theme={theme} onToggle={toggleTheme} />
+        <SuccessScreen
+          count={uploadedCount}
+          publicationHint={uploadPublicationHint}
+          onUploadMore={handleUploadAnother}
+        />
+      </ThemeCtx.Provider>
+    );
+  }
+
+  const sharedUploadGate = getSharedUploadGate({
+    uploadsNotEnabled,
+    wallPublished,
+    quotaLoaded,
+    uploadsRemaining,
+  });
+
+  if (!quotaLoaded) {
+    return (
+      <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
+        <UploadThemeToggle theme={theme} onToggle={toggleTheme} />
+        <div
+          className={`relative isolate flex min-h-screen items-center justify-center px-6 py-10${theme === "light" ? " bg-gray-50" : ""}`}
+        >
+          <DarkBackground />
+          <UploadStatusLoadingState theme={theme} />
+        </div>
+      </ThemeCtx.Provider>
+    );
+  }
+
+  if (quotaLoaded && uploadStatusError) {
+    return (
+      <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
+        <UploadThemeToggle theme={theme} onToggle={toggleTheme} />
+        <div
+          className={`relative isolate flex min-h-screen items-center justify-center px-6 py-10${theme === "light" ? " bg-gray-50" : ""}`}
+        >
+          <DarkBackground />
+          <UploadStatusErrorState
+            theme={theme}
+            kind={uploadStatusError.kind}
+            retrying={quotaRetrying}
+            onRetry={
+              uploadStatusError.kind === "transient"
+                ? () => void retryQuota()
+                : undefined
+            }
+          />
+        </div>
+      </ThemeCtx.Provider>
+    );
+  }
+
+  if (sharedUploadGate === "published") {
+    return (
+      <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
+        <UploadThemeToggle theme={theme} onToggle={toggleTheme} />
+        <ThankYouScreen
+          eventName={wallEventName}
+          identifier={identifier}
+          accessToken={accessToken}
+        />
+      </ThemeCtx.Provider>
+    );
+  }
+
+  if (sharedUploadGate === "disabled") {
+    return (
+      <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
+        <UploadThemeToggle theme={theme} onToggle={toggleTheme} />
+        <ComingSoonScreen />
+      </ThemeCtx.Provider>
+    );
+  }
+
+  if (sharedUploadGate === "limit-reached") {
+    return (
+      <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
+        <UploadThemeToggle theme={theme} onToggle={toggleTheme} />
+        <UploadLimitReachedScreen />
       </ThemeCtx.Provider>
     );
   }
@@ -1090,8 +998,10 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
   if (optimizing) {
     return (
       <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
-        <ThemeToggleButton />
-        <div className={`min-h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden${theme === 'light' ? ' bg-white' : ''}`}>
+        <UploadThemeToggle theme={theme} onToggle={toggleTheme} />
+        <div
+          className={`relative isolate flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 text-center${theme === "light" ? " bg-white" : ""}`}
+        >
           <DarkBackground />
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -1099,18 +1009,24 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
             className="flex flex-col items-center gap-4"
           >
-            <div className={`w-20 h-20 rounded-full flex items-center justify-center ${
-              theme === 'dark'
-                ? 'bg-gradient-to-br from-violet-600/30 to-indigo-600/30 ring-1 ring-violet-500/40'
-                : 'bg-gradient-to-br from-violet-100 to-indigo-100 ring-1 ring-violet-300'
-            }`}>
+            <div
+              className={`w-20 h-20 rounded-full flex items-center justify-center ${
+                theme === "dark"
+                  ? "bg-gradient-to-br from-violet-600/30 to-indigo-600/30 ring-1 ring-violet-500/40"
+                  : "bg-gradient-to-br from-violet-100 to-indigo-100 ring-1 ring-violet-300"
+              }`}
+            >
               <Spinner className="w-8 h-8 text-violet-500" />
             </div>
             <div className="space-y-1.5">
-              <p className={`text-base font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+              <p
+                className={`text-base font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}
+              >
                 Optimizando tus archivos…
               </p>
-              <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+              <p
+                className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+              >
                 Esto solo toma unos segundos
               </p>
             </div>
@@ -1120,473 +1036,521 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
     );
   }
 
-  if (allDone) {
-    return (
-      <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
-        <ThemeToggleButton />
-        <SuccessScreen
-          count={uploadedCount}
-          onUploadMore={handleUploadAnother}
-        />
-      </ThemeCtx.Provider>
-    );
-  }
-
   // ── Derived ────────────────────────────────────────────────────────────────
   const doneCount = files.filter((e) => e.status === "done").length;
   const hasErrors = files.some((e) => e.status === "error");
-  const canAdd = files.length < MAX_FILES;
+  const reservedQuotaCount = files.filter((e) => e.status !== "done").length;
+  const selectableSlots = getSelectableUploadSlots({
+    currentBatchCount: files.length,
+    reservedQuotaCount,
+    perBatchLimit: MAX_FILES,
+    quotaRemaining: uploadsRemaining,
+  });
+  const displayMaxFiles = getUploadDisplayLimit(MAX_FILES, uploadsRemaining);
+  const canAdd = selectableSlots > 0 && !uploading;
 
   // ── Main UI ────────────────────────────────────────────────────────────────
 
   return (
     <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
-    <ThemeToggleButton />
-    <ToastList toasts={toasts} onRemove={removeToast} />
-    <div className={`min-h-screen flex flex-col relative${theme === 'light' ? ' bg-gray-50' : ''}`}>
-      <DarkBackground />
-      {/* Preview lightbox */}
-      <AnimatePresence>
-        {previewEntry && (
-          <PreviewLightbox entry={previewEntry} onClose={() => setPreviewEntry(null)} />
-        )}
-      </AnimatePresence>
+      <UploadThemeToggle theme={theme} onToggle={toggleTheme} />
+      <ToastList toasts={toasts} onRemove={removeToast} />
+      <div
+        className={`relative isolate flex min-h-screen flex-col${theme === "light" ? " bg-gray-50" : ""}`}
+      >
+        <DarkBackground />
 
-      {/* iOS gallery preparation overlay */}
-      <AnimatePresence>
-        {isPreparing && (
-          <motion.div
-            key="preparing"
-            role="status"
-            aria-live="polite"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.2 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl px-5 py-3 shadow-xl backdrop-blur-md"
-            style={{
-              background: 'rgba(24,24,27,0.92)',
-              border: '1px solid rgba(255,255,255,0.08)',
-            }}
-          >
-            <svg
-              className="w-4 h-4 text-pink-400 animate-spin shrink-0"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <span className="text-sm text-white/90 font-medium whitespace-nowrap">
-              Preparando archivos de tu galería…
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Header */}
-      <header className="px-4 sm:px-6 pt-8 sm:pt-12 pb-6 text-center">
-        <motion.div
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 400, damping: 25, delay: 0.1 }}
-          className={`inline-flex items-center justify-center w-16 h-16 rounded-[20px] mb-5 transition-colors ${
-            theme === 'dark'
-              ? 'bg-violet-500/20 border border-violet-500/30 shadow-[0_0_40px_rgba(139,92,246,0.25)]'
-              : 'bg-gradient-to-br from-violet-500 to-indigo-600 shadow-lg shadow-indigo-500/25'
-          }`}
-        >
-          <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-          </svg>
-        </motion.div>
-        <motion.h1
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className={`text-2xl font-bold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}
-        >
-          Comparte tus momentos
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className={`mt-2 text-sm max-w-[280px] mx-auto leading-relaxed ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}
-        >
-          Sube hasta {MAX_FILES} fotos o videos para la galería del evento
-        </motion.p>
-      </header>
-
-      {/* Main content */}
-      <main className="flex-1 px-3 sm:px-5 pb-10 pt-2 max-w-md mx-auto w-full">
-        <div className={`space-y-4 rounded-3xl p-4 sm:p-6 transition-all ${
-          theme === 'dark'
-            ? 'bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] shadow-2xl shadow-black/50'
-            : 'bg-white border border-gray-100 shadow-sm'
-        }`}>
-
-        {/* Thumbnails grid */}
+        {/* iOS gallery preparation overlay */}
         <AnimatePresence>
-          {files.length > 0 && (
+          {isPreparing && (
             <motion.div
-              initial={{ opacity: 0, y: 12 }}
+              key="preparing"
+              role="status"
+              aria-live="polite"
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              className="grid grid-cols-3 gap-2"
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.2 }}
+              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl px-5 py-3 shadow-xl backdrop-blur-md"
+              style={{
+                background: "rgba(24,24,27,0.92)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
             >
-              {files.map((entry) => {
-                const thumb = entry.isVideo ? videoThumbs.get(entry.id) : null;
-                return (
-                  <motion.div
-                    key={entry.id}
-                    layout
-                    initial={{ opacity: 0, scale: 0.85 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.85 }}
-                    transition={{ type: "spring", damping: 20, stiffness: 300 }}
-                    className={`relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-all duration-200 ${
-                      entry.status === 'uploading'
-                        ? 'ring-2 ring-amber-400/60 shadow-[0_0_14px_rgba(251,191,36,0.35)]'
-                        : entry.status === 'done'
-                        ? 'ring-2 ring-green-400/60 shadow-[0_0_14px_rgba(52,211,153,0.45)]'
-                        : entry.status === 'error'
-                        ? 'ring-2 ring-red-400/60 shadow-[0_0_14px_rgba(248,113,113,0.45)]'
-                        : theme === 'dark'
-                        ? 'ring-1 ring-white/10 hover:ring-white/25 hover:scale-[1.02] bg-gray-800'
-                        : 'ring-1 ring-gray-200 hover:ring-gray-300 hover:scale-[1.02] bg-gray-100'
-                    }`}
-                    onClick={() => { if (!uploading) setPreviewEntry(entry); }}
-                  >
-                    {/* Thumbnail image */}
-                    {entry.isVideo ? (
-                      thumb ? (
-                        <img src={thumb} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                      ) : (
-                        <div className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
-                          <IconPlay className="w-8 h-8 text-white/40" />
-                        </div>
-                      )
-                    ) : entry.previewUrl === "heic" ? (
-                      <div className={`absolute inset-0 flex flex-col items-center justify-center gap-1 px-1 ${
-                        theme === 'dark'
-                          ? 'bg-gradient-to-br from-gray-700 to-gray-800'
-                          : 'bg-gradient-to-br from-gray-200 to-gray-300'
-                      }`}>
-                        <IconCamera className={`w-6 h-6 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} />
-                        <p className={`text-[9px] font-medium text-center leading-tight truncate w-full text-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{entry.file.name}</p>
-                      </div>
-                    ) : (
-                      <img src={entry.previewUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                    )}
-
-                    {/* Video play badge */}
-                    {entry.isVideo && entry.status === "pending" && (
-                      <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 bg-black/60 backdrop-blur-sm rounded-full pl-1.5 pr-2 py-0.5">
-                        <IconPlay className="w-3 h-3 text-white" />
-                        <span className="text-[10px] text-white font-medium">{formatSize(entry.file.size)}</span>
-                      </div>
-                    )}
-
-                    {/* Status overlays */}
-                    {entry.status === "uploading" && (
-                      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2">
-                        {(entry.progress ?? 0) > 0 ? (
-                          <>
-                            <span className="text-white text-xs font-semibold">{entry.progress}%</span>
-                            <div className="w-3/4 h-1 rounded-full bg-white/30 overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-white transition-all duration-300"
-                                style={{ width: `${entry.progress}%` }}
-                              />
-                            </div>
-                            {entry.subtitle && (
-                              <span className="text-white/70 text-[9px] font-medium leading-none px-1 text-center">{entry.subtitle}</span>
-                            )}
-                          </>
-                        ) : (
-                          <Spinner className="w-7 h-7 text-white" />
-                        )}
-                      </div>
-                    )}
-                    {entry.status === "done" && (
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="absolute inset-0 bg-green-500/20 backdrop-blur-[1px] flex items-center justify-center"
-                      >
-                        <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          transition={{ type: "spring", stiffness: 400, damping: 15 }}
-                          className="w-9 h-9 rounded-full bg-green-500 flex items-center justify-center shadow-lg"
-                        >
-                          <IconCheck className="w-5 h-5 text-white" />
-                        </motion.div>
-                      </motion.div>
-                    )}
-                    {entry.status === "error" && (
-                      <div className="absolute inset-0 bg-red-500/20 backdrop-blur-[1px] flex items-center justify-center">
-                        <div className="w-9 h-9 rounded-full bg-red-500 flex items-center justify-center shadow-lg" title={entry.errorMsg}>
-                          <IconX className="w-5 h-5 text-white" />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Remove button — visible on pending (always) and error (even mid-upload).
-                        Always visible on mobile (no hover); hover-only on desktop. */}
-                    {(entry.status === "pending" || entry.status === "error") && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); removeFile(entry.id); }}
-                        className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/50 backdrop-blur-sm text-white hover:bg-black/70 transition-all opacity-70 sm:opacity-0 sm:group-hover:opacity-100"
-                        aria-label="Quitar"
-                      >
-                        <IconX className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </motion.div>
-                );
-              })}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Action buttons — gallery + camera */}
-        {canAdd && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: files.length === 0 ? 0.25 : 0 }}
-          >
-            {files.length === 0 ? (
-              /* Empty state — large drop zone */
-              <div
-                onDrop={handleDrop}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onClick={() => { pickerOpenRef.current = true; fileInputRef.current?.click(); }}
-                className={`cursor-pointer border-2 border-dashed rounded-3xl aspect-[4/3] flex flex-col items-center justify-center gap-4 transition-all duration-200 ${
-                  dragOver
-                    ? theme === 'dark'
-                      ? 'border-violet-400/70 bg-violet-500/[0.08] shadow-[inset_0_0_40px_rgba(139,92,246,0.12)] scale-[1.01]'
-                      : 'border-indigo-400 bg-indigo-50 scale-[1.01]'
-                    : theme === 'dark'
-                      ? 'border-white/20 hover:border-violet-400/40 hover:bg-violet-500/[0.04]'
-                      : 'border-gray-200 hover:border-indigo-300 hover:bg-gray-50/50'
-                }`}
+              <svg
+                className="w-4 h-4 text-pink-400 animate-spin shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
               >
-                <motion.div
-                  animate={dragOver ? { scale: 1.1 } : { scale: 1 }}
-                  className={`p-4 rounded-2xl transition-colors ${
-                    dragOver
-                      ? theme === 'dark' ? 'bg-violet-500/20' : 'bg-indigo-100'
-                      : theme === 'dark' ? 'bg-gradient-to-br from-violet-500/15 to-indigo-500/15' : 'bg-gray-50'
-                  }`}
-                >
-                  <IconUpload className={`w-8 h-8 ${
-                    dragOver
-                      ? theme === 'dark' ? 'text-violet-300' : 'text-indigo-500'
-                      : theme === 'dark' ? 'text-violet-400/60' : 'text-gray-300'
-                  }`} />
-                </motion.div>
-                <div className="text-center px-6">
-                  <p className={`text-[15px] font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-700'}`}>
-                    {dragOver ? "Suelta aquí" : "Seleccionar de galería"}
-                  </p>
-                  <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>Fotos y videos · Máx. 25 MB fotos, 200 MB videos · Máximo 5 min por video</p>
-                </div>
-              </div>
-            ) : (
-              /* Has files — compact add more */
-              <div
-                onDrop={handleDrop}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onClick={() => { pickerOpenRef.current = true; fileInputRef.current?.click(); }}
-                className={`cursor-pointer border-2 border-dashed rounded-2xl py-4 flex items-center justify-center gap-2 transition-all ${
-                  dragOver
-                    ? theme === 'dark' ? 'border-violet-400/70 bg-violet-500/[0.08]' : 'border-indigo-400 bg-indigo-50'
-                    : theme === 'dark' ? 'border-white/15 hover:border-violet-400/40 hover:bg-violet-500/[0.04]' : 'border-gray-200 hover:border-indigo-300 hover:bg-gray-50/50'
-                }`}
-              >
-                <svg className={`w-5 h-5 ${theme === 'dark' ? 'text-violet-400' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                <span className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Agregar más ({files.length}/{MAX_FILES})
-                </span>
-              </div>
-            )}
-
-            {/* Camera button */}
-            <button
-              type="button"
-              onClick={() => { pickerOpenRef.current = true; cameraInputRef.current?.click(); }}
-              className={`mt-2 w-full flex items-center justify-center gap-2.5 rounded-2xl border py-3.5 text-sm font-medium transition-colors ${
-                theme === 'dark'
-                  ? 'border-white/10 text-gray-400 hover:bg-white/[0.04] hover:text-gray-200'
-                  : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-              }`}
-            >
-              <IconCamera className="w-5 h-5" />
-              Tomar foto o video
-            </button>
-          </motion.div>
-        )}
-
-        {/* Hidden file inputs */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={FILE_ACCEPT}
-          multiple
-          className="sr-only"
-          onChange={(e) => {
-            if (preparingTimerRef.current) {
-              clearTimeout(preparingTimerRef.current)
-              preparingTimerRef.current = null
-            }
-            setIsPreparing(false)
-            pickerOpenRef.current = false
-            const selected = Array.from(e.target.files ?? []);
-            if (selected.length > 0) addFiles(selected);
-            e.target.value = "";
-          }}
-        />
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*,video/*"
-          multiple
-          className="sr-only"
-          onChange={(e) => {
-            if (preparingTimerRef.current) {
-              clearTimeout(preparingTimerRef.current)
-              preparingTimerRef.current = null
-            }
-            setIsPreparing(false)
-            pickerOpenRef.current = false
-            const selected = Array.from(e.target.files ?? []);
-            if (selected.length > 0) addFiles(selected);
-            e.target.value = "";
-          }}
-        />
-
-        {/* Description */}
-        {files.length > 0 && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Escribe un mensaje (opcional)"
-              rows={2}
-              maxLength={300}
-              className={`w-full rounded-2xl border px-4 py-3 text-sm resize-none transition-all focus:outline-none focus:ring-2 ${
-                theme === 'dark'
-                  ? 'border-white/10 bg-white/[0.04] text-white placeholder:text-gray-600 focus:ring-violet-500/25 focus:border-violet-500/40'
-                  : 'border-gray-200 bg-white text-gray-800 placeholder:text-gray-300 focus:ring-indigo-500/30 focus:border-indigo-300'
-              }`}
-            />
-          </motion.div>
-        )}
-
-        {/* Error */}
-        <AnimatePresence>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              className={`rounded-xl px-4 py-3 flex items-start gap-2 ${
-                theme === 'dark' ? 'bg-red-500/10 border border-red-500/20' : 'bg-red-50'
-              }`}
-            >
-              <svg className="w-4 h-4 text-red-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
               </svg>
-              <p className={`text-sm leading-relaxed ${theme === 'dark' ? 'text-red-300' : 'text-red-600'}`}>{error}</p>
+              <span className="text-sm text-white/90 font-medium whitespace-nowrap">
+                Preparando archivos de tu galería…
+              </span>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Partial success banner — some uploaded, some failed */}
-        <AnimatePresence>
-          {!uploading && doneCount > 0 && hasErrors && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              className={`rounded-xl px-4 py-3 flex items-start gap-2.5 border ${
-                theme === 'dark' ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200/50'
-              }`}
-            >
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-                theme === 'dark' ? 'bg-amber-500/40 border border-amber-400/40' : 'bg-amber-400'
-              }`}>
-                <span className="text-white text-xs font-bold">!</span>
-              </div>
-              <div>
-                <p className={`text-sm font-medium ${theme === 'dark' ? 'text-amber-300' : 'text-amber-800'}`}>
-                  {doneCount} de {files.length} {doneCount === 1 ? "se subió" : "se subieron"} correctamente
-                </p>
-                <p className={`text-xs mt-0.5 ${theme === 'dark' ? 'text-amber-400/80' : 'text-amber-600'}`}>
-                  Puedes reintentar los que fallaron tocando el botón de abajo.
-                </p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Progress bar */}
-        {uploading && (
+        {/* Header */}
+        <header className="px-4 sm:px-6 pt-8 sm:pt-12 pb-6 text-center">
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="space-y-2"
-          >
-            <div className={`h-2 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-white/10' : 'bg-gray-100'}`}>
-              <motion.div
-                className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${files.length > 0 ? ((uploadedCount + 0.5) / files.length) * 100 : 0}%` }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
-              />
-            </div>
-            <div className="flex items-center justify-center gap-2">
-              <Spinner className="w-4 h-4 text-indigo-500" />
-              <p className={`text-xs font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                Subiendo {Math.min(uploadedCount + 1, files.length)} de {files.length}
-              </p>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Submit button */}
-        {files.length > 0 && (
-          <motion.button
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            type="button"
-            disabled={files.length === 0 || uploading || files.every((e) => e.status === "done")}
-            onClick={handleUpload}
-            className={`w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 py-4 text-sm font-semibold text-white active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 disabled:shadow-none ${
-              theme === 'dark'
-                ? 'shadow-[0_8px_32px_rgba(99,102,241,0.35)] hover:shadow-[0_8px_40px_rgba(99,102,241,0.55)]'
-                : 'shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30'
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{
+              type: "spring",
+              stiffness: 400,
+              damping: 25,
+              delay: 0.1,
+            }}
+            className={`inline-flex items-center justify-center w-16 h-16 rounded-[20px] mb-5 transition-colors ${
+              theme === "dark"
+                ? "bg-violet-500/20 border border-violet-500/30 shadow-[0_0_40px_rgba(139,92,246,0.25)]"
+                : "bg-gradient-to-br from-violet-500 to-indigo-600 shadow-lg shadow-indigo-500/25"
             }`}
           >
-            {uploading
-              ? `Subiendo ${Math.min(uploadedCount + 1, files.length)} de ${files.length}…`
-              : hasErrors
-                ? "Reintentar fallidos"
-                : files.length === 1
-                  ? "Compartir momento"
-                  : `Compartir ${files.length} momentos`}
-          </motion.button>
-        )}
-        </div>
-      </main>
-    </div>
+            <svg
+              className="w-8 h-8 text-white"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
+              />
+            </svg>
+          </motion.div>
+          <motion.h1
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className={`text-2xl font-bold tracking-tight ${theme === "dark" ? "text-white" : "text-gray-900"}`}
+          >
+            Comparte tus momentos
+          </motion.h1>
+          <motion.p
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className={`mt-2 text-sm max-w-[280px] mx-auto leading-relaxed ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}
+          >
+            Sube hasta {displayMaxFiles} fotos o videos para la galería del
+            evento
+          </motion.p>
+        </header>
+
+        {/* Main content */}
+        <main className="flex-1 px-3 sm:px-5 pb-10 pt-2 max-w-md mx-auto w-full">
+          <div
+            className={`space-y-4 rounded-3xl p-4 sm:p-6 transition-all ${
+              theme === "dark"
+                ? "bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] shadow-2xl shadow-black/50"
+                : "bg-white border border-gray-100 shadow-sm"
+            }`}
+          >
+            {/* Media preview grid — loaded only after the first file is selected. */}
+            {files.length > 0 && (
+              <Suspense
+                fallback={
+                  <div
+                    className="grid grid-cols-3 gap-2"
+                    role="status"
+                    aria-label="Preparando archivos seleccionados"
+                  >
+                    {files.slice(0, 3).map((entry) => (
+                      <div
+                        key={entry.id}
+                        className={`aspect-square animate-pulse rounded-2xl motion-reduce:animate-none ${
+                          theme === "dark" ? "bg-white/10" : "bg-gray-100"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                }
+              >
+                <UploadMediaPreviewGrid
+                  entries={files}
+                  videoThumbs={videoThumbs}
+                  uploading={uploading || isPreparing}
+                  theme={theme}
+                  onRemove={removeFile}
+                />
+              </Suspense>
+            )}
+
+            {/* Action buttons — gallery + camera */}
+            {canAdd && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: files.length === 0 ? 0.25 : 0 }}
+              >
+                {files.length === 0 ? (
+                  /* Empty state — large drop zone */
+                  <button
+                    type="button"
+                    disabled={isPreparing}
+                    onPointerEnter={preloadSharedUploadEngine}
+                    onFocus={preloadSharedUploadEngine}
+                    onTouchStart={preloadSharedUploadEngine}
+                    onDrop={handleDrop}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOver(true);
+                    }}
+                    onDragLeave={() => setDragOver(false)}
+                    onClick={() => {
+                      preloadSharedUploadEngine();
+                      pickerOpenRef.current = true;
+                      fileInputRef.current?.click();
+                    }}
+                    className={`w-full cursor-pointer border-2 border-dashed rounded-3xl aspect-[4/3] flex flex-col items-center justify-center gap-4 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 ${theme === "dark" ? "focus-visible:ring-offset-gray-950" : "focus-visible:ring-offset-white"} ${
+                      dragOver
+                        ? theme === "dark"
+                          ? "border-violet-400/70 bg-violet-500/[0.08] shadow-[inset_0_0_40px_rgba(139,92,246,0.12)] scale-[1.01]"
+                          : "border-indigo-400 bg-indigo-50 scale-[1.01]"
+                        : theme === "dark"
+                          ? "border-white/20 hover:border-violet-400/40 hover:bg-violet-500/[0.04]"
+                          : "border-gray-200 hover:border-indigo-300 hover:bg-gray-50/50"
+                    }`}
+                  >
+                    <motion.div
+                      animate={dragOver ? { scale: 1.1 } : { scale: 1 }}
+                      className={`p-4 rounded-2xl transition-colors ${
+                        dragOver
+                          ? theme === "dark"
+                            ? "bg-violet-500/20"
+                            : "bg-indigo-100"
+                          : theme === "dark"
+                            ? "bg-gradient-to-br from-violet-500/15 to-indigo-500/15"
+                            : "bg-gray-50"
+                      }`}
+                    >
+                      <IconUpload
+                        className={`w-8 h-8 ${
+                          dragOver
+                            ? theme === "dark"
+                              ? "text-violet-300"
+                              : "text-indigo-500"
+                            : theme === "dark"
+                              ? "text-violet-400/60"
+                              : "text-gray-300"
+                        }`}
+                      />
+                    </motion.div>
+                    <div className="text-center px-6">
+                      <p
+                        className={`text-[15px] font-semibold ${theme === "dark" ? "text-white" : "text-gray-700"}`}
+                      >
+                        {dragOver ? "Suelta aquí" : "Seleccionar de galería"}
+                      </p>
+                      <p
+                        className={`text-xs mt-1 ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}
+                      >
+                        Fotos y videos · Máx. 25 MB fotos, 200 MB videos ·
+                        Máximo 5 min por video
+                      </p>
+                    </div>
+                  </button>
+                ) : (
+                  /* Has files — compact add more */
+                  <button
+                    type="button"
+                    disabled={isPreparing}
+                    onPointerEnter={preloadSharedUploadEngine}
+                    onFocus={preloadSharedUploadEngine}
+                    onTouchStart={preloadSharedUploadEngine}
+                    onDrop={handleDrop}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOver(true);
+                    }}
+                    onDragLeave={() => setDragOver(false)}
+                    onClick={() => {
+                      preloadSharedUploadEngine();
+                      pickerOpenRef.current = true;
+                      fileInputRef.current?.click();
+                    }}
+                    className={`w-full cursor-pointer border-2 border-dashed rounded-2xl py-4 flex items-center justify-center gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 ${theme === "dark" ? "focus-visible:ring-offset-gray-950" : "focus-visible:ring-offset-white"} ${
+                      dragOver
+                        ? theme === "dark"
+                          ? "border-violet-400/70 bg-violet-500/[0.08]"
+                          : "border-indigo-400 bg-indigo-50"
+                        : theme === "dark"
+                          ? "border-white/15 hover:border-violet-400/40 hover:bg-violet-500/[0.04]"
+                          : "border-gray-200 hover:border-indigo-300 hover:bg-gray-50/50"
+                    }`}
+                  >
+                    <svg
+                      className={`w-5 h-5 ${theme === "dark" ? "text-violet-400" : "text-gray-400"}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 4.5v15m7.5-7.5h-15"
+                      />
+                    </svg>
+                    <span
+                      className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+                    >
+                      Agregar más ({files.length}/
+                      {Math.min(MAX_FILES, files.length + selectableSlots)})
+                    </span>
+                  </button>
+                )}
+
+                {/* Camera button */}
+                <button
+                  type="button"
+                  disabled={isPreparing}
+                  onPointerEnter={preloadSharedUploadEngine}
+                  onFocus={preloadSharedUploadEngine}
+                  onTouchStart={preloadSharedUploadEngine}
+                  onClick={() => {
+                    preloadSharedUploadEngine();
+                    pickerOpenRef.current = true;
+                    cameraInputRef.current?.click();
+                  }}
+                  className={`mt-2 w-full flex items-center justify-center gap-2.5 rounded-2xl border py-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 ${theme === "dark" ? "focus-visible:ring-offset-gray-950" : "focus-visible:ring-offset-white"} ${
+                    theme === "dark"
+                      ? "border-white/10 text-gray-400 hover:bg-white/[0.04] hover:text-gray-200"
+                      : "border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                  }`}
+                >
+                  <IconCamera className="w-5 h-5" />
+                  Tomar foto o video
+                </button>
+              </motion.div>
+            )}
+
+            {/* Hidden file inputs */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={FILE_ACCEPT}
+              multiple
+              hidden
+              tabIndex={-1}
+              aria-hidden="true"
+              onChange={(e) => {
+                if (preparingTimerRef.current) {
+                  clearTimeout(preparingTimerRef.current);
+                  preparingTimerRef.current = null;
+                }
+                setIsPreparing(false);
+                pickerOpenRef.current = false;
+                const selected = Array.from(e.target.files ?? []);
+                if (selected.length > 0) addFiles(selected);
+                e.target.value = "";
+              }}
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept={CAMERA_FILE_ACCEPT}
+              multiple
+              hidden
+              tabIndex={-1}
+              aria-hidden="true"
+              onChange={(e) => {
+                if (preparingTimerRef.current) {
+                  clearTimeout(preparingTimerRef.current);
+                  preparingTimerRef.current = null;
+                }
+                setIsPreparing(false);
+                pickerOpenRef.current = false;
+                const selected = Array.from(e.target.files ?? []);
+                if (selected.length > 0) addFiles(selected);
+                e.target.value = "";
+              }}
+            />
+
+            {/* Description */}
+            {files.length > 0 && allowMessages && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <textarea
+                  value={description}
+                  disabled={uploading}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Escribe un mensaje (opcional)"
+                  rows={2}
+                  maxLength={300}
+                  className={`w-full rounded-2xl border px-4 py-3 text-sm resize-none transition-all focus:outline-none focus:ring-2 disabled:cursor-wait disabled:opacity-60 ${
+                    theme === "dark"
+                      ? "border-white/10 bg-white/[0.04] text-white placeholder:text-gray-600 focus:ring-violet-500/25 focus:border-violet-500/40"
+                      : "border-gray-200 bg-white text-gray-800 placeholder:text-gray-300 focus:ring-indigo-500/30 focus:border-indigo-300"
+                  }`}
+                />
+              </motion.div>
+            )}
+
+            {/* Error */}
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  role="alert"
+                  aria-live="assertive"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  className={`rounded-xl px-4 py-3 flex items-start gap-2 ${
+                    theme === "dark"
+                      ? "bg-red-500/10 border border-red-500/20"
+                      : "bg-red-50"
+                  }`}
+                >
+                  <svg
+                    className="w-4 h-4 text-red-400 mt-0.5 shrink-0"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                    />
+                  </svg>
+                  <p
+                    className={`text-sm leading-relaxed ${theme === "dark" ? "text-red-300" : "text-red-600"}`}
+                  >
+                    {error}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Partial success banner — some uploaded, some failed */}
+            <AnimatePresence>
+              {!uploading && doneCount > 0 && hasErrors && (
+                <motion.div
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  className={`rounded-xl px-4 py-3 flex items-start gap-2.5 border ${
+                    theme === "dark"
+                      ? "bg-amber-500/10 border-amber-500/20"
+                      : "bg-amber-50 border-amber-200/50"
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                      theme === "dark"
+                        ? "bg-amber-500/40 border border-amber-400/40"
+                        : "bg-amber-400"
+                    }`}
+                  >
+                    <span className="text-white text-xs font-bold">!</span>
+                  </div>
+                  <div>
+                    <p
+                      className={`text-sm font-medium ${theme === "dark" ? "text-amber-300" : "text-amber-800"}`}
+                    >
+                      {doneCount} de {files.length}{" "}
+                      {doneCount === 1 ? "se subió" : "se subieron"}{" "}
+                      correctamente
+                    </p>
+                    <p
+                      className={`text-xs mt-0.5 ${theme === "dark" ? "text-amber-400/80" : "text-amber-600"}`}
+                    >
+                      Puedes reintentar los que fallaron tocando el botón de
+                      abajo.
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Progress bar */}
+            {uploading && (
+              <motion.div
+                role="progressbar"
+                aria-label="Progreso de subida"
+                aria-valuemin={0}
+                aria-valuemax={files.length}
+                aria-valuenow={uploadedCount}
+                aria-valuetext={`${uploadedCount} de ${files.length} archivos completados`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="space-y-2"
+              >
+                <div
+                  className={`h-2 rounded-full overflow-hidden ${theme === "dark" ? "bg-white/10" : "bg-gray-100"}`}
+                >
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{
+                      width: `${files.length > 0 ? Math.min(100, ((uploadedCount + 0.5) / files.length) * 100) : 0}%`,
+                    }}
+                    transition={{ duration: 0.4, ease: "easeOut" }}
+                  />
+                </div>
+                <div className="flex items-center justify-center gap-2">
+                  <Spinner className="w-4 h-4 text-indigo-500" />
+                  <p
+                    className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+                  >
+                    Subiendo {Math.min(uploadedCount + 1, files.length)} de{" "}
+                    {files.length}
+                  </p>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Submit button */}
+            {files.length > 0 && (
+              <motion.button
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                type="button"
+                disabled={
+                  files.length === 0 ||
+                  uploading ||
+                  isPreparing ||
+                  files.every((e) => e.status === "done")
+                }
+                onClick={handleUpload}
+                className={`w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 py-4 text-sm font-semibold text-white active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 disabled:shadow-none ${
+                  theme === "dark"
+                    ? "shadow-[0_8px_32px_rgba(99,102,241,0.35)] hover:shadow-[0_8px_40px_rgba(99,102,241,0.55)]"
+                    : "shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30"
+                }`}
+              >
+                {uploading
+                  ? `Subiendo ${Math.min(uploadedCount + 1, files.length)} de ${files.length}…`
+                  : hasErrors
+                    ? "Reintentar fallidos"
+                    : files.length === 1
+                      ? "Compartir momento"
+                      : `Compartir ${files.length} momentos`}
+              </motion.button>
+            )}
+          </div>
+        </main>
+      </div>
     </ThemeCtx.Provider>
   );
 }
@@ -1595,14 +1559,31 @@ export default function SharedUploadPage({ EVENTS_URL: rawEventsUrl }: UploadPag
 
 function SuccessScreen({
   count,
+  publicationHint,
   onUploadMore,
 }: {
   count: number;
+  publicationHint: SharedUploadPublicationHint;
   onUploadMore?: () => void;
 }) {
   const { theme } = useContext(ThemeCtx);
+  const successMessage =
+    publicationHint === "published"
+      ? count === 1
+        ? "Tu archivo ya está disponible en la galería del evento."
+        : `Tus ${count} archivos ya están disponibles en la galería del evento.`
+      : publicationHint === "processing"
+        ? count === 1
+          ? "Tu archivo ya fue aprobado y aparecerá en cuanto termine de procesarse."
+          : `Tus ${count} archivos ya fueron aprobados y aparecerán en cuanto terminen de procesarse.`
+        : count === 1
+          ? "Tu foto aparecerá en la galería del evento una vez que el organizador la apruebe."
+          : `Tus ${count} archivos aparecerán en la galería del evento una vez que el organizador los apruebe.`;
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden${theme === 'light' ? ' bg-white' : ''}`}>
+    <div
+      className={`relative isolate flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 text-center${theme === "light" ? " bg-white" : ""}`}
+    >
+      <DarkBackground />
       {/* Confetti dots */}
       {Array.from({ length: 16 }).map((_, i) => (
         <motion.div
@@ -1613,10 +1594,23 @@ function SuccessScreen({
             y: [-(20 + Math.random() * 40), 60 + Math.random() * 200],
             x: (Math.random() - 0.5) * 200,
           }}
-          transition={{ duration: 1.5 + Math.random(), delay: 0.1 + Math.random() * 0.4, ease: "easeOut" }}
+          transition={{
+            duration: 1.5 + Math.random(),
+            delay: 0.1 + Math.random() * 0.4,
+            ease: "easeOut",
+          }}
           className="absolute top-1/4 left-1/2 w-2 h-2 rounded-full"
           style={{
-            backgroundColor: ["#818cf8", "#34d399", "#fbbf24", "#f472b6", "#60a5fa", "#a78bfa", "#fb923c", "#e879f9"][i % 8],
+            backgroundColor: [
+              "#818cf8",
+              "#34d399",
+              "#fbbf24",
+              "#f472b6",
+              "#60a5fa",
+              "#a78bfa",
+              "#fb923c",
+              "#e879f9",
+            ][i % 8],
           }}
         />
       ))}
@@ -1626,9 +1620,9 @@ function SuccessScreen({
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
         className={`w-24 h-24 rounded-full flex items-center justify-center mb-8 ${
-          theme === 'dark'
-            ? 'bg-gradient-to-br from-violet-500 to-indigo-500 shadow-[0_0_60px_rgba(139,92,246,0.55)]'
-            : 'bg-gradient-to-br from-green-400 to-emerald-500 shadow-lg shadow-green-500/30'
+          theme === "dark"
+            ? "bg-gradient-to-br from-violet-500 to-indigo-500 shadow-[0_0_60px_rgba(139,92,246,0.55)]"
+            : "bg-gradient-to-br from-green-400 to-emerald-500 shadow-lg shadow-green-500/30"
         }`}
       >
         <IconCheck className="w-12 h-12 text-white" />
@@ -1640,20 +1634,24 @@ function SuccessScreen({
         transition={{ delay: 0.15 }}
         className="space-y-4"
       >
-        <h2 className={`text-2xl font-bold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-          {count === 1 ? "¡Momento compartido!" : `¡${count} momentos compartidos!`}
-        </h2>
-        <p className={`text-sm max-w-[280px] mx-auto leading-relaxed ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+        <h2
+          className={`text-2xl font-bold tracking-tight ${theme === "dark" ? "text-white" : "text-gray-900"}`}
+        >
           {count === 1
-            ? "Tu foto aparecerá en la galería del evento una vez que el organizador la apruebe."
-            : `Tus ${count} archivos aparecerán en la galería del evento una vez que el organizador los apruebe.`}
+            ? "¡Momento compartido!"
+            : `¡${count} momentos compartidos!`}
+        </h2>
+        <p
+          className={`text-sm max-w-[280px] mx-auto leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+        >
+          {successMessage}
         </p>
 
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className={`text-xs italic ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}
+          className={`text-xs italic ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}
         >
           ¡Gracias por ser parte de este momento especial!
         </motion.p>
@@ -1665,9 +1663,9 @@ function SuccessScreen({
             transition={{ delay: 0.5 }}
             onClick={onUploadMore}
             className={`mt-2 inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-3 text-sm font-semibold text-white transition-all active:scale-[0.98] ${
-              theme === 'dark'
-                ? 'shadow-[0_8px_32px_rgba(99,102,241,0.35)] hover:shadow-[0_8px_40px_rgba(99,102,241,0.55)]'
-                : 'shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30'
+              theme === "dark"
+                ? "shadow-[0_8px_32px_rgba(99,102,241,0.35)] hover:shadow-[0_8px_40px_rgba(99,102,241,0.55)]"
+                : "shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30"
             }`}
           >
             Subir más fotos o videos
@@ -1678,10 +1676,63 @@ function SuccessScreen({
   );
 }
 
-function ComingSoonScreen({ identifier }: { identifier: string }) {
+function UploadLimitReachedScreen() {
   const { theme } = useContext(ThemeCtx);
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden${theme === 'light' ? ' bg-white' : ''}`}>
+    <div
+      className={`relative isolate flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 text-center${theme === "light" ? " bg-white" : ""}`}
+    >
+      <DarkBackground />
+      <motion.div
+        initial={{ scale: 0.3, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+        className={`w-24 h-24 rounded-full flex items-center justify-center mb-8 ${
+          theme === "dark"
+            ? "bg-gradient-to-br from-violet-500 to-indigo-500 shadow-[0_0_50px_rgba(139,92,246,0.45)]"
+            : "bg-gradient-to-br from-violet-400 to-indigo-500 shadow-lg shadow-indigo-500/25"
+        }`}
+      >
+        <IconCheck className="w-12 h-12 text-white" />
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="space-y-4 max-w-sm"
+      >
+        <h2
+          className={`text-2xl font-bold tracking-tight leading-tight ${theme === "dark" ? "text-white" : "text-gray-900"}`}
+        >
+          Gracias por compartir tus momentos
+        </h2>
+        <p
+          className={`text-sm leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+        >
+          Ya registramos las contribuciones permitidas para este enlace. Tus
+          archivos aparecerán en la galería cuando el organizador los apruebe.
+        </p>
+      </motion.div>
+    </div>
+  );
+}
+
+function ComingSoonScreen({
+  title = "Pronto podras compartir tus mejores momentos",
+  description = "El organizador esta preparando todo para que puedas subir tus fotos y videos del evento. Vuelve en un momento.",
+  statusLabel = "Preparando el evento",
+}: {
+  title?: string;
+  description?: string;
+  statusLabel?: string;
+}) {
+  const { theme } = useContext(ThemeCtx);
+  return (
+    <div
+      className={`relative isolate flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 text-center${theme === "light" ? " bg-white" : ""}`}
+    >
+      <DarkBackground />
       {/* Floating decorative dots */}
       {Array.from({ length: 10 }).map((_, i) => (
         <motion.div
@@ -1692,7 +1743,13 @@ function ComingSoonScreen({ identifier }: { identifier: string }) {
             height: 4 + (i % 3) * 4,
             left: `${8 + i * 9}%`,
             top: `${12 + (i % 4) * 20}%`,
-            backgroundColor: ['#a78bfa', '#818cf8', '#c084fc', '#6366f1', '#8b5cf6'][i % 5],
+            backgroundColor: [
+              "#a78bfa",
+              "#818cf8",
+              "#c084fc",
+              "#6366f1",
+              "#8b5cf6",
+            ][i % 5],
           }}
           animate={{
             y: [0, -8 - (i % 3) * 4, 0],
@@ -1715,19 +1772,35 @@ function ComingSoonScreen({ identifier }: { identifier: string }) {
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
         className="relative mb-8"
       >
-        <div className={`w-24 h-24 rounded-full flex items-center justify-center ${
-          theme === 'dark'
-            ? 'bg-gradient-to-br from-violet-500 to-indigo-500 shadow-[0_0_50px_rgba(139,92,246,0.45)]'
-            : 'bg-gradient-to-br from-violet-400 to-indigo-500 shadow-lg shadow-indigo-500/25'
-        }`}>
-          <svg className="w-12 h-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+        <div
+          className={`w-24 h-24 rounded-full flex items-center justify-center ${
+            theme === "dark"
+              ? "bg-gradient-to-br from-violet-500 to-indigo-500 shadow-[0_0_50px_rgba(139,92,246,0.45)]"
+              : "bg-gradient-to-br from-violet-400 to-indigo-500 shadow-lg shadow-indigo-500/25"
+          }`}
+        >
+          <svg
+            className="w-12 h-12 text-white"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.5}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"
+            />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"
+            />
           </svg>
         </div>
         {/* Pulse ring */}
         <motion.div
-          className={`absolute inset-0 rounded-full border-2 ${theme === 'dark' ? 'border-violet-400/60' : 'border-indigo-300'}`}
+          className={`absolute inset-0 rounded-full border-2 ${theme === "dark" ? "border-violet-400/60" : "border-indigo-300"}`}
           animate={{ scale: [1, 1.4], opacity: [0.4, 0] }}
           transition={{ repeat: Infinity, duration: 2, ease: "easeOut" }}
         />
@@ -1740,16 +1813,18 @@ function ComingSoonScreen({ identifier }: { identifier: string }) {
         transition={{ delay: 0.15 }}
         className="space-y-4 max-w-sm"
       >
-        <h2 className={`text-2xl font-bold tracking-tight leading-tight ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-          Pronto podras compartir tus mejores momentos
+        <h2
+          className={`text-2xl font-bold tracking-tight leading-tight ${theme === "dark" ? "text-white" : "text-gray-900"}`}
+        >
+          {title}
         </h2>
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className={`text-sm leading-relaxed ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
+          className={`text-sm leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
         >
-          El organizador esta preparando todo para que puedas subir tus fotos y videos del evento. Vuelve en un momento.
+          {description}
         </motion.p>
       </motion.div>
 
@@ -1764,32 +1839,70 @@ function ComingSoonScreen({ identifier }: { identifier: string }) {
           {[0, 1, 2].map((i) => (
             <motion.div
               key={i}
-              className={`w-1.5 h-1.5 rounded-full ${theme === 'dark' ? 'bg-violet-400' : 'bg-indigo-400'}`}
+              className={`w-1.5 h-1.5 rounded-full ${theme === "dark" ? "bg-violet-400" : "bg-indigo-400"}`}
               animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.1, 0.8] }}
-              transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2, ease: "easeInOut" }}
+              transition={{
+                repeat: Infinity,
+                duration: 1.2,
+                delay: i * 0.2,
+                ease: "easeInOut",
+              }}
             />
           ))}
         </div>
-        <span className="text-xs text-gray-400 font-medium">Preparando el evento</span>
+        <span className="text-xs text-gray-400 font-medium">{statusLabel}</span>
       </motion.div>
     </div>
   );
 }
 
-function ThankYouScreen({ eventName, identifier }: { eventName: string; identifier: string }) {
+function ThankYouScreen({
+  eventName,
+  identifier,
+  accessToken,
+}: {
+  eventName: string;
+  identifier: string;
+  accessToken?: string;
+}) {
   const { theme } = useContext(ThemeCtx);
+  const accessParams =
+    typeof window === "undefined"
+      ? { previewToken: "", cacheKey: "", invitationToken: "", accessToken: "" }
+      : readPublicAccessParams(window.location.search);
+  const momentsUrl = buildEventMomentsPath(
+    identifier,
+    getPublicUploadBaseUrl(),
+    {
+      previewToken: accessParams.previewToken,
+      cacheKey: accessParams.cacheKey,
+      invitationToken: accessParams.invitationToken,
+      accessToken: accessToken || accessParams.accessToken,
+    },
+  );
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden${theme === 'light' ? ' bg-white' : ''}`}>
+    <div
+      className={`relative isolate flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 text-center${theme === "light" ? " bg-white" : ""}`}
+    >
       <DarkBackground />
       {Array.from({ length: 8 }).map((_, i) => (
         <motion.div
           key={i}
-          className={`absolute text-lg pointer-events-none ${theme === 'dark' ? 'text-amber-300/60' : 'text-amber-300/40'}`}
+          className={`pointer-events-none absolute ${theme === "dark" ? "text-amber-300/60" : "text-amber-500/30"}`}
           style={{ left: `${10 + i * 11}%`, top: `${15 + (i % 3) * 25}%` }}
-          animate={{ y: [0, -12, 0], opacity: [0.3, 0.7, 0.3], scale: [1, 1.2, 1] }}
-          transition={{ repeat: Infinity, duration: 2.5 + i * 0.3, delay: i * 0.3, ease: "easeInOut" }}
+          animate={{
+            y: [0, -12, 0],
+            opacity: [0.3, 0.7, 0.3],
+            scale: [1, 1.2, 1],
+          }}
+          transition={{
+            repeat: Infinity,
+            duration: 2.5 + i * 0.3,
+            delay: i * 0.3,
+            ease: "easeInOut",
+          }}
         >
-          ✦
+          <Sparkles className="size-4" aria-hidden="true" />
         </motion.div>
       ))}
 
@@ -1798,42 +1911,82 @@ function ThankYouScreen({ eventName, identifier }: { eventName: string; identifi
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
         className={`w-24 h-24 rounded-full flex items-center justify-center mb-8 bg-gradient-to-br from-amber-400 to-orange-400 ${
-          theme === 'dark'
-            ? 'shadow-[0_0_50px_rgba(251,146,60,0.45)]'
-            : 'shadow-lg shadow-amber-500/20'
+          theme === "dark"
+            ? "shadow-[0_0_50px_rgba(251,146,60,0.45)]"
+            : "shadow-lg shadow-amber-500/20"
         }`}
       >
-        <svg className="w-12 h-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+        <svg
+          className="w-12 h-12 text-white"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={1.5}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
+          />
         </svg>
       </motion.div>
 
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="space-y-4">
-        <h2 className={`text-2xl font-bold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-          Gracias por compartir tus<br />mejores momentos
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="space-y-4"
+      >
+        <h2
+          className={`text-2xl font-bold tracking-tight ${theme === "dark" ? "text-white" : "text-gray-900"}`}
+        >
+          Gracias por compartir tus
+          <br />
+          mejores momentos
         </h2>
         {eventName && (
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className={`text-lg font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className={`text-lg font-medium ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}
+          >
             {eventName}
           </motion.p>
         )}
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className={`text-sm max-w-[300px] mx-auto leading-relaxed ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-          Estamos muy agradecidos de que hayas sido parte de este día tan especial
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className={`text-sm max-w-[300px] mx-auto leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
+        >
+          Estamos muy agradecidos de que hayas sido parte de este día tan
+          especial
         </motion.p>
         <motion.a
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
-          href={`/e/${identifier}/momentos`}
+          href={momentsUrl}
           className={`inline-flex items-center gap-2 mt-4 rounded-2xl px-5 py-2.5 text-sm font-medium transition-all ${
-            theme === 'dark'
-              ? 'bg-white/10 border border-white/15 text-gray-200 hover:bg-white/20'
-              : 'bg-gray-100 border border-gray-200 text-gray-600 hover:bg-gray-200'
+            theme === "dark"
+              ? "bg-white/10 border border-white/15 text-gray-200 hover:bg-white/20"
+              : "bg-gray-100 border border-gray-200 text-gray-600 hover:bg-gray-200"
           }`}
         >
           Ver el muro de momentos
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+            />
           </svg>
         </motion.a>
       </motion.div>
@@ -1841,43 +1994,11 @@ function ThankYouScreen({ eventName, identifier }: { eventName: string; identifi
   );
 }
 
-// ── Theme toggle button ────────────────────────────────────────────────────────
-function ThemeToggleButton() {
-  const { theme, toggle } = useContext(ThemeCtx);
-  return (
-    <motion.button
-      type="button"
-      onClick={toggle}
-      whileTap={{ scale: 0.9 }}
-      className={`fixed top-4 right-4 z-50 flex items-center justify-center w-9 h-9 rounded-full border transition-all ${
-        theme === 'dark'
-          ? 'bg-white/10 border-white/15 text-gray-300 hover:bg-white/20'
-          : 'bg-black/5 border-black/10 text-gray-500 hover:bg-black/10'
-      }`}
-      title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-    >
-      {theme === 'dark' ? (
-        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <circle cx="12" cy="12" r="5" />
-          <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-          <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-        </svg>
-      ) : (
-        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-        </svg>
-      )}
-    </motion.button>
-  );
-}
-
 // ── Dark background with ambient light blobs ──────────────────────────────────
 
 function DarkBackground() {
   const { theme } = useContext(ThemeCtx);
-  if (theme === 'light') return null;
+  if (theme === "light") return null;
   return (
     <div className="fixed inset-0 -z-10 overflow-hidden bg-gray-950 pointer-events-none">
       {/* Blob 1 — violet, top-left */}
@@ -1889,13 +2010,23 @@ function DarkBackground() {
       {/* Blob 2 — indigo, top-right */}
       <motion.div
         animate={{ y: [0, 20, 0] }}
-        transition={{ repeat: Infinity, duration: 13, ease: "easeInOut", delay: 2 }}
+        transition={{
+          repeat: Infinity,
+          duration: 13,
+          ease: "easeInOut",
+          delay: 2,
+        }}
         className="absolute top-10 -right-16 w-[320px] h-[320px] rounded-full bg-indigo-500/15 blur-[100px]"
       />
       {/* Blob 3 — blue, bottom-center */}
       <motion.div
         animate={{ y: [0, -16, 0] }}
-        transition={{ repeat: Infinity, duration: 11, ease: "easeInOut", delay: 4 }}
+        transition={{
+          repeat: Infinity,
+          duration: 11,
+          ease: "easeInOut",
+          delay: 4,
+        }}
         className="absolute -bottom-24 left-1/2 -translate-x-1/2 w-[380px] h-[380px] rounded-full bg-blue-600/10 blur-[140px]"
       />
     </div>

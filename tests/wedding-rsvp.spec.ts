@@ -10,6 +10,7 @@ import {
   mockRsvpPost,
   installApiGuard,
   API_BASE,
+  invitationByTokenUrl,
 } from './helpers/mocks';
 import { installStorageClearScript } from './helpers/storage';
 
@@ -32,23 +33,30 @@ test.beforeEach(async ({ page }) => {
 test.describe('Carga de invitación', () => {
 
   test('muestra "Cargando..." mientras llegan los datos', async ({ page }) => {
-    // Delayar la respuesta para observar el estado de carga
-    await page.route(`${API_BASE}/api/invitations/ByToken/${TOKEN}`, async (route) => {
-      await new Promise((r) => setTimeout(r, 1500));
+    let releaseInvitation: () => void = () => {};
+    const invitationPending = new Promise<void>((resolve) => {
+      releaseInvitation = resolve;
+    });
+
+    await page.route(invitationByTokenUrl(TOKEN), async (route) => {
+      await invitationPending;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
           data: {
             pretty_token: 'ABC-123',
-            invitation: { ID: '1', EventID: '1', max_guests: 2, Event: { EventDateTime: '2026-08-15T20:30:00-06:00' } },
+            invitation: { id: '1', event_id: '1', max_guests: 2, event: { event_date_time: '2026-08-15T20:30:00-06:00' } },
             guest: { first_name: 'Ana', last_name: 'García', rsvp_status: '' },
           },
         }),
       });
     });
-    await page.goto(PAGE_URL);
+
+    await page.goto(PAGE_URL, { waitUntil: 'domcontentloaded' });
     await expect(page.getByText('Cargando...')).toBeVisible({ timeout: 5_000 });
+    releaseInvitation();
+    await expect(page.getByRole('heading', { name: 'Ana García' })).toBeVisible({ timeout: 10_000 });
   });
 
   test('muestra el nombre del invitado al cargar', async ({ page }) => {
@@ -71,7 +79,7 @@ test.describe('Carga de invitación', () => {
   });
 
   test('muestra error cuando el token no existe (API 404)', async ({ page }) => {
-    await page.route(`${API_BASE}/api/invitations/ByToken/${TOKEN}`, async (route) => {
+    await page.route(invitationByTokenUrl(TOKEN), async (route) => {
       await route.fulfill({
         status: 404,
         contentType: 'application/json',
@@ -81,6 +89,18 @@ test.describe('Carga de invitación', () => {
     await page.goto(PAGE_URL);
     // InvitationDataLoader llama onError → Section1Wrapper renderiza <p class="text-red-600">
     await expect(page.locator('.text-red-600')).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('muestra error cuando el evento no esta publico (API 403)', async ({ page }) => {
+    await page.route(invitationByTokenUrl(TOKEN), async (route) => {
+      await route.fulfill({
+        status: 403,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 403, message: 'Event is not public' }),
+      });
+    });
+    await page.goto(PAGE_URL);
+    await expect(page.getByText('Event is not public')).toBeVisible({ timeout: 10_000 });
   });
 
   test('sin token en URL muestra error "Token requerido"', async ({ page }) => {
@@ -272,6 +292,18 @@ test.describe('Estados RSVP previos', () => {
     await page.goto(PAGE_URL);
     await expect(page.getByText(/Lamentamos que no nos puedas acompañar/)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'Claro, con gusto' })).not.toBeVisible();
+  });
+
+  test('tarjeta de confirmacion comparte el RSVP canonico aun desde ruta legacy', async ({ page }) => {
+    await mockInvitation(page, 'confirmed', TOKEN);
+    await page.goto(PAGE_URL);
+
+    const shareLink = page.locator('a[href^="https://wa.me/"]').first();
+    await expect(shareLink).toBeVisible({ timeout: 10_000 });
+
+    const href = decodeURIComponent((await shareLink.getAttribute('href')) ?? '');
+    expect(href).toContain('/rsvp/boda-ana-luis?token=ABC-123');
+    expect(href).not.toContain('/evento?token=ABC-123');
   });
 });
 

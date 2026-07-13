@@ -3,11 +3,14 @@ export const prerender = true;
 
 import TemplateLayout from '../../layouts/template.astro';
 import EventPage from '../../components/engine/EventPage';
+import { normalizeEventsUrl } from '../../lib/eventsUrl';
+
+const EVENTS_URL = normalizeEventsUrl(import.meta.env.PUBLIC_EVENTS_URL as string | undefined);
 ---
 
 <TemplateLayout title="Andres & Ivanna | Confirmación">
   <EventPage
     client:only="react"
-    EVENTS_URL={import.meta.env.PUBLIC_EVENTS_URL}
+    EVENTS_URL={EVENTS_URL}
   />
 </TemplateLayout>
