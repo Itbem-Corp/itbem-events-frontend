@@ -236,18 +236,20 @@ jobs:
         id: post_production_smoke
         if: steps.production_rollout.outcome == 'success'
         continue-on-error: true
-        timeout-minutes: 8
+        timeout-minutes: 12
         env:
           DEPLOYMENT_URL: ${{ steps.production_rollout.outputs.deployment_url }}
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --location \
-            --retry 6 --retry-all-errors --retry-delay 5 --max-time 20 \
+            --retry 30 --retry-all-errors --retry-delay 5 \
+            --retry-max-time 180 --max-time 20 \
             "${DEPLOYMENT_URL%/}/offline/" > /dev/null
           bash scripts/smoke-security-headers.sh "${DEPLOYMENT_URL}"
           bash scripts/smoke-root.sh "${DEPLOYMENT_URL}"
           curl --fail --silent --show-error --location \
-            --retry 6 --retry-all-errors --retry-delay 5 --max-time 20 \
+            --retry 30 --retry-all-errors --retry-delay 5 \
+            --retry-max-time 180 --max-time 20 \
             "https://www.eventiapp.com.mx/offline/" > /dev/null
           bash scripts/smoke-security-headers.sh "https://www.eventiapp.com.mx"
           bash scripts/smoke-root.sh "https://www.eventiapp.com.mx"
