@@ -185,6 +185,21 @@ browser request
 
 **Preview local:** `npm run build && npm start`
 
+### Riesgo de dependencia conocido
+
+Auditoría verificada el 2026-07-13 con el lockfile de producción:
+
+- `npm audit --package-lock-only`: 0 critical, 1 high, 0 moderate y 4 low.
+- El único high corresponde a Astro 5; npm propone Astro 7, un cambio mayor.
+- El frontend permanece temporalmente en Astro 5 + `@astrojs/cloudflare` 12
+  porque el deployment actual usa Cloudflare Pages. El adapter moderno eliminó
+  soporte para Pages y requiere migrar el runtime y el rollout a Workers.
+- No ejecutar `npm audit fix --force`: la remediación se hará como una migración
+  Pages → Workers independiente, con preview, smoke, rollback y validación de
+  dominios antes de promoverla.
+
+Referencia: <https://docs.astro.build/en/guides/integrations-guide/cloudflare/#removed-cloudflare-pages-support>
+
 ---
 
 ## External Services
