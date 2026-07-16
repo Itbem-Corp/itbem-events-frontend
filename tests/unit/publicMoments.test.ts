@@ -9,6 +9,7 @@ import {
   PUBLIC_MOMENTS_LIVE_REFRESH_MS,
   publicMomentContentUrl,
   publicMomentsMediaRefreshKey,
+  publicMomentMediaSrcSet,
   publicMomentPreviewUrl,
   publicMomentThumbnailUrl,
   publicMomentUploadSuccessMessage,
@@ -491,6 +492,23 @@ describe("normalizePublicMomentsPage", () => {
 });
 
 describe("normalizePublicMoment", () => {
+  it("normalizes responsive media variants and orders them by width", () => {
+    const moment = normalizePublicMoment({
+      id: "responsive",
+      content_url: "moments/event/photo.webp",
+      media_variants: [
+        { url: "moments/event/photo-960.webp", view_url: "https://signed.example.com/960.webp", width: 960, format: "WEBP" },
+        { object_key: "moments/event/photo-480.webp", width: 480, format: "webp", bytes: 12000 },
+        { url: "bad", width: 0, format: "jpg" },
+      ],
+    });
+
+    expect(moment?.media_variants).toEqual([
+      { url: "moments/event/photo-480.webp", width: 480, format: "webp", bytes: 12000 },
+      { url: "moments/event/photo-960.webp", view_url: "https://signed.example.com/960.webp", width: 960, format: "webp" },
+    ]);
+  });
+
   it("preserves legacy empty processing status and rejects unknown statuses", () => {
     expect(
       normalizePublicMoment({ id: "legacy", processing_status: "" }),
@@ -696,6 +714,33 @@ describe("public moment media expiry", () => {
     expect(getPublicMomentsRefreshDelay(moments, now, 60_000)).toBe(120_000);
   });
 
+  it("includes responsive variants when choosing the earliest media expiry", () => {
+    const moment = normalizePublicMoment({
+      id: "responsive",
+      content_url: "https://cdn.example.com/content.webp",
+      content_url_expires_at: "2026-03-01T12:10:00.000Z",
+      media_variants: [
+        {
+          url: "moments/event/photos/responsive-480.webp",
+          view_url: "https://signed.example.com/responsive-480.webp",
+          view_url_expires_at: "2026-03-01T12:03:00.000Z",
+          width: 480,
+          format: "webp",
+        },
+      ],
+    });
+
+    expect(getPublicMomentMediaExpiry(moment!)?.toISOString()).toBe(
+      "2026-03-01T12:03:00.000Z",
+    );
+    expect(publicMomentsMediaRefreshKey([moment!])).toContain(
+      "480,webp,https://signed.example.com/responsive-480.webp,2026-03-01T12:03:00.000Z",
+    );
+    expect(publicMomentMediaSrcSet(moment!, (url) => `resolved:${url}`)).toBe(
+      "resolved:https://signed.example.com/responsive-480.webp 480w",
+    );
+  });
+
   it("builds a stable refresh key from public moment media fields", () => {
     const moments = normalizePublicMomentsPage({
       items: [
@@ -710,7 +755,7 @@ describe("public moment media expiry", () => {
     }).items;
 
     expect(publicMomentsMediaRefreshKey(moments)).toBe(
-      "moment-1:https://cdn.example.com/content.webp:2026-03-01T12:05:00.000Z:https://cdn.example.com/thumb.webp:2026-03-01T12:04:00.000Z",
+      "moment-1:https://cdn.example.com/content.webp:2026-03-01T12:05:00.000Z:https://cdn.example.com/thumb.webp:2026-03-01T12:04:00.000Z:",
     );
   });
 });

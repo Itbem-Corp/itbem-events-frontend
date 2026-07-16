@@ -70,6 +70,7 @@ import {
   normalizePublicMomentUploadResponse,
   PUBLIC_MOMENTS_LIVE_REFRESH_MS,
   publicMomentContentUrl,
+  publicMomentMediaSrcSet,
   publicMomentsMediaRefreshKey,
   publicMomentPreviewUrl,
   publicMomentThumbnailUrl,
@@ -803,7 +804,7 @@ export default function MomentWall({
 
   const [uploadProgress, setUploadProgress] = useState(0);
 
-  const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleUpload = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!invData?.prettyToken || !identifier || uploadingRef.current) return;
     const form = e.currentTarget;
@@ -1063,6 +1064,10 @@ export default function MomentWall({
                 >
                   <img
                     src={src}
+                    srcSet={publicMomentMediaSrcSet(m, (url) =>
+                      resolvePublicMediaUrl(url, EVENTS_URL),
+                    )}
+                    sizes="(max-width: 639px) 50vw, 33vw"
                     alt={m.description || "Momento del evento"}
                     className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
                     loading="lazy"

@@ -344,3 +344,19 @@ img, video {
     opacity: 0;
   }
 }
+
+/* Applied only when the browser reports clearly constrained hardware. Keep
+ * feedback and page structure, but remove decorative compositor work. */
+html[data-eventi-performance="conserve"] .animate-blob-1,
+html[data-eventi-performance="conserve"] .animate-blob-2,
+html[data-eventi-performance="conserve"] .animate-breathe,
+html[data-eventi-performance="conserve"] .animate-breathe-slow,
+html[data-eventi-performance="conserve"] .eventi-skeleton::after {
+  animation: none !important;
+  will-change: auto;
+}
+
+html[data-eventi-performance="conserve"] .group-hover\:scale-105,
+html[data-eventi-performance="conserve"] .hover\:-translate-y-0\.5:hover {
+  transform: none !important;
+}

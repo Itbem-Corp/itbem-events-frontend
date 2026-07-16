@@ -1,4 +1,4 @@
-import type { PageSpec } from "../components/engine/types";
+import type { PageMediaVariant, PageSpec } from "../components/engine/types";
 import { readApiData } from "./apiEnvelope";
 import { getPresignedUrlExpiry } from "./signedMedia";
 import { cacheTokenHash } from "./tokenHash";
@@ -14,6 +14,38 @@ type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 interface CachedPageSpec {
   spec: PageSpec;
   ts: number;
+}
+
+function isCachedPageSpec(value: unknown): value is PageSpec {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as { meta?: unknown; sections?: unknown };
+  return (
+    !!candidate.meta &&
+    typeof candidate.meta === "object" &&
+    !Array.isArray(candidate.meta) &&
+    Array.isArray(candidate.sections)
+  );
+}
+
+function preparePageSpecForCache(spec: PageSpec): PageSpec {
+  // Network payloads are fully normalized before reaching this function. This
+  // small compatibility step only repairs historical cache callers that passed
+  // a JSON-encoded section config, without pulling in the full API normalizer.
+  return {
+    ...spec,
+    sections: spec.sections.map((section) => {
+      if (typeof section.config !== "string") return section;
+      try {
+        const parsed = JSON.parse(section.config);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return { ...section, config: parsed as Record<string, unknown> };
+        }
+      } catch {
+        // Keep malformed legacy config unchanged; the section boundary handles it.
+      }
+      return section;
+    }),
+  };
 }
 
 type AnyRecord = Record<string, unknown>;
@@ -1266,6 +1298,33 @@ function normalizePageSpecMeta(value: AnyRecord): PageSpec["meta"] {
     "ViewURLExpiresAt",
     "ViewUrlExpiresAt",
   ]);
+  const coverVariantsRaw = firstValue(value, [
+    "coverVariants",
+    "cover_variants",
+    "CoverVariants",
+  ]);
+  const coverVariants = Array.isArray(coverVariantsRaw)
+    ? coverVariantsRaw
+        .map((variant): PageMediaVariant | null => {
+          if (!isRecord(variant)) return null;
+          const url = firstOptionalString(variant, ["url", "URL", "object_key", "objectKey"]);
+          const viewUrl = firstOptionalString(variant, ["viewUrl", "view_url", "ViewURL"]);
+          const viewUrlExpiresAt = firstOptionalString(variant, ["viewUrlExpiresAt", "view_url_expires_at", "ViewURLExpiresAt"]);
+          const width = optionalNumber(firstValue(variant, ["width", "Width"]));
+          const format = firstOptionalString(variant, ["format", "Format"])?.toLowerCase();
+          if (!url || !width || (format !== "webp" && format !== "avif")) return null;
+          return {
+            url,
+            viewUrl,
+            viewUrlExpiresAt,
+            width,
+            format,
+            bytes: optionalNumber(firstValue(variant, ["bytes", "Bytes"])),
+          };
+        })
+        .filter((variant): variant is PageMediaVariant => variant !== null)
+        .sort((left, right) => left.width - right.width)
+    : undefined;
   const eventDateTime = optionalString(
     firstValue(value, ["eventDateTime", "event_date_time", "EventDateTime"]),
   );
@@ -1309,6 +1368,7 @@ function normalizePageSpecMeta(value: AnyRecord): PageSpec["meta"] {
   if (coverImageUrlExpiresAt)
     meta.coverImageUrlExpiresAt = coverImageUrlExpiresAt;
   if (coverViewUrlExpiresAt) meta.coverViewUrlExpiresAt = coverViewUrlExpiresAt;
+  if (coverVariants?.length) meta.coverVariants = coverVariants;
   if (eventDateTime) meta.eventDateTime = eventDateTime;
   if (eventDate) meta.eventDate = eventDate;
   if (address) meta.address = address;
@@ -1529,6 +1589,11 @@ export function getPageSpecCoverExpiry(spec: PageSpec): Date | null {
       spec.meta.coverViewUrlExpiresAt || spec.meta.coverImageUrlExpiresAt,
     ),
     getPresignedUrlExpiry(spec.meta.coverViewUrl || spec.meta.coverImageUrl),
+    ...(spec.meta.coverVariants ?? []).map(
+      (variant) =>
+        optionalDate(variant.viewUrlExpiresAt) ??
+        getPresignedUrlExpiry(variant.viewUrl || variant.url),
+    ),
   ]);
 }
 
@@ -1629,16 +1694,18 @@ export function readPageSpecCache(
       return null;
     }
 
-    const normalizedSpec = readPageSpecPayload(cached.spec);
-    if (!normalizedSpec) {
+    // Specs are normalized at the network boundary before being written. Avoid
+    // reloading the legacy-payload normalizer on every cache read: it is a large
+    // module and cache reads happen on the critical render path.
+    if (!isCachedPageSpec(cached.spec)) {
       resolvedStorage.removeItem(key);
       return null;
     }
-    if (now > getPageSpecCacheExpiresAt(normalizedSpec, mode, cached.ts)) {
+    if (now > getPageSpecCacheExpiresAt(cached.spec, mode, cached.ts)) {
       resolvedStorage.removeItem(key);
       return null;
     }
-    return normalizedSpec;
+    return cached.spec;
   } catch {
     resolvedStorage.removeItem(key);
     return null;
@@ -1657,10 +1724,9 @@ export function writePageSpecCache(
   if (!resolvedStorage) return;
 
   try {
-    const normalizedSpec = normalizePageSpec(spec);
     resolvedStorage.setItem(
       pageSpecCacheKey(cacheId, mode, namespace),
-      JSON.stringify({ spec: normalizedSpec, ts: now }),
+      JSON.stringify({ spec: preparePageSpecForCache(spec), ts: now }),
     );
   } catch {
     // sessionStorage full or unavailable - skip silently

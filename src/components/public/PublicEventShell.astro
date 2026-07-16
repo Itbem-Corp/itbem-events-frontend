@@ -1,0 +1,72 @@
+---
+import type { PageSpec } from "../../components/engine/types";
+import { formatPublicEventDate } from "../../lib/eventDate";
+import { resolvePublicMediaUrl } from "../../lib/mediaUrl";
+
+interface Props {
+  spec: PageSpec;
+  eventsUrl: string;
+}
+
+const { spec, eventsUrl } = Astro.props;
+const meta = spec.meta;
+const title = meta.pageTitle || "Tu invitación";
+const cover = resolvePublicMediaUrl(meta.coverViewUrl || meta.coverImageUrl, eventsUrl);
+const coverSrcSet = (meta.coverVariants ?? [])
+  .map((variant) => `${resolvePublicMediaUrl(variant.viewUrl || variant.url, eventsUrl)} ${variant.width}w`)
+  .join(', ');
+const date = formatPublicEventDate(meta.eventDateTime || meta.eventDate, meta.timezone);
+const location = meta.address?.trim() || meta.secondAddress?.trim() || "";
+---
+
+<section id="eventi-server-shell" class="eventi-server-shell" aria-label={title}>
+  <div class="eventi-server-shell__frame">
+    {cover ? (
+      <img
+        src={cover}
+        srcset={coverSrcSet || undefined}
+        sizes="100vw"
+        alt=""
+        width="1440"
+        height="960"
+        fetchpriority="high"
+        decoding="async"
+        class="eventi-server-shell__cover"
+      />
+    ) : <div class="eventi-server-shell__cover eventi-server-shell__cover--fallback" aria-hidden="true" />}
+    <div class="eventi-server-shell__veil" aria-hidden="true"></div>
+    <div class="eventi-server-shell__content">
+      <p class="eventi-server-shell__eyebrow">Estás invitado</p>
+      <h1>{title}</h1>
+      {(date || location) && (
+        <p class="eventi-server-shell__details">
+          {[date, location].filter(Boolean).join(" · ")}
+        </p>
+      )}
+    </div>
+  </div>
+</section>
+
+<script is:inline>
+  window.addEventListener('eventi:public-page-ready', () => {
+    const shell = document.getElementById('eventi-server-shell')
+    if (!shell) return
+    shell.setAttribute('aria-hidden', 'true')
+    shell.classList.add('eventi-server-shell--ready')
+    window.setTimeout(() => shell.remove(), 250)
+  }, { once: true })
+</script>
+
+<style>
+  .eventi-server-shell { min-height: 100svh; padding: 0.75rem; background: #fbfaf9; }
+  .eventi-server-shell__frame { position: relative; display: grid; min-height: calc(100svh - 1.5rem); overflow: hidden; border-radius: 1.75rem; background: #17394a; color: white; isolation: isolate; }
+  .eventi-server-shell__cover { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+  .eventi-server-shell__cover--fallback { background: radial-gradient(circle at 20% 15%, #d74b96, transparent 45%), linear-gradient(135deg, #102f3f, #274f61); }
+  .eventi-server-shell__veil { position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgb(0 0 0 / 12%), rgb(0 0 0 / 64%)); }
+  .eventi-server-shell__content { align-self: end; padding: clamp(2rem, 7vw, 5rem); text-align: center; text-shadow: 0 2px 18px rgb(0 0 0 / 40%); }
+  .eventi-server-shell__eyebrow { margin: 0 0 0.75rem; font: 600 0.75rem/1.2 Quicksand, sans-serif; letter-spacing: 0.18em; text-transform: uppercase; }
+  .eventi-server-shell h1 { margin: 0; font: 400 clamp(2.8rem, 11vw, 5.5rem)/0.96 Bigilla, Georgia, serif; text-wrap: balance; }
+  .eventi-server-shell__details { margin: 1.25rem auto 0; max-width: 40rem; font: 500 clamp(0.9rem, 3.5vw, 1.1rem)/1.5 Quicksand, sans-serif; }
+  .eventi-server-shell--ready { opacity: 0; pointer-events: none; transition: opacity 180ms ease-out; }
+  @media (prefers-reduced-motion: reduce) { .eventi-server-shell--ready { transition: none; } }
+</style>

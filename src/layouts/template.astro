@@ -11,6 +11,8 @@ interface Props {
   ogImage?: string;
   ogUrl?: string;
   language?: string;
+  /** Only invitation entry points need typefaces before React is ready. */
+  preloadFonts?: 'invitation' | 'none';
 }
 
 const {
@@ -20,6 +22,7 @@ const {
   ogImage       = '',
   ogUrl         = '',
   language      = 'es',
+  preloadFonts  = 'none',
 } = Astro.props;
 
 const apiOrigin = eventsUrlOrigin(import.meta.env.PUBLIC_EVENTS_URL as string | undefined);
@@ -60,9 +63,13 @@ const publicOgUrl = ogUrl ? sanitizePublicShareUrl(ogUrl) : '';
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="EventiApp" />
     <link rel="apple-touch-icon" href="/icons/pwa-192.png" />
-    <!-- Preload only the two fonts used by the initial public shell. -->
-    <link rel="preload" href="/fonts/Bigilla.otf" as="font" type="font/otf" crossorigin>
-    <link rel="preload" href="/fonts/Quicksand-VariableFont_wght.ttf" as="font" type="font/ttf" crossorigin>
+    {preloadFonts === 'invitation' && (
+      <>
+        <!-- The SSR invitation shell needs these before the interactive page starts. -->
+        <link rel="preload" href="/fonts/Bigilla.woff2" as="font" type="font/woff2" crossorigin>
+        <link rel="preload" href="/fonts/Quicksand-VariableFont_wght.woff2" as="font" type="font/woff2" crossorigin>
+      </>
+    )}
 
     <!-- Preconnect to AWS S3 -->
     <link rel="preconnect" href="https://itbem-events-bucket-prod.s3.us-east-2.amazonaws.com" crossorigin>
@@ -118,6 +125,17 @@ const publicOgUrl = ogUrl ? sanitizePublicShareUrl(ogUrl) : '';
       document.addEventListener('dragstart', (e) => {
         if (e.target instanceof HTMLImageElement) e.preventDefault()
       }, { capture: true })
+    </script>
+    <script is:inline>
+      // Low-end mobiles benefit more from immediate input/scroll response than
+      // decorative motion. Respect user preference first, then conservatively
+      // reduce compositor-heavy effects on clearly constrained devices.
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        const nav = navigator
+        const lowMemory = typeof nav.deviceMemory === 'number' && nav.deviceMemory <= 2
+        const lowCpu = typeof nav.hardwareConcurrency === 'number' && nav.hardwareConcurrency <= 4
+        if (lowMemory || lowCpu) document.documentElement.dataset.eventiPerformance = 'conserve'
+      }
     </script>
   </body>
 </html>

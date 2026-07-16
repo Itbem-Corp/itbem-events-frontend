@@ -7,26 +7,38 @@ export const prerender = false;
  */
 import TemplateLayout from '../../../layouts/template.astro';
 import EventPage from '../../../components/engine/EventPage';
+import PublicEventShell from '../../../components/public/PublicEventShell.astro';
 import { buildPublicEventOgMeta, fetchEventOgData } from '../../../lib/og';
 import { normalizeEventsUrl } from '../../../lib/eventsUrl';
 import { normalizePathIdentifier } from '../../../lib/pathIdentifier';
 import { readPublicAccessParams } from '../../../lib/publicPreview';
+import { fetchPublicEventShell } from '../../../lib/publicEventShell';
 
 const EVENTS_URL = normalizeEventsUrl(import.meta.env.PUBLIC_EVENTS_URL as string | undefined);
 const identifier = normalizePathIdentifier(Astro.params.identifier);
 const accessParams = readPublicAccessParams(Astro.url.search);
 const ogUrl = Astro.url.href;
+const hasCredential = Boolean(
+  accessParams.previewToken ||
+  accessParams.cacheKey ||
+  accessParams.invitationToken ||
+  accessParams.accessToken
+);
 
-const eventOg = identifier
-  ? await fetchEventOgData(
-      EVENTS_URL,
-      identifier,
-      accessParams.previewToken,
-      accessParams.cacheKey,
-      accessParams.invitationToken,
-      accessParams.accessToken
-    )
-  : null;
+// Preview/invitation/access proofs are consumed only by the client. Their
+// PageSpec and metadata never enter SSR HTML, even on a no-store response.
+const [eventOg, serverShellSpec] = identifier && !hasCredential
+  ? await Promise.all([
+      fetchEventOgData(
+        EVENTS_URL,
+        identifier,
+      ),
+      fetchPublicEventShell({
+        eventsUrl: EVENTS_URL,
+        identifier,
+      }),
+    ])
+  : [null, null];
 const ogMeta = buildPublicEventOgMeta(eventOg, EVENTS_URL);
 ---
 
@@ -37,7 +49,11 @@ const ogMeta = buildPublicEventOgMeta(eventOg, EVENTS_URL);
   ogImage={ogMeta.image}
   ogUrl={ogUrl}
   language={eventOg?.language}
+  preloadFonts="invitation"
 >
+  {serverShellSpec && (
+    <PublicEventShell spec={serverShellSpec} eventsUrl={EVENTS_URL} />
+  )}
   <EventPage
     client:only="react"
     EVENTS_URL={EVENTS_URL}

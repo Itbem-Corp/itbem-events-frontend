@@ -32,6 +32,16 @@ export interface PublicMoment {
   optimized_size_bytes?: number;
   content_type?: string;
   error_message?: string;
+  media_variants?: PublicMediaVariant[];
+}
+
+export interface PublicMediaVariant {
+  url: string;
+  view_url?: string;
+  view_url_expires_at?: string;
+  width: number;
+  format: "webp" | "avif";
+  bytes?: number;
 }
 
 export interface PublicMomentsPage {
@@ -330,6 +340,31 @@ export function normalizePublicMoment(value: unknown): PublicMoment | null {
     "ThumbnailURLExpiresAt",
     "ThumbnailUrlExpiresAt",
   ]);
+  const mediaVariantsRaw = firstValue(value, [
+    "media_variants",
+    "mediaVariants",
+    "MediaVariants",
+  ]);
+  const mediaVariants = Array.isArray(mediaVariantsRaw)
+    ? mediaVariantsRaw
+        .map((variant): PublicMediaVariant | null => {
+          if (!isRecord(variant)) return null;
+          const url = firstOptionalString(variant, ["url", "URL", "object_key", "objectKey"]);
+          const width = optionalNumber(firstValue(variant, ["width", "Width"]));
+          const formatValue = firstOptionalString(variant, ["format", "Format"])?.toLowerCase();
+          if (!url || !width || (formatValue !== "webp" && formatValue !== "avif")) return null;
+          return {
+            url,
+            view_url: firstOptionalString(variant, ["view_url", "viewUrl", "ViewURL"]),
+            view_url_expires_at: firstOptionalString(variant, ["view_url_expires_at", "viewUrlExpiresAt", "ViewURLExpiresAt"]),
+            width,
+            format: formatValue,
+            bytes: optionalNumber(firstValue(variant, ["bytes", "Bytes"])),
+          };
+        })
+        .filter((variant): variant is PublicMediaVariant => variant !== null)
+        .sort((left, right) => left.width - right.width)
+    : undefined;
 
   return {
     id,
@@ -398,6 +433,7 @@ export function normalizePublicMoment(value: unknown): PublicMoment | null {
     error_message: optionalString(
       firstValue(value, ["error_message", "errorMessage", "ErrorMessage"]),
     ),
+    media_variants: mediaVariants?.length ? mediaVariants : undefined,
   };
 }
 
@@ -567,6 +603,11 @@ export function getPublicMomentMediaExpiry(moment: PublicMoment): Date | null {
     explicitDate(
       moment.thumbnail_view_url_expires_at ?? moment.thumbnail_url_expires_at,
     ) ?? getPresignedUrlExpiry(publicMomentThumbnailUrl(moment)),
+    ...(moment.media_variants ?? []).map(
+      (variant) =>
+        explicitDate(variant.view_url_expires_at) ??
+        getPresignedUrlExpiry(variant.view_url?.trim() || variant.url),
+    ),
   ].filter((expiry): expiry is Date => expiry instanceof Date);
 
   if (expiries.length === 0) return null;
@@ -599,6 +640,19 @@ export function publicMomentThumbnailUrl(
 
 export function publicMomentPreviewUrl(moment: PublicMoment): string {
   return publicMomentThumbnailUrl(moment) || publicMomentContentUrl(moment);
+}
+
+export function publicMomentMediaSrcSet(
+  moment: PublicMoment,
+  resolveUrl: (url: string) => string = (url) => url,
+): string | undefined {
+  const candidates = (moment.media_variants ?? [])
+    .filter((variant) => variant.width > 0 && (variant.view_url || variant.url))
+    .map(
+      (variant) =>
+        `${resolveUrl(variant.view_url?.trim() || variant.url)} ${variant.width}w`,
+    );
+  return candidates.length ? candidates.join(", ") : undefined;
 }
 
 export function mergePublicMomentsById(
@@ -668,6 +722,16 @@ export function publicMomentsMediaRefreshKey(moments: PublicMoment[]): string {
     .map((moment) => {
       const contentUrl = publicMomentContentUrl(moment);
       const thumbnailUrl = publicMomentThumbnailUrl(moment);
+      const variants = (moment.media_variants ?? [])
+        .map((variant) =>
+          [
+            variant.width,
+            variant.format,
+            variant.view_url?.trim() || variant.url,
+            variant.view_url_expires_at ?? "",
+          ].join(","),
+        )
+        .join(";");
       return [
         moment.id,
         contentUrl,
@@ -678,6 +742,7 @@ export function publicMomentsMediaRefreshKey(moments: PublicMoment[]): string {
         moment.thumbnail_view_url_expires_at ??
           moment.thumbnail_url_expires_at ??
           "",
+        variants,
       ].join(":");
     })
     .join("|");

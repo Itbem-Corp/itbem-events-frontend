@@ -45,7 +45,6 @@ import {
 import { normalizeEventAccessVerification } from "../../lib/eventAccess";
 import { formatPublicAccessDateTime } from "../../lib/accessDates";
 import {
-  readPageSpecPayload,
   readPageSpecCache,
   removePageSpecCache,
   shouldRenderCachedPageSpecBeforeRevalidate,
@@ -62,6 +61,7 @@ import {
   resolvePublicLoadFailure,
   type PublicLoadFailure,
 } from "../../lib/publicLoadFailure";
+import { installPublicRum, recordPublicRumMetric } from "../../lib/publicRum";
 
 interface Props {
   EVENTS_URL: string;
@@ -277,6 +277,17 @@ export default function EventPage({
     isPreview && spec?.meta?.access?.previewAuthorized,
   );
 
+  useEffect(() => {
+    const id = identifierProp || spec?.meta.identifier || "";
+    if (!id) return;
+    return installPublicRum({
+      eventsUrl: EVENTS_URL,
+      identifier: id,
+      route: rsvpMode ? "rsvp" : "event",
+      access: readPublicAccessParams(),
+    });
+  }, [EVENTS_URL, identifierProp, rsvpMode, spec?.meta.identifier]);
+
   const loadSpec = useCallback(
     async (
       tok: string,
@@ -340,6 +351,7 @@ export default function EventPage({
               inviteToken,
             )
           : buildTokenPageSpecUrl(EVENTS_URL, tok);
+        const pageSpecStartedAt = performance.now();
         const result = await fetchPageSpecWithRetry<unknown>(
           url,
           3,
@@ -352,6 +364,7 @@ export default function EventPage({
             ? "No pudimos cargar este evento."
             : "No pudimos cargar esta invitación.",
         );
+        recordPublicRumMetric("page_spec_ms", performance.now() - pageSpecStartedAt);
         const clearStalePageSpecCache = () => {
           removePageSpecCache(scopedCacheId, cacheMode, undefined, EVENTS_URL);
         };
@@ -397,6 +410,10 @@ export default function EventPage({
           );
         }
 
+        // The PageSpec normalizer supports legacy payload aliases and is sizeable.
+        // Keep it out of the critical invitation shell; it is only needed once the
+        // API response has arrived (or after a deliberate retry).
+        const { readPageSpecPayload } = await import("../../lib/pageSpecCache");
         const pageSpec = readPageSpecPayload(result.data);
         if (!pageSpec) throw new Error("Respuesta de invitación inválida.");
         const access = pageSpec.meta.access;
@@ -503,6 +520,17 @@ export default function EventPage({
       initialAccessToken,
     );
   }, [loadSpec, identifierProp]);
+
+  // The Astro SSR shell is intentionally limited to non-private invitation
+  // metadata. Once the interactive renderer has its authoritative PageSpec,
+  // replace it without leaving two invitation views in the DOM.
+  useEffect(() => {
+    if (!spec || typeof window === "undefined") return;
+    const frame = window.requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent("eventi:public-page-ready"));
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [spec]);
 
   const retryLoadSpec = useCallback(() => {
     if (!token) return;

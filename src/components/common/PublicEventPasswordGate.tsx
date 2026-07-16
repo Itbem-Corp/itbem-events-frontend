@@ -8,7 +8,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useId, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { SubmitEvent } from "react";
 import { cn } from "../../lib/utils";
 
 interface PublicEventPasswordGateProps {
@@ -44,7 +44,7 @@ export default function PublicEventPasswordGate({
   const inputId = useId();
   const RootElement = standalone ? "main" : "section";
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const value = password.trim();
     if (!value || submittingRef.current) return;

@@ -1653,6 +1653,43 @@ describe("pageSpecCache", () => {
     );
   });
 
+  it("normalizes responsive cover variants and refreshes at their earliest expiry", () => {
+    const normalized = readPageSpecPayload({
+      data: {
+        meta: {
+          pageTitle: "Evento responsive",
+          coverImageUrl: "events/cover.webp",
+          coverViewUrlExpiresAt: "2026-03-01T12:10:00.000Z",
+          coverVariants: [
+            {
+              url: "events/cover-640.webp",
+              view_url: "https://signed.example.com/cover-640.webp",
+              view_url_expires_at: "2026-03-01T12:03:00.000Z",
+              width: 640,
+              format: "webp",
+              bytes: 12000,
+            },
+          ],
+        },
+        sections: [],
+      },
+    });
+
+    expect(normalized?.meta.coverVariants).toEqual([
+      {
+        url: "events/cover-640.webp",
+        viewUrl: "https://signed.example.com/cover-640.webp",
+        viewUrlExpiresAt: "2026-03-01T12:03:00.000Z",
+        width: 640,
+        format: "webp",
+        bytes: 12000,
+      },
+    ]);
+    expect(getPageSpecCoverExpiry(normalized!)?.toISOString()).toBe(
+      "2026-03-01T12:03:00.000Z",
+    );
+  });
+
   it("normalizes cached section configs when reading and writing", () => {
     const storage = new MemoryStorage();
     const legacySpec = {
