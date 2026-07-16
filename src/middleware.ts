@@ -1,5 +1,7 @@
 import { defineMiddleware } from "astro:middleware";
 
+import { applyPublicResponseHeaders } from "./lib/publicResponseHeaders";
+
 const ACCESS_QUERY_KEYS = [
   "preview",
   "preview_token",
@@ -25,12 +27,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // URLs carrying any form of invitation/preview/access proof are never
   // browser- or edge-cacheable. Public pages can be briefly cached, while the
   // client and service worker still revalidate their PageSpec promptly.
-  response.headers.set(
-    "Cache-Control",
-    hasCredential
-      ? "private, no-store"
-      : "public, max-age=60, s-maxage=120, stale-while-revalidate=60",
-  );
-  response.headers.set("Vary", "Accept-Encoding");
+  applyPublicResponseHeaders(response, hasCredential);
   return response;
 });
