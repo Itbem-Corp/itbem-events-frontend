@@ -200,6 +200,7 @@ export interface PageMeta {
   coverViewUrl?: string;
   /** Expiration for coverViewUrl */
   coverViewUrlExpiresAt?: string;
+  coverVariants?: PageMediaVariant[];
   /** ISO 8601 event datetime */
   eventDateTime?: string;
   /** Legacy alias accepted by older mocks/cache entries; backend emits eventDateTime. */
@@ -222,6 +223,15 @@ export interface PageMeta {
   footerVisible?: boolean;
   /** Effective theme from EventConfig overrides or DesignTemplate defaults */
   theme?: PageTheme;
+}
+
+export interface PageMediaVariant {
+  url: string;
+  viewUrl?: string;
+  viewUrlExpiresAt?: string;
+  width: number;
+  format: "webp" | "avif";
+  bytes?: number;
 }
 
 export interface PageSpec {

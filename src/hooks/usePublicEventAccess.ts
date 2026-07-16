@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 
 import { buildEventVerifyAccessUrl } from "../lib/apiUrls";
 import { fetchApiResult } from "../lib/apiFetch";
-import { readPageSpecPayload } from "../lib/pageSpecCache";
 import {
   readStoredEventAccessToken,
   removeStoredEventAccessToken,
@@ -43,6 +42,13 @@ interface PublicEventAccessState {
 
 function clean(value: string | null | undefined): string {
   return value?.trim() ?? "";
+}
+
+async function readPublicPageSpec(payload: unknown): Promise<PageSpec | null> {
+  // This normalizer accepts historical API aliases. Loading it on demand keeps
+  // the Moments/QR access path from paying for it before a response exists.
+  const { readPageSpecPayload } = await import("../lib/pageSpecCache");
+  return readPageSpecPayload(payload);
 }
 
 export function usePublicEventAccess({
@@ -103,7 +109,7 @@ export function usePublicEventAccess({
     fetchAccessSpec(queryAccessToken)
       .then(async (payload) => {
         if (cancelled) return;
-        const spec = readPageSpecPayload(payload);
+        const spec = await readPublicPageSpec(payload);
         const access = spec?.meta.access;
         const version = clean(access?.accessVersion);
         setPageSpec(spec);
@@ -142,7 +148,7 @@ export function usePublicEventAccess({
         if (storedToken) {
           const verifiedPayload = await fetchAccessSpec(storedToken);
           if (cancelled) return;
-          const verifiedSpec = readPageSpecPayload(verifiedPayload);
+          const verifiedSpec = await readPublicPageSpec(verifiedPayload);
           const verifiedAccess = verifiedSpec?.meta.access;
           const verifiedVersion =
             clean(verifiedAccess?.accessVersion) || version;
@@ -283,7 +289,7 @@ export function usePublicEventAccess({
               invitationToken,
               accessToken: access.accessToken,
             });
-            const verifiedSpec = readPageSpecPayload(verifiedPayload);
+            const verifiedSpec = await readPublicPageSpec(verifiedPayload);
             const verifiedAccess = verifiedSpec?.meta.access;
             const nextAccessVersion =
               clean(verifiedAccess?.accessVersion) || verifiedAccessVersion;

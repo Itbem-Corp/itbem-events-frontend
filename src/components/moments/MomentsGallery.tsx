@@ -49,6 +49,7 @@ import {
   normalizePublicMomentsPage,
   PUBLIC_MOMENTS_LIVE_REFRESH_MS,
   publicMomentContentUrl,
+  publicMomentMediaSrcSet,
   publicMomentsMediaRefreshKey,
   publicMomentPreviewUrl,
   shouldReplacePublicMomentsOnLiveRefresh,
@@ -58,6 +59,7 @@ import {
   resolvePublicLoadFailure,
   type PublicLoadFailure,
 } from "../../lib/publicLoadFailure";
+import { installPublicRum, recordPublicRumMetric } from "../../lib/publicRum";
 import {
   getCardType,
   readPending,
@@ -316,6 +318,11 @@ export default function MomentsGallery({
   useEffect(() => {
     setIdentifier(getIdentifier());
   }, []);
+
+  useEffect(() => {
+    if (!identifier) return;
+    return installPublicRum({ eventsUrl: EVENTS_URL, identifier, route: "moments", access: requestAccess });
+  }, [EVENTS_URL, identifier, requestAccess]);
 
   const fetchMoments = useCallback(
     async (id: string, cursor: string | null, append: boolean) => {
@@ -1233,6 +1240,9 @@ function PhotoCard({
   const isVideoMoment = isVideoMedia(fullUrl, moment.content_type);
   const featured = getCardType(globalIndex) === "featured";
   const eager = globalIndex < 6;
+  const srcSet = publicMomentMediaSrcSet(moment, (url) =>
+    resolvePublicMediaUrl(url, EVENTS_URL),
+  );
 
   return (
     <button
@@ -1259,6 +1269,8 @@ function PhotoCard({
 
       <img
         src={thumbUrl}
+        srcSet={srcSet}
+        sizes={featured ? "(max-width: 767px) 66vw, 560px" : "(max-width: 767px) 33vw, 280px"}
         alt={moment.description || "Momento del evento"}
         loading={eager ? "eager" : "lazy"}
         {...(eager ? { fetchPriority: "high" as const } : {})}
@@ -1267,7 +1279,10 @@ function PhotoCard({
         className={`w-full h-full object-cover transition-[opacity,transform] duration-300 group-hover:scale-105 ${
           loaded ? "opacity-100" : "opacity-0"
         } ${featured ? "absolute inset-0" : ""}`}
-        onLoad={() => setLoaded(true)}
+        onLoad={() => {
+          setLoaded(true);
+          if (globalIndex === 0) recordPublicRumMetric("photo_visible_ms", performance.now());
+        }}
       />
 
       {/* Desktop hover overlay */}

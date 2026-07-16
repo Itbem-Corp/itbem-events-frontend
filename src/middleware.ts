@@ -1,21 +1,36 @@
 import { defineMiddleware } from "astro:middleware";
 
-import { hasPublicAccessCredential } from "./lib/publicAccessParams";
+const ACCESS_QUERY_KEYS = [
+  "preview",
+  "preview_token",
+  "t",
+  "token",
+  "invitation_token",
+  "access_token",
+  "access",
+];
 
-// Public URLs may contain short-lived preview, invitation, or password-access
-// credentials. Never disclose the current URL through the Referer header when
-// a page loads third-party maps, fonts, media, or follows an external link.
+function isPublicEventRoute(pathname: string): boolean {
+  return pathname.startsWith("/e/") || pathname.startsWith("/rsvp/");
+}
+
 export const onRequest = defineMiddleware(async (context, next) => {
   const response = await next();
-  response.headers.set("Referrer-Policy", "no-referrer");
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set(
-    "Permissions-Policy",
-    "camera=(self), geolocation=(), microphone=()",
+  if (!isPublicEventRoute(context.url.pathname)) return response;
+
+  const hasCredential = ACCESS_QUERY_KEYS.some((key) =>
+    context.url.searchParams.has(key),
   );
-  if (hasPublicAccessCredential(context.url.searchParams)) {
-    response.headers.set("Cache-Control", "private, no-store, max-age=0");
-    response.headers.set("Pragma", "no-cache");
-  }
+
+  // URLs carrying any form of invitation/preview/access proof are never
+  // browser- or edge-cacheable. Public pages can be briefly cached, while the
+  // client and service worker still revalidate their PageSpec promptly.
+  response.headers.set(
+    "Cache-Control",
+    hasCredential
+      ? "private, no-store"
+      : "public, max-age=60, s-maxage=120, stale-while-revalidate=60",
+  );
+  response.headers.set("Vary", "Accept-Encoding");
   return response;
 });

@@ -78,7 +78,13 @@ export default defineConfig({
         // Upload transport is useless offline (API + S3 are mandatory). Keep its
         // intent-loaded chunk out of install-time precache so the async boundary
         // also saves network bytes, not only parse/evaluation work.
-        globIgnores: ["**/SharedUploadEngine.*.js"],
+        globIgnores: [
+          "**/SharedUploadEngine.*.js",
+          // Optional typefaces are fetched on demand after their first use;
+          // do not make a first PWA install download every template font.
+          "**/fonts/Aloevera-*.woff2",
+          "**/fonts/Astralaga SemiBold.woff2",
+        ],
 
         // Offline fallback for navigations that fail (network down, no cache).
         // /offline is statically prerendered (prerender = true in offline.astro).
@@ -101,6 +107,23 @@ export default defineConfig({
               expiration: {
                 maxEntries: 30,
                 maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+
+          // Optional local fonts are immutable assets. Cache after first use,
+          // rather than making them part of the install-time download.
+          {
+            urlPattern: ({ url }) =>
+              url.origin === self.location.origin &&
+              url.pathname.startsWith("/fonts/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "eventi-template-fonts",
+              expiration: {
+                maxEntries: 8,
+                maxAgeSeconds: 365 * 24 * 60 * 60,
               },
               cacheableResponse: { statuses: [0, 200] },
             },

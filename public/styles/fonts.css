@@ -1,32 +1,32 @@
 /* src/styles/fonts.css */
 @font-face {
   font-family: 'Bigilla';
-  src: url('/fonts/Bigilla.otf') format('opentype');
+  src: url('/fonts/Bigilla.woff2') format('woff2');
 }
 @font-face {
   font-family: 'Aloevera';
-  src: url('/fonts/Aloevera-Medium.otf') format('opentype');
+  src: url('/fonts/Aloevera-Medium.woff2') format('woff2');
 }
 @font-face {
   font-family: 'Quicksand';
-  src: url('/fonts/Quicksand-VariableFont_wght.ttf') format('truetype');
+  src: url('/fonts/Quicksand-VariableFont_wght.woff2') format('woff2');
 }
 
 @font-face {
   font-family: "Aloevera";
-  src: url("/fonts/Aloevera-Light.otf") format("opentype");
+  src: url("/fonts/Aloevera-Light.woff2") format("woff2");
   font-weight: 300;
 }
 
 @font-face {
   font-family: "Aloevera";
-  src: url("/fonts/Aloevera-Regular.otf") format("opentype");
+  src: url("/fonts/Aloevera-Regular.woff2") format("woff2");
   font-weight: 400;
 }
 
 @font-face {
   font-family: "Astralaga";
-  src: url("/fonts/Astralaga SemiBold.ttf") format("truetype");
+  src: url("/fonts/Astralaga SemiBold.woff2") format("woff2");
   font-weight: 600;
 }
 

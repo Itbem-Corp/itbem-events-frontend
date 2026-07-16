@@ -13,6 +13,7 @@ import ResourcesBySectionSingle, {
   type Section,
 } from "../ResourcesBySectionSingle";
 import ImageWithLoader from "../ImageWithLoader";
+import { recordPublicRumMetric } from "../../lib/publicRum";
 import { resourceAtPosition } from "../../lib/publicResources";
 import type {
   SectionComponentProps,
@@ -208,6 +209,7 @@ export default function RSVPConfirmation({
     const nextStatus = respuesta === "yes" ? "confirmed" : "declined";
     const nextGuestCount = respuesta === "yes" ? numPersonas : 0;
 
+    const submitStartedAt = performance.now();
     try {
       const confirmationPayload = await fetchApiData<unknown>(
         rsvpUrl,
@@ -261,6 +263,7 @@ export default function RSVPConfirmation({
           : "Respuesta registrada",
         "success",
       );
+      recordPublicRumMetric("rsvp_submit_ms", performance.now() - submitStartedAt);
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Error en la confirmación";
