@@ -21,7 +21,7 @@
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^12.6.13",
+    "@astrojs/cloudflare": "^13.1.10",
     "@astrojs/react": "^4.4.2",
     "@astrojs/tailwind": "^6.0.2",
     "@headlessui/react": "^2.2.10",
