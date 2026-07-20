@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "eventiapp-public",
+  "compatibility_date": "2026-07-19",
+  "preview_urls": true,
+  "workers_dev": true,
+  "limits": {
+    "cpu_ms": 10
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 0.1,
+      "invocation_logs": true
+    }
+  }
+}

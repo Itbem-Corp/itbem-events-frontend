@@ -4,19 +4,18 @@ import {
   useState,
   useEffect,
   useCallback,
+  lazy,
   useRef,
+  Suspense,
   type CSSProperties,
   type ReactNode,
 } from "react";
 import { CalendarClock, PartyPopper } from "lucide-react";
 import SectionRenderer from "./SectionRenderer";
 import { isRsvpSectionType } from "./registry";
-import MusicWidget from "../MusicWidget";
-import ShareWidget from "../ShareWidget";
 import Footer from "../common/Footer";
 import PublicEventPasswordGate from "../common/PublicEventPasswordGate";
 import { PublicEventLoadError } from "../common/PublicEventLoadError";
-import InstallPrompt from "../InstallPrompt";
 import type { PageSpec } from "./types";
 import { normalizeEventsUrl } from "../../lib/eventsUrl";
 import { buildEventVerifyAccessUrl } from "../../lib/apiUrls";
@@ -62,6 +61,43 @@ import {
   type PublicLoadFailure,
 } from "../../lib/publicLoadFailure";
 import { installPublicRum, recordPublicRumMetric } from "../../lib/publicRum";
+
+// These controls are useful only after the invitation has loaded. Keeping them
+// outside the entry chunk shortens parse/evaluation work on the critical path.
+const MusicWidget = lazy(() => import("../MusicWidget"));
+const ShareWidget = lazy(() => import("../ShareWidget"));
+const InstallPrompt = lazy(() => import("../InstallPrompt"));
+
+function useDeferredInvitationChrome(): boolean {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (ready) return;
+    let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+    let idleId: number | undefined;
+    const reveal = () => setReady(true);
+    const options = { once: true, passive: true } as const;
+
+    window.addEventListener("pointerdown", reveal, options);
+    window.addEventListener("keydown", reveal, { once: true });
+    if ("requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(reveal, { timeout: 1800 });
+    } else {
+      timeoutId = globalThis.setTimeout(reveal, 1200);
+    }
+
+    return () => {
+      window.removeEventListener("pointerdown", reveal);
+      window.removeEventListener("keydown", reveal);
+      if (idleId !== undefined && "cancelIdleCallback" in window) {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
+    };
+  }, [ready]);
+
+  return ready;
+}
 
 interface Props {
   EVENTS_URL: string;
@@ -263,6 +299,7 @@ export default function EventPage({
   rsvpMode,
 }: Props) {
   const EVENTS_URL = normalizeEventsUrl(rawEventsUrl);
+  const deferredChromeReady = useDeferredInvitationChrome();
   const [spec, setSpec] = useState<PageSpec | null>(null);
   const [error, setError] = useState<PublicLoadFailure | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -364,7 +401,10 @@ export default function EventPage({
             ? "No pudimos cargar este evento."
             : "No pudimos cargar esta invitación.",
         );
-        recordPublicRumMetric("page_spec_ms", performance.now() - pageSpecStartedAt);
+        recordPublicRumMetric(
+          "page_spec_ms",
+          performance.now() - pageSpecStartedAt,
+        );
         const clearStalePageSpecCache = () => {
           removePageSpecCache(scopedCacheId, cacheMode, undefined, EVENTS_URL);
         };
@@ -819,14 +859,18 @@ export default function EventPage({
     >
       {themeFontFaces && <style>{themeFontFaces}</style>}
 
-      {spec.meta.musicUrl && (
-        <MusicWidget audioUrl={spec.meta.musicUrl} volume={0.3} />
-      )}
+      {deferredChromeReady && (
+        <Suspense fallback={null}>
+          {spec.meta.musicUrl && (
+            <MusicWidget audioUrl={spec.meta.musicUrl} volume={0.3} />
+          )}
 
-      <ShareWidget
-        eventTitle={spec.meta.pageTitle}
-        eventIdentifier={spec.meta.identifier}
-      />
+          <ShareWidget
+            eventTitle={spec.meta.pageTitle}
+            eventIdentifier={spec.meta.identifier}
+          />
+        </Suspense>
+      )}
 
       <main className="eventi-event-page mx-auto max-w-screen-md space-y-10 overflow-x-hidden px-3 py-4 sm:space-y-16 sm:px-4 lg:max-w-[1024px]">
         {sorted.map((section) => (
@@ -845,7 +889,11 @@ export default function EventPage({
         )}
       </main>
 
-      <InstallPrompt />
+      {deferredChromeReady && (
+        <Suspense fallback={null}>
+          <InstallPrompt />
+        </Suspense>
+      )}
     </div>
   );
 }
