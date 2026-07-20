@@ -748,6 +748,7 @@ export async function uploadSharedFiles({
           object_key: objectKey,
           s3_key: objectKey,
           content_type: uploadContentType,
+          file_size: file.size,
           parts: completedParts,
           description:
             allowMessages && includeDescription && description.trim()
@@ -804,11 +805,13 @@ export async function uploadSharedFiles({
       let uploadUrl: string;
       let objectKey: string;
       let uploadContentType = effectiveContentType;
+      let uploadHeaders: Record<string, string> = {};
 
       if (cachedPresign) {
         uploadUrl = cachedPresign.uploadUrl;
         objectKey = cachedPresign.objectKey;
         uploadContentType = cachedPresign.contentType;
+        uploadHeaders = cachedPresign.uploadHeaders ?? {};
       } else {
         let data: MomentUploadUrl;
         try {
@@ -843,6 +846,7 @@ export async function uploadSharedFiles({
         uploadUrl = presign.uploadUrl;
         objectKey = presign.objectKey;
         uploadContentType = presign.contentType;
+        uploadHeaders = presign.uploadHeaders ?? {};
       }
 
       await withRetry(
@@ -854,6 +858,9 @@ export async function uploadSharedFiles({
               await new Promise<void>((resolve, reject) => {
                 request.open("PUT", uploadUrl);
                 request.setRequestHeader("Content-Type", uploadContentType);
+                for (const [name, value] of Object.entries(uploadHeaders)) {
+                  request.setRequestHeader(name, value);
+                }
                 request.timeout = 120_000;
                 request.upload.onprogress = (event) => {
                   if (!event.lengthComputable) return;
@@ -922,6 +929,7 @@ export async function uploadSharedFiles({
               object_key: objectKey,
               s3_key: objectKey,
               content_type: uploadContentType,
+              file_size: fileToUpload.size,
               description:
                 allowMessages && includeDescription && description.trim()
                   ? description.trim()

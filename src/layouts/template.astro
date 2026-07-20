@@ -71,12 +71,10 @@ const publicOgUrl = ogUrl ? sanitizePublicShareUrl(ogUrl) : '';
       </>
     )}
 
-    <!-- Preconnect to AWS S3 -->
-    <link rel="preconnect" href="https://itbem-events-bucket-prod.s3.us-east-2.amazonaws.com" crossorigin>
-
-    <!-- Preconnect to Google Maps -->
-    <link rel="preconnect" href="https://maps.googleapis.com" crossorigin>
-    <link rel="dns-prefetch" href="https://maps.googleapis.com">
+    <!-- Invitation entry points commonly paint event media above the fold. -->
+    {preloadFonts === 'invitation' && (
+      <link rel="preconnect" href="https://itbem-events-bucket-prod.s3.us-east-2.amazonaws.com" crossorigin>
+    )}
 
     <!-- Preconnect to API (DNS + TCP + TLS warmup) -->
     {apiOrigin && <link rel="preconnect" href={apiOrigin} crossorigin>}

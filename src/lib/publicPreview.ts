@@ -1,6 +1,7 @@
 import { readPublicInvitationToken } from "./publicInvitationToken";
 import {
   PUBLIC_EVENT_ACCESS_HEADER_NAME,
+  PUBLIC_ACCESS_CREDENTIAL_QUERY_KEYS,
   PUBLIC_EVENT_ACCESS_TOKEN_QUERY_KEYS,
   PUBLIC_INVITATION_TOKEN_QUERY_KEYS,
   PUBLIC_PREVIEW_CACHE_KEY_QUERY_KEY,
@@ -16,6 +17,8 @@ const PUBLIC_INVITATION_TOKEN_QUERY_KEY =
   PUBLIC_INVITATION_TOKEN_QUERY_KEYS[0];
 const PUBLIC_EVENT_ACCESS_TOKEN_QUERY_KEY =
   PUBLIC_EVENT_ACCESS_TOKEN_QUERY_KEYS[0];
+const PUBLIC_ACCESS_SESSION_PREFIX = "eventiapp:public-access:";
+const PUBLIC_ACCESS_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
 export interface PublicPreviewParams {
   isPreview: boolean;
@@ -138,11 +141,77 @@ export function readPublicAccessParams(search?: string): PublicAccessParams {
     ...parsePublicPreviewParams(query),
     invitationToken: readPublicInvitationToken(query),
   };
-  if (!accessToken) return accessParams;
-  return {
+  const resolved = !accessToken ? accessParams : {
     ...accessParams,
     accessToken,
   };
+  return retainAndSanitizeBrowserAccess(query, resolved);
+}
+
+type StoredPublicAccess = PublicAccessParams & { savedAt: number };
+
+function browserAccessStorageKey(): string {
+  return `${PUBLIC_ACCESS_SESSION_PREFIX}${window.location.pathname}`;
+}
+
+function readStoredBrowserAccess(): PublicAccessParams | null {
+  try {
+    const raw = window.sessionStorage.getItem(browserAccessStorageKey());
+    if (!raw) return null;
+    const stored = JSON.parse(raw) as Partial<StoredPublicAccess>;
+    if (
+      typeof stored.savedAt !== "number" ||
+      Date.now() - stored.savedAt > PUBLIC_ACCESS_SESSION_TTL_MS
+    ) {
+      window.sessionStorage.removeItem(browserAccessStorageKey());
+      return null;
+    }
+    return {
+      isPreview: Boolean(stored.previewToken),
+      previewToken: String(stored.previewToken ?? ""),
+      cacheKey: String(stored.cacheKey ?? ""),
+      invitationToken: String(stored.invitationToken ?? ""),
+      ...(stored.accessToken
+        ? { accessToken: String(stored.accessToken) }
+        : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function retainAndSanitizeBrowserAccess(
+  query: string,
+  access: PublicAccessParams,
+): PublicAccessParams {
+  if (typeof window === "undefined" || query !== window.location.search) {
+    return access;
+  }
+  const hasCredential = Boolean(
+    access.previewToken || access.invitationToken || access.accessToken,
+  );
+  if (!hasCredential) return readStoredBrowserAccess() ?? access;
+
+  try {
+    const stored: StoredPublicAccess = { ...access, savedAt: Date.now() };
+    window.sessionStorage.setItem(
+      browserAccessStorageKey(),
+      JSON.stringify(stored),
+    );
+
+    const sanitized = new URL(window.location.href);
+    for (const key of PUBLIC_ACCESS_CREDENTIAL_QUERY_KEYS) {
+      sanitized.searchParams.delete(key);
+    }
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${sanitized.pathname}${sanitized.search}${sanitized.hash}`,
+    );
+  } catch {
+    // Restricted browser storage/history must not prevent invitation loading.
+  }
+  return access;
 }
 
 export function resolvePublicAccessParams(
