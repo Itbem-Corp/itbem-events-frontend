@@ -1,0 +1,134 @@
+name: Deploy Cloudflare Worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      promote:
+        description: Promote the smoke-tested version to 100% traffic
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+env:
+  PUBLIC_EVENTS_URL: https://api.eventiapp.com.mx
+  PUBLIC_DASHBOARD_URL: ${{ vars.PUBLIC_DASHBOARD_URL || 'https://dashboard.eventiapp.com.mx' }}
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    concurrency:
+      group: eventiapp-public-worker-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          node-version: 22.23.1
+          cache: npm
+
+      - name: Install and verify
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run typecheck
+          npm run test:unit
+          npm audit --omit=dev --audit-level=high
+
+      - name: Build immutable Worker artifact
+        run: npm run build
+
+      - name: Verify cost and security controls
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const config = JSON.parse(readFileSync('dist/server/wrangler.json', 'utf8'));
+          if (config.limits?.cpu_ms !== 10) throw new Error('Worker CPU limit must remain 10 ms');
+          if (config.assets?.directory !== '../client') throw new Error('Static assets must remain outside Worker execution');
+          if (config.preview_urls !== true) throw new Error('Version preview URLs must be enabled');
+          NODE
+
+      - name: Create and attest release artifact
+        run: tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf worker-release.tgz dist
+
+      - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: worker-release.tgz
+
+      - name: Upload version without production traffic
+        id: upload
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VERSION_TAG: release-${{ github.run_id }}-${{ github.run_attempt }}
+          PREVIEW_ALIAS: candidate-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          npx --no-install wrangler versions upload \
+            --config dist/server/wrangler.json \
+            --strict \
+            --keep-vars \
+            --tag "${VERSION_TAG}" \
+            --message "${GITHUB_REPOSITORY}@${GITHUB_SHA}" \
+            --preview-alias "${PREVIEW_ALIAS}" 2>&1 | tee worker-upload.log
+          PREVIEW_URL="$(grep -Eo 'https://[a-zA-Z0-9.-]+\.workers\.dev' worker-upload.log | tail -1)"
+          test -n "${PREVIEW_URL}"
+          printf 'preview_url=%s\n' "${PREVIEW_URL}" >> "${GITHUB_OUTPUT}"
+          printf 'version_tag=%s\n' "${VERSION_TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Smoke candidate
+        env:
+          CANDIDATE_URL: ${{ steps.upload.outputs.preview_url }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            --retry 6 --retry-all-errors --retry-delay 5 --max-time 20 \
+            "${CANDIDATE_URL%/}/offline/" > /dev/null
+          bash scripts/smoke-security-headers.sh "${CANDIDATE_URL}"
+          bash scripts/smoke-root.sh "${CANDIDATE_URL}"
+
+      - name: Promote exact tested version
+        if: inputs.promote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VERSION_TAG: ${{ steps.upload.outputs.version_tag }}
+        run: |
+          set -euo pipefail
+          test -n "${{ vars.WORKER_PRODUCTION_URL }}"
+          npx --no-install wrangler versions deploy \
+            --config dist/server/wrangler.json \
+            --version-tag "${VERSION_TAG}@100%" \
+            --message "Promote tested ${GITHUB_SHA}" \
+            --yes
+
+      - name: Verify production and roll back on failure
+        if: inputs.promote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PRODUCTION_URL: ${{ vars.WORKER_PRODUCTION_URL }}
+        run: |
+          set +e
+          bash scripts/smoke-security-headers.sh "${PRODUCTION_URL}"
+          HEADER_STATUS=$?
+          bash scripts/smoke-root.sh "${PRODUCTION_URL}"
+          ROOT_STATUS=$?
+          if [ "${HEADER_STATUS}" -ne 0 ] || [ "${ROOT_STATUS}" -ne 0 ]; then
+            npx --no-install wrangler rollback \
+              --config dist/server/wrangler.json \
+              --message "Automatic rollback after smoke failure for ${GITHUB_SHA}" \
+              --yes
+            exit 1
+          fi

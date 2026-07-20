@@ -5,10 +5,15 @@
  * assets in the output directory. This script removes any exclude entries
  * that would conflict with SSR routes, ensuring the worker handles them.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const ROUTES_PATH = resolve('dist', '_routes.json');
+
+if (!existsSync(ROUTES_PATH)) {
+  console.log('_routes.json not generated; the Astro 6 Cloudflare adapter targets Workers and needs no Pages route patch.');
+  process.exit(0);
+}
 
 // Patterns to remove from exclude (they would block SSR routes from reaching the worker)
 const EXCLUDE_REMOVE = ['/e/*', '/events/*'];

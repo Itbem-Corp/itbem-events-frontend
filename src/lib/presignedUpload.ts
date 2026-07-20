@@ -71,6 +71,7 @@ interface PresignedUploadOptions {
   url: string;
   body: Blob;
   contentType: string;
+  headers?: Record<string, string>;
   signal?: AbortSignal;
   timeoutMs?: number;
   maxAttempts?: number;
@@ -100,13 +101,14 @@ function uploadAttempt({
   url,
   body,
   contentType,
+  headers,
   signal,
   timeoutMs,
   onProgress,
 }: Required<Pick<PresignedUploadOptions, "url" | "body" | "contentType">> &
   Pick<
     PresignedUploadOptions,
-    "signal" | "timeoutMs" | "onProgress"
+    "headers" | "signal" | "timeoutMs" | "onProgress"
   >): Promise<void> {
   if (signal?.aborted) return Promise.reject(abortError());
 
@@ -125,6 +127,9 @@ function uploadAttempt({
     request.open("PUT", url);
     request.timeout = timeoutMs ?? 120_000;
     request.setRequestHeader("Content-Type", contentType);
+    for (const [name, value] of Object.entries(headers ?? {})) {
+      request.setRequestHeader(name, value);
+    }
     request.upload.onprogress = (event) => {
       if (!event.lengthComputable || event.total <= 0) return;
       onProgress?.(
