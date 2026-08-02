@@ -41,7 +41,7 @@
     "motion": "^12.42.2",
     "postcss": "^8.5.19",
     "qrcode.react": "^4.2.0",
-    "react": "^19.2.7",
+    "react": "^19.2.8",
     "react-dom": "^19.2.7",
     "react-howler": "^5.2.0",
     "sonner": "^2.0.7",
