@@ -1,10 +1,9 @@
 // @ts-check
 import { defineConfig, envField } from "astro/config";
 import react from "@astrojs/react";
-import tailwind from "@astrojs/tailwind";
 import cloudflare from "@astrojs/cloudflare";
 import Critters from "critters";
-import AstroPWA from "@vite-pwa/astro";
+import AstroPWA from "./scripts/vite-pwa-astro.mjs";
 import {
   createApiRuntimeCacheMatcher,
   createFreshFirstApiMatcher,
@@ -37,8 +36,6 @@ export default defineConfig({
 
   integrations: [
     react(),
-    tailwind(),
-
     // ── PWA ──────────────────────────────────────────────────────────────────
     // Generates service worker (Workbox) + injects manifest link into <head>.
     // SW is output to dist/sw.js — served as a static Cloudflare Pages asset.
@@ -115,7 +112,7 @@ export default defineConfig({
           // Optional local fonts are immutable assets. Cache after first use,
           // rather than making them part of the install-time download.
           {
-            urlPattern: ({ url }) =>
+            urlPattern: (/** @type {{ url: URL }} */ { url }) =>
               url.origin === self.location.origin &&
               url.pathname.startsWith("/fonts/"),
             handler: "CacheFirst",
@@ -184,7 +181,7 @@ export default defineConfig({
 
           // ── Google Fonts / Maps (NetworkFirst) ─────────────────────────────
           {
-            urlPattern: ({ url }) =>
+            urlPattern: (/** @type {{ url: URL }} */ { url }) =>
               url.hostname.includes("google") ||
               url.hostname.includes("googleapis"),
             handler: "NetworkFirst",

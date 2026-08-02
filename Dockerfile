@@ -2,6 +2,11 @@
 FROM node:22.23.1-bookworm-slim AS base
 WORKDIR /app
 
+# Astro's Cloudflare prerenderer starts and fetches a localhost Worker during
+# image builds. Prefer one address family so Docker's localhost resolution
+# cannot bind the preview server on IPv6 and fetch it over IPv4 (or vice versa).
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
+
 # Public URLs are compiled into the Astro client bundle during the build.
 ARG PUBLIC_EVENTS_URL=http://localhost:8080/
 ARG PUBLIC_DASHBOARD_URL=http://localhost:3000
