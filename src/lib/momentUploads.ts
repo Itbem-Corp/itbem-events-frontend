@@ -12,6 +12,9 @@ export interface MomentUploadUrl {
   content_type?: string;
   contentType?: string;
   ContentType?: string;
+  upload_headers?: Record<string, string>;
+  uploadHeaders?: Record<string, string>;
+  UploadHeaders?: Record<string, string>;
   uploads_limit?: number;
   uploadsLimit?: number;
   UploadsLimit?: number;
@@ -89,6 +92,7 @@ export interface CachedMomentPresign {
   uploadUrl: string;
   objectKey: string;
   contentType: string;
+  uploadHeaders?: Record<string, string>;
 }
 
 export interface CachedSharedMultipartUploadStart {
@@ -103,6 +107,18 @@ export const INCOMPLETE_MOMENT_PRESIGN_MESSAGE =
 
 function cleanString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readUploadHeaders(presign: MomentUploadUrl): Record<string, string> {
+  const raw = presign.upload_headers ?? presign.uploadHeaders ?? presign.UploadHeaders;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(raw)) {
+    const cleanName = name.trim().toLowerCase();
+    const cleanValue = cleanString(value);
+    if (cleanName === "x-amz-tagging" && cleanValue) headers[cleanName] = cleanValue;
+  }
+  return headers;
 }
 
 function positiveInt(value: unknown): number {
@@ -221,9 +237,11 @@ export function readMomentUploadPresign(
   const objectKey = getMomentObjectKey(presign);
   if (!uploadUrl || !objectKey) return null;
 
+  const uploadHeaders = readUploadHeaders(presign);
   return {
     uploadUrl,
     objectKey,
+    ...(Object.keys(uploadHeaders).length > 0 ? { uploadHeaders } : {}),
     contentType:
       cleanString(presign.content_type) ||
       cleanString(presign.contentType) ||

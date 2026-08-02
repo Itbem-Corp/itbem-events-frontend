@@ -10,6 +10,23 @@ import {
 } from "../../src/lib/momentUploads";
 
 describe("momentUploads", () => {
+  it("keeps only the signed S3 tagging header", () => {
+    expect(
+      toCachedMomentPresign(
+        {
+          upload_url: "https://s3.example.com/upload",
+          object_key: "moments/event/raw/file.jpg",
+          content_type: "image/jpeg",
+          upload_headers: {
+            "X-Amz-Tagging": "upload-state=unconfirmed",
+            Authorization: "must-not-be-forwarded",
+          },
+        },
+        "image/jpeg",
+      ).uploadHeaders,
+    ).toEqual({ "x-amz-tagging": "upload-state=unconfirmed" });
+  });
+
   it("preserves backend-normalized content_type when caching a presign", () => {
     expect(
       toCachedMomentPresign(

@@ -1,14 +1,19 @@
 /**
- * Post-build script: fixes _routes.json for Cloudflare Pages.
+ * Post-build script: preserves legacy Pages route patches when present.
  *
  * Astro's Cloudflare adapter auto-generates exclude rules based on static
  * assets in the output directory. This script removes any exclude entries
  * that would conflict with SSR routes, ensuring the worker handles them.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const ROUTES_PATH = resolve('dist', '_routes.json');
+
+if (!existsSync(ROUTES_PATH)) {
+  console.log('_routes.json not generated; the Cloudflare Worker adapter needs no Pages route patch.');
+  process.exit(0);
+}
 
 // Patterns to remove from exclude (they would block SSR routes from reaching the worker)
 const EXCLUDE_REMOVE = ['/e/*', '/events/*'];
