@@ -243,10 +243,11 @@ export default defineConfig({
         enforce: "post",
         apply: "build",
         /**
-         * @param {unknown} _
-         * @param {import('rollup').OutputBundle} bundle
+         * @param {import('rolldown').NormalizedOutputOptions} _
+         * @param {import('rolldown').OutputBundle} bundle
+         * @param {boolean} _isWrite
          */
-        async generateBundle(_, bundle) {
+        async generateBundle(_, bundle, _isWrite) {
           const critters = new Critters({ preload: "swap" });
           for (const file of Object.keys(bundle)) {
             const chunk = bundle[file];

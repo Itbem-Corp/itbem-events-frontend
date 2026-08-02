@@ -1,5 +1,5 @@
 /**
- * Post-build script: fixes _routes.json for Cloudflare Pages.
+ * Post-build script: preserves legacy Pages route patches when present.
  *
  * Astro's Cloudflare adapter auto-generates exclude rules based on static
  * assets in the output directory. This script removes any exclude entries
@@ -11,7 +11,7 @@ import { resolve } from 'node:path';
 const ROUTES_PATH = resolve('dist', '_routes.json');
 
 if (!existsSync(ROUTES_PATH)) {
-  console.log('_routes.json not generated; the Astro 6 Cloudflare adapter targets Workers and needs no Pages route patch.');
+  console.log('_routes.json not generated; the Cloudflare Worker adapter needs no Pages route patch.');
   process.exit(0);
 }
 

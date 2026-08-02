@@ -1,4 +1,4 @@
-name: Build legacy Cloudflare release
+name: Build Cloudflare Worker release
 
 on:
   push:
@@ -63,6 +63,9 @@ jobs:
         env:
           # Used at build time for OG-tag server-side fetches and client-side API calls.
           PUBLIC_EVENTS_URL: https://api.eventiapp.com.mx
+
+      - name: Verify Worker artifact contract
+        run: npm run verify:worker-artifact
 
       - name: Upload dist artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

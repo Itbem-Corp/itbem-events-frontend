@@ -4,9 +4,9 @@ import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 
 const require = createRequire(import.meta.url);
-const workerEntry = resolve('dist', '_worker.js');
+const workerConfig = resolve('dist', 'server', 'wrangler.json');
 
-if (!existsSync(workerEntry)) {
+if (!existsSync(workerConfig)) {
   throw new Error('Cloudflare build not found. Run `npm run build` before starting the preview.');
 }
 
@@ -27,17 +27,14 @@ const result = spawnSync(
   process.execPath,
   [
     wranglerCli,
-    'pages',
     'dev',
-    resolve('dist'),
+    '--config',
+    workerConfig,
+    '--local',
     '--ip',
     host,
     '--port',
     String(numericPort),
-    // Match the compatibility date supported by the pinned Wrangler/workerd.
-    // Additional CLI arguments are appended so callers can override it explicitly.
-    '--compatibility-date',
-    '2025-11-18',
     ...process.argv.slice(2),
   ],
   { env: process.env, stdio: 'inherit' },

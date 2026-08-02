@@ -1,4 +1,4 @@
-# Cloudflare Pages routing rules
+# Legacy static routing rules; the Cloudflare Worker owns SSR routing.
 #
 # Dynamic routes /e/{identifier}, /e/{identifier}/momentos, /events/{identifier}/upload,
 # /rsvp/{identifier}, and /evento are handled by SSR (Cloudflare Pages Functions).

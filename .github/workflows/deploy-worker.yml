@@ -46,18 +46,10 @@ jobs:
           npm audit --omit=dev --audit-level=high
 
       - name: Build immutable Worker artifact
-        run: npm run build
+        run: npm run build && npm run verify:worker-artifact
 
       - name: Verify cost and security controls
-        run: |
-          set -euo pipefail
-          node --input-type=module <<'NODE'
-          import { readFileSync } from 'node:fs';
-          const config = JSON.parse(readFileSync('dist/server/wrangler.json', 'utf8'));
-          if (config.limits?.cpu_ms !== 10) throw new Error('Worker CPU limit must remain 10 ms');
-          if (config.assets?.directory !== '../client') throw new Error('Static assets must remain outside Worker execution');
-          if (config.preview_urls !== true) throw new Error('Version preview URLs must be enabled');
-          NODE
+        run: npm run verify:worker-artifact
 
       - name: Create and attest release artifact
         run: tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf worker-release.tgz dist

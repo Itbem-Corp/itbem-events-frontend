@@ -24,7 +24,7 @@ RUN npm run build
 # ---------- Runtime image ----------
 FROM base AS runtime
 
-# Wrangler is a declared runtime dependency and serves the Cloudflare Pages
+# Wrangler is a declared runtime dependency and serves the Cloudflare Worker
 # artifact locally with the same worker semantics used in production.
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
