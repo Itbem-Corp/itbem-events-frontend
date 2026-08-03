@@ -12,9 +12,15 @@ ejecuta automáticamente.
 
 ## Setup Local
 
+Requiere Node.js 22.12 o superior. La versión reproducible para equipo y CI
+está fijada en `.nvmrc` (22.23.1).
+
 ```bash
+# 0. Con nvm, seleccionar el runtime del proyecto
+nvm use
+
 # 1. Instalar dependencias
-npm install
+npm ci
 
 # 2. Copiar y configurar variables de entorno
 cp .env.example .env

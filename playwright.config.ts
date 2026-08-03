@@ -16,6 +16,10 @@ try {
 
 export default defineConfig({
   testDir: './tests',
+  // Unit tests live under tests/unit and are executed by Vitest. Restrict
+  // Playwright discovery to browser specifications so the runners cannot
+  // interpret each other's test globals or configuration.
+  testMatch: '**/*.spec.ts',
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
 
@@ -52,13 +56,19 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'npm run dev',
+    // Exercise the generated Cloudflare Worker, matching the runtime shipped
+    // by the deployment workflow instead of Vite's development semantics.
+    command: 'npm run build && npm run start',
     url: 'http://localhost:4321/graduacion-izapa',
     // Always start a fresh server so PUBLIC_EVENTS_URL in .env is guaranteed
     // to match the API_BASE used in mock interceptors.
     // Note: this stops any dev server already running on port 4321.
     reuseExistingServer: false,
     timeout: 60_000,
+    env: {
+      ...process.env,
+      XDG_CONFIG_HOME: join(process.cwd(), '.local', 'xdg-config'),
+    },
     stdout: 'pipe',
     stderr: 'pipe',
   },

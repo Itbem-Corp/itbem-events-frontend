@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 
@@ -12,6 +12,7 @@ if (!existsSync(workerConfig)) {
 
 const host = process.env.HOST?.trim() || '127.0.0.1';
 const port = process.env.PORT?.trim() || '4321';
+const localXdgConfig = resolve('.local', 'xdg-config');
 const numericPort = Number(port);
 
 if (!Number.isInteger(numericPort) || numericPort < 1 || numericPort > 65_535) {
@@ -23,6 +24,7 @@ if (!Number.isInteger(numericPort) || numericPort < 1 || numericPort > 65_535) {
 // CLI inside that package without depending on the removed subpath export.
 const wranglerPackageRoot = dirname(require.resolve('wrangler/package.json'));
 const wranglerCli = resolve(wranglerPackageRoot, 'bin', 'wrangler.js');
+mkdirSync(localXdgConfig, { recursive: true });
 const result = spawnSync(
   process.execPath,
   [
@@ -37,7 +39,10 @@ const result = spawnSync(
     String(numericPort),
     ...process.argv.slice(2),
   ],
-  { env: process.env, stdio: 'inherit' },
+  {
+    env: { ...process.env, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME || localXdgConfig },
+    stdio: 'inherit',
+  },
 );
 
 if (result.error) throw result.error;

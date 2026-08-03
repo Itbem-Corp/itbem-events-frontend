@@ -2,6 +2,7 @@
 import { defineConfig, envField } from "astro/config";
 import react from "@astrojs/react";
 import cloudflare from "@astrojs/cloudflare";
+import tailwindcss from "@tailwindcss/vite";
 import Beasties from "beasties";
 import AstroPWA from "./scripts/vite-pwa-astro.mjs";
 import {
@@ -235,6 +236,7 @@ export default defineConfig({
       },
     },
     plugins: [
+      tailwindcss(),
       {
         name: "vite-plugin-beasties",
         enforce: "post",
