@@ -4,7 +4,7 @@
  *
  * URL patterns that land here:
  *   /events/upload               (direct – identifier comes from ?e= query param)
- *   /events/{identifier}/upload  (via Cloudflare Pages _redirects rewrite → this file)
+ *   /events/{identifier}/upload  (handled directly by the Cloudflare Worker)
  *
  * The React component reads the event identifier from window.location.pathname
  * so that the friendly URL (/events/mi-boda/upload) works seamlessly.

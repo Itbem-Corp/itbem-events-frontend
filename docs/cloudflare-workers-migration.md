@@ -1,6 +1,6 @@
 # Cloudflare Workers migration
 
-Astro 6 no longer produces Cloudflare Pages Functions. The application now builds an immutable Worker entrypoint in `dist/server` and static assets in `dist/client`.
+Astro 7 builds an immutable Worker entrypoint in `dist/server` and static assets in `dist/client`. Cloudflare Pages release automation has been retired.
 
 ## Cost controls
 
@@ -28,11 +28,11 @@ Do not raise CPU, sampling, or traffic percentages without recording the estimat
 3. Attach a temporary test domain and inspect Worker Analytics for request count, CPU and errors.
 4. Run the workflow with `promote=true`; this deploys exactly the version tag that passed preview smoke tests.
 5. Move the production custom domain only after the Worker deployment is healthy.
-6. Keep the Pages project intact during the observation window.
+6. Monitor the promoted Worker version during the observation window.
 
 ## Rollback
 
-The workflow calls `wrangler rollback --yes` if production smoke tests fail after promotion. If the custom-domain cutover itself fails, restore the prior Pages DNS/custom-domain route. Storage and bindings are not versioned with Worker rollbacks, so binding changes require their own rollback procedure.
+The workflow calls `wrangler rollback --yes` if production smoke tests fail after promotion. Storage and bindings are not versioned with Worker rollbacks, so binding changes require their own rollback procedure.
 
 ## Acceptance criteria
 
@@ -41,4 +41,4 @@ The workflow calls `wrangler rollback --yes` if production smoke tests fail afte
 - No high or critical dependency finding exists.
 - Candidate and production smoke tests pass.
 - Error rate, CPU, request count and spend alerts are active.
-- A Pages rollback remains possible until at least seven healthy production days have elapsed.
+- The previous Worker version remains available for an immediate rollback.

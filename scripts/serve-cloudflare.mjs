@@ -1,22 +1,25 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 
 const require = createRequire(import.meta.url);
-const workerEntry = resolve('dist', '_worker.js');
+const workerConfig = resolve('dist', 'server', 'wrangler.json');
 
-if (!existsSync(workerEntry)) {
+if (!existsSync(workerConfig)) {
   throw new Error('Cloudflare build not found. Run `npm run build` before starting the preview.');
 }
 
 const host = process.env.HOST?.trim() || '127.0.0.1';
 const port = process.env.PORT?.trim() || '4321';
+const localXdgConfig = resolve('.local', 'xdg-config');
 const numericPort = Number(port);
 
 if (!Number.isInteger(numericPort) || numericPort < 1 || numericPort > 65_535) {
   throw new Error(`Invalid PORT: ${port}`);
 }
+
+mkdirSync(localXdgConfig, { recursive: true });
 
 // Wrangler 4.110+ deliberately exports package.json but no longer exports its
 // bin subpath. Resolve the public package boundary, then locate the declared
@@ -27,20 +30,21 @@ const result = spawnSync(
   process.execPath,
   [
     wranglerCli,
-    'pages',
     'dev',
-    resolve('dist'),
+    '--config',
+    workerConfig,
     '--ip',
     host,
     '--port',
     String(numericPort),
-    // Match the compatibility date supported by the pinned Wrangler/workerd.
-    // Additional CLI arguments are appended so callers can override it explicitly.
-    '--compatibility-date',
-    '2025-11-18',
+    // The generated config carries the compatibility date and assets binding.
+    // Additional CLI arguments let callers opt into supported Wrangler options.
     ...process.argv.slice(2),
   ],
-  { env: process.env, stdio: 'inherit' },
+  {
+    env: { ...process.env, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME || localXdgConfig },
+    stdio: 'inherit',
+  },
 );
 
 if (result.error) throw result.error;

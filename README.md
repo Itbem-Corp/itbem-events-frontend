@@ -6,9 +6,15 @@ Vistas publicas de invitaciones, RSVP y momentos. Construido con Astro, React y 
 
 ## Setup Local
 
+Requiere Node.js 22.12 o superior (la version fijada para el equipo y CI esta
+en `.nvmrc`: 22.23.1) y npm 10.9 o superior.
+
 ```bash
+# 0. Con nvm, usar la version del proyecto
+nvm use
+
 # 1. Instalar dependencias
-npm install
+npm ci
 
 # 2. Copiar y configurar variables de entorno
 cp .env.example .env
@@ -38,7 +44,7 @@ Copiar `.env.example` a `.env` y ajustar los valores.
 ```bash
 npm run dev          # Servidor de desarrollo (localhost:4321)
 npm run build        # Build de produccion -> dist/
-npm run preview      # Sirve dist/ con Cloudflare Pages + Wrangler
+npm run preview      # Sirve el Worker construido con Wrangler
 npm run start        # Igual que preview; requiere npm run build
 npm run test:e2e     # Tests E2E Playwright (headless)
 npm run test:e2e:ui  # Tests E2E con interfaz visual
@@ -70,8 +76,9 @@ docker build \
 docker run --rm -p 4321:4321 eventiapp-frontend
 ```
 
-El contenedor ejecuta el artefacto `dist/_worker.js` con Wrangler. Produccion se
-despliega directamente en Cloudflare Pages mediante el workflow del repositorio.
+El contenedor ejecuta el Worker generado desde `dist/server/wrangler.json` con
+Wrangler. Producción se despliega como una versión de Worker validada mediante
+el workflow del repositorio.
 
 ---
 

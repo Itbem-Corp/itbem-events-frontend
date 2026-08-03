@@ -40,7 +40,7 @@ COGNITO_LOGOUT_REDIRECT_URI=
 
 | Aspecto | cafetton-casero (este repo) | dashboard-ts |
 |---|---|---|
-| Framework | Astro 5 + React islands | Next.js 15 App Router |
+| Framework | Astro 7 + React islands | Next.js 15 App Router |
 | Tailwind | v3.4 (`tailwind.config.cjs`) | v4 CSS-first (sin config JS) |
 | Auth | Sin auth — rutas públicas con `?token=` | Cognito OAuth 2.0 (session cookie httpOnly) |
 | Estado | `useState` local por isla | Zustand global |

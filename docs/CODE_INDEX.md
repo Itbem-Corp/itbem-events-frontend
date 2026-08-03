@@ -18,7 +18,7 @@
 | `/graduacion-izapa` | `src/pages/graduacion-izapa.astro` | Hardcoded graduation event page |
 | `/AndresIvanna/Confirmacion` | `src/pages/AndresIvanna/Confirmacion.astro` | Hardcoded wedding RSVP page |
 
-**Cloudflare routing:** dynamic public routes are served by Astro SSR through the Cloudflare Pages worker. `public/_redirects` intentionally has no `/events/*/upload` rewrite; the friendly upload URL is handled by `src/pages/events/[identifier]/upload.astro`.
+**Cloudflare routing:** dynamic public routes are served by Astro SSR through the Cloudflare Worker. The friendly upload URL is handled directly by `src/pages/events/[identifier]/upload.astro`.
 
 ---
 

@@ -1,7 +1,7 @@
 // @ts-check
 import { defineConfig, envField } from "astro/config";
 import react from "@astrojs/react";
-import tailwind from "@astrojs/tailwind";
+import tailwindcss from "@tailwindcss/vite";
 import cloudflare from "@astrojs/cloudflare";
 import Critters from "critters";
 import AstroPWA from "@vite-pwa/astro";
@@ -24,24 +24,33 @@ const PUBLIC_DEV_PORT =
 
 // Static by default — pages with `export const prerender = false` opt into SSR.
 // SSR pages (e.g. /e/[identifier], /rsvp/[identifier], /evento) run on
-// Cloudflare Pages Functions for dynamic OG tags.
+// Cloudflare Worker routes render dynamic OG tags.
 // All interactivity is handled by client:only React islands that call
 // PUBLIC_EVENTS_URL (the Go backend) directly from the browser.
 export default defineConfig({
   output: "server",
   // Event media already arrives in display-ready variants from the backend/CDN.
   // Avoid shipping Astro's Sharp endpoint to Workers, where native Sharp cannot run.
-  adapter: cloudflare({ imageService: "passthrough" }),
+	adapter: cloudflare({
+		imageService: "passthrough",
+		// Keep prerendered routes reproducible on Windows and in CI without
+		// starting a local workerd instance. On-demand SSR remains workerd-only.
+		prerenderEnvironment: "node",
+		// Local development and browser tests use the bindings declared by the
+		// project, never a developer's remote Cloudflare account or persisted
+		// workerd state. Production bindings are supplied by the deployed Worker.
+		remoteBindings: false,
+		persistState: false,
+	}),
 
   site: "https://www.eventiapp.com.mx",
 
   integrations: [
     react(),
-    tailwind(),
 
     // ── PWA ──────────────────────────────────────────────────────────────────
     // Generates service worker (Workbox) + injects manifest link into <head>.
-    // SW is output to dist/sw.js — served as a static Cloudflare Pages asset.
+    // SW is output to dist/client/sw.js and served as a static Worker asset.
     AstroPWA({
       registerType: "autoUpdate",
       // 'auto' injects the workbox-window registration snippet into every page.
@@ -238,14 +247,11 @@ export default defineConfig({
       },
     },
     plugins: [
+      tailwindcss(),
       {
         name: "vite-plugin-critters",
         enforce: "post",
         apply: "build",
-        /**
-         * @param {unknown} _
-         * @param {import('rollup').OutputBundle} bundle
-         */
         async generateBundle(_, bundle) {
           const critters = new Critters({ preload: "swap" });
           for (const file of Object.keys(bundle)) {

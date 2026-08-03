@@ -1,6 +1,6 @@
 # Architecture
 
-**Stack:** Astro 5 SSR (Node middleware) · React 19 islands · Tailwind CSS 3.4 · Framer Motion 12 · Howler.js · Vite + Critters · TypeScript strict
+**Stack:** Astro 7 SSR (Cloudflare Worker) · React 19 islands · Tailwind CSS 4 via Vite · Framer Motion 12 · Howler.js · Vite + Critters · TypeScript strict
 
 ## Folder Map
 
@@ -167,16 +167,16 @@ Las páginas de evento son **públicas** — no hay usuario logueado. El acceso 
 
 ## Runtime Cloudflare
 
-Astro genera un Worker de Cloudflare Pages en `dist/_worker.js`. El desarrollo
+Astro genera un Worker de Cloudflare en `dist/server`. El desarrollo
 diario usa `astro dev`; `npm start` y `npm run preview` sirven el build con
-`wrangler pages dev`, manteniendo localmente las mismas reglas SSR y de assets
+`wrangler dev`, manteniendo localmente las mismas reglas SSR y de assets
 del despliegue.
 
 ```
 browser request
-  → Cloudflare Pages / Wrangler
-      → dist/_worker.js             # rutas Astro SSR
-      → dist/*                      # assets estáticos
+  → Cloudflare Worker / Wrangler
+      → dist/server                 # rutas Astro SSR
+      → dist/client                 # assets estáticos
 ```
 
 - Cloudflare aplica compresión y caching HTTP en el edge de producción.
@@ -185,20 +185,13 @@ browser request
 
 **Preview local:** `npm run build && npm start`
 
-### Riesgo de dependencia conocido
+### Dependencias y runtime
 
-Auditoría verificada el 2026-07-13 con el lockfile de producción:
-
-- `npm audit --package-lock-only`: 0 critical, 1 high, 0 moderate y 4 low.
-- El único high corresponde a Astro 5; npm propone Astro 7, un cambio mayor.
-- El frontend permanece temporalmente en Astro 5 + `@astrojs/cloudflare` 12
-  porque el deployment actual usa Cloudflare Pages. El adapter moderno eliminó
-  soporte para Pages y requiere migrar el runtime y el rollout a Workers.
-- No ejecutar `npm audit fix --force`: la remediación se hará como una migración
-  Pages → Workers independiente, con preview, smoke, rollback y validación de
-  dominios antes de promoverla.
-
-Referencia: <https://docs.astro.build/en/guides/integrations-guide/cloudflare/#removed-cloudflare-pages-support>
+El producto usa Astro 7, `@astrojs/cloudflare` 14, Tailwind 4 y Wrangler 4.
+El release se construye como un Worker versionado y se valida antes de promoción;
+no mantiene el pipeline ni el CLI de Cloudflare Pages retirado. Ejecuta
+`npm audit --omit=dev --audit-level=high` en CI para revisar dependencias de
+producción sin aplicar actualizaciones forzadas automáticamente.
 
 ---
 
@@ -220,7 +213,7 @@ Referencia: <https://docs.astro.build/en/guides/integrations-guide/cloudflare/#r
 4. **ResourcesBySectionSingle cache** — `sessionStorage` + expiry en `localStorage` basado en presigned URL params
 5. **EventPage sessionStorage cache** — page-spec cacheado 30 min; retorno a la misma invitación no hace fetch
 6. **Fuentes locales** — `/public/fonts/*.otf/.ttf`, sin CDN externo
-7. **Entrega edge** — Cloudflare Pages aplica compresión y caching HTTP; Wrangler conserva el runtime Worker en preview local
+7. **Entrega edge** — Cloudflare sirve compresión y caching HTTP; Wrangler conserva el runtime Worker en preview local
 8. **HTML válido** — Un solo `<main>` por página
 9. **Shared-upload previews async** — el grid se descarga al seleccionar el
    primer archivo y el diálogo solo al pedir una vista previa; el estado del
