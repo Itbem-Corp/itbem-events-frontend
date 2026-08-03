@@ -1,6 +1,15 @@
 # Architecture
 
-**Stack:** Astro 5 SSR (Node middleware) · React 19 islands · Tailwind CSS 3.4 · Framer Motion 12 · Howler.js · Vite + Critters · TypeScript strict
+## Runtime actual
+
+El runtime actual es Astro 7 con Vite 8 y el adapter moderno de Cloudflare.
+El build genera un Worker SSR y assets estáticos; `npm start`/`npm run preview`
+usan Wrangler para servir exactamente ese artefacto. Las referencias posteriores
+a Astro 5 o Pages describen el estado histórico de la migración y no deben
+usarse para cambios nuevos. El CSS crítico se procesa con Beasties, el fork
+mantenido de Critters.
+
+**Stack:** Astro 7 SSR (Cloudflare Worker) · React 19 islands · Tailwind CSS 3.4 · Framer Motion 12 · Howler.js · Vite + Beasties · TypeScript strict
 
 ## Folder Map
 
@@ -167,14 +176,14 @@ Las páginas de evento son **públicas** — no hay usuario logueado. El acceso 
 
 ## Runtime Cloudflare
 
-Astro genera un Worker de Cloudflare Pages en `dist/_worker.js`. El desarrollo
-diario usa `astro dev`; `npm start` y `npm run preview` sirven el build con
-`wrangler pages dev`, manteniendo localmente las mismas reglas SSR y de assets
+Astro genera un Worker SSR de Cloudflare y assets estáticos en `dist/`. El
+desarrollo diario usa `astro dev`; `npm start` y `npm run preview` sirven el
+build con Wrangler, manteniendo localmente las mismas reglas SSR y de assets
 del despliegue.
 
 ```
 browser request
-  → Cloudflare Pages / Wrangler
+  → Cloudflare Worker / Wrangler
       → dist/_worker.js             # rutas Astro SSR
       → dist/*                      # assets estáticos
 ```
@@ -184,21 +193,6 @@ browser request
 - El contenedor Docker también ejecuta ese Worker; no mantiene un segundo adapter Node.
 
 **Preview local:** `npm run build && npm start`
-
-### Riesgo de dependencia conocido
-
-Auditoría verificada el 2026-07-13 con el lockfile de producción:
-
-- `npm audit --package-lock-only`: 0 critical, 1 high, 0 moderate y 4 low.
-- El único high corresponde a Astro 5; npm propone Astro 7, un cambio mayor.
-- El frontend permanece temporalmente en Astro 5 + `@astrojs/cloudflare` 12
-  porque el deployment actual usa Cloudflare Pages. El adapter moderno eliminó
-  soporte para Pages y requiere migrar el runtime y el rollout a Workers.
-- No ejecutar `npm audit fix --force`: la remediación se hará como una migración
-  Pages → Workers independiente, con preview, smoke, rollback y validación de
-  dominios antes de promoverla.
-
-Referencia: <https://docs.astro.build/en/guides/integrations-guide/cloudflare/#removed-cloudflare-pages-support>
 
 ---
 
@@ -214,13 +208,17 @@ Referencia: <https://docs.astro.build/en/guides/integrations-guide/cloudflare/#r
 
 ## Performance
 
-1. **Critters** — inline CSS crítico en build. Requiere `manualChunks: undefined` en Rollup
+El procesamiento de CSS crítico usa Beasties y conserva `manualChunks:
+undefined` para que cada HTML de salida tenga acceso al CSS requerido durante
+el postprocesado.
+
+1. **Beasties** — inline CSS crítico en build. Requiere `manualChunks: undefined` en Rollup
 2. **SectionRenderer IntersectionObserver** — secciones `visible` no cargan JS hasta estar cerca del viewport. Equivalente a `client:visible` pero implementado en React para funcionar dentro del island único
 3. **Dynamic imports en registry** — cada sección es un chunk separado. El browser solo descarga el JS de las secciones que va a renderizar
 4. **ResourcesBySectionSingle cache** — `sessionStorage` + expiry en `localStorage` basado en presigned URL params
 5. **EventPage sessionStorage cache** — page-spec cacheado 30 min; retorno a la misma invitación no hace fetch
 6. **Fuentes locales** — `/public/fonts/*.otf/.ttf`, sin CDN externo
-7. **Entrega edge** — Cloudflare Pages aplica compresión y caching HTTP; Wrangler conserva el runtime Worker en preview local
+7. **Entrega edge** — Cloudflare aplica compresión y caching HTTP; Wrangler conserva el runtime Worker en preview local
 8. **HTML válido** — Un solo `<main>` por página
 9. **Shared-upload previews async** — el grid se descarga al seleccionar el
    primer archivo y el diálogo solo al pedir una vista previa; el estado del

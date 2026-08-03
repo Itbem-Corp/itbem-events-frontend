@@ -2,7 +2,7 @@
 import { defineConfig, envField } from "astro/config";
 import react from "@astrojs/react";
 import cloudflare from "@astrojs/cloudflare";
-import Critters from "critters";
+import Beasties from "beasties";
 import AstroPWA from "./scripts/vite-pwa-astro.mjs";
 import {
   createApiRuntimeCacheMatcher,
@@ -23,7 +23,7 @@ const PUBLIC_DEV_PORT =
 
 // Static by default — pages with `export const prerender = false` opt into SSR.
 // SSR pages (e.g. /e/[identifier], /rsvp/[identifier], /evento) run on
-// Cloudflare Pages Functions for dynamic OG tags.
+// Cloudflare Worker SSR renders dynamic OG tags.
 // All interactivity is handled by client:only React islands that call
 // PUBLIC_EVENTS_URL (the Go backend) directly from the browser.
 export default defineConfig({
@@ -38,7 +38,7 @@ export default defineConfig({
     react(),
     // ── PWA ──────────────────────────────────────────────────────────────────
     // Generates service worker (Workbox) + injects manifest link into <head>.
-    // SW is output to dist/sw.js — served as a static Cloudflare Pages asset.
+    // SW is output to dist/sw.js — served as a static Cloudflare Worker asset.
     AstroPWA({
       registerType: "autoUpdate",
       // 'auto' injects the workbox-window registration snippet into every page.
@@ -229,14 +229,14 @@ export default defineConfig({
     build: {
       rollupOptions: {
         output: {
-          // Required for Critters (critical CSS inlining) to work correctly.
+          // Required for Beasties (critical CSS inlining) to work correctly.
           manualChunks: undefined,
         },
       },
     },
     plugins: [
       {
-        name: "vite-plugin-critters",
+        name: "vite-plugin-beasties",
         enforce: "post",
         apply: "build",
         /**
@@ -245,7 +245,7 @@ export default defineConfig({
          * @param {boolean} _isWrite
          */
         async generateBundle(_, bundle, _isWrite) {
-          const critters = new Critters({ preload: "swap" });
+          const beasties = new Beasties({ preload: "swap" });
           for (const file of Object.keys(bundle)) {
             const chunk = bundle[file];
             if (
@@ -253,7 +253,7 @@ export default defineConfig({
               chunk.fileName.endsWith(".html") &&
               typeof chunk.source === "string"
             ) {
-              chunk.source = await critters.process(chunk.source);
+              chunk.source = await beasties.process(chunk.source);
             }
           }
         },
