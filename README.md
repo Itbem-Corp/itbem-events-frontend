@@ -2,6 +2,12 @@
 
 Vistas publicas de invitaciones, RSVP y momentos. Construido con Astro, React y Tailwind.
 
+## Verificación de rendimiento
+
+`npm run build:budget` construye el artefacto Worker y protege los presupuestos
+gzip de los chunks públicos más pesados. El gate completo (`npm run check`) lo
+ejecuta automáticamente.
+
 ---
 
 ## Setup Local

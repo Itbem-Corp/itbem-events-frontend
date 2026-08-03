@@ -64,6 +64,9 @@ jobs:
           # Used at build time for OG-tag server-side fetches and client-side API calls.
           PUBLIC_EVENTS_URL: https://api.eventiapp.com.mx
 
+      - name: Verify public bundle budgets
+        run: npm run verify:bundle-budget
+
       - name: Verify Worker artifact contract
         run: npm run verify:worker-artifact
 

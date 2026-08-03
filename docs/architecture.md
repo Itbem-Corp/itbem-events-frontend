@@ -208,6 +208,11 @@ browser request
 
 ## Performance
 
+`npm run build:budget` construye el Worker y verifica los assets comprimidos
+que más influyen en la primera carga. `npm run check` incluye la misma
+verificación después del build, por lo que una regresión de bundle no puede
+llegar al CI sin una decisión explícita de ajustar su presupuesto.
+
 El procesamiento de CSS crítico usa Beasties y conserva `manualChunks:
 undefined` para que cada HTML de salida tenga acceso al CSS requerido durante
 el postprocesado.
