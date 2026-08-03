@@ -57,7 +57,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.4",
     "@types/react-howler": "^5.2.3",
-    "critters": "^0.0.25",
+    "beasties": "0.4.3",
     "sharp": "0.35.3",
     "typescript": "5.8.3",
     "vite": "8.2.0",
