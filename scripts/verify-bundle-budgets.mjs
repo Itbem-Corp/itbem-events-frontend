@@ -7,7 +7,9 @@ const kib = 1024;
 const namedBudgets = {
   "client.*.js": 64 * kib,
   "signedMedia.*.js": 60 * kib,
-  "template.*.css": 18 * kib,
+  // Tailwind v4's modern CSS foundation adds a small fixed cost. Keep an
+  // explicit per-template cap so future styling changes cannot grow freely.
+  "template.*.css": 19 * kib,
   "SharedUploadPage.*.js": 16 * kib,
 };
 const aggregateBudgets = {

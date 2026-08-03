@@ -190,8 +190,8 @@ npx playwright test tests/graduation-page.spec.ts
 
 | File | Purpose |
 |------|---------|
-| `astro.config.mjs` | `output: 'server'`; Cloudflare SSR adapter; React integration; Tailwind |
-| `tailwind.config.cjs` | Tailwind v3.4 config (uses `.cjs`, not `.ts`) |
+| `astro.config.mjs` | `output: 'server'`; Cloudflare SSR adapter; React integration; Tailwind v4 Vite plugin |
+| `tailwind.config.cjs` | Legacy-compatible design tokens consumed by Tailwind v4 through `src/styles/global.css` |
 | `playwright.config.ts` | E2E config; `webServer` auto-starts dev server |
 | `tsconfig.json` | TypeScript config |
 | `public/_redirects` | Static fallback redirects only; SSR routes should not be rewritten |
