@@ -19,6 +19,7 @@
     "preview": "node scripts/serve-cloudflare.mjs",
     "astro": "astro",
     "typecheck": "astro check",
+    "test": "npm run test:unit",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:e2e": "playwright test",
