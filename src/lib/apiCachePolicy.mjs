@@ -38,6 +38,7 @@ const SIGNED_MEDIA_QUERY_KEYS = [
 ];
 
 const S3_VIDEO_MEDIA_PATH_PATTERN = /\.(?:mp4|webm|mov|m4v|3gp)$/i;
+const AMAZONAWS_DOMAIN_SUFFIX = ".amazonaws.com";
 
 export const PUBLIC_ACCESS_CONTENT_API_PATH_PATTERN =
   /^\/api\/(?:events\/page-spec|events\/[^/]+\/(?:page-spec|moments)|invitations\/ByToken(?:\/[^/]+)?|resources\/(?:section\/[^/]+|[^/]+)|events\/section\/[^/]+\/attendees)$/;
@@ -145,6 +146,20 @@ function hasSignedMediaQuery(url) {
   });
 }
 
+function isS3AmazonAwsUrl(url) {
+  if (url.protocol !== "https:") return false;
+
+  const hostname = url.hostname.toLowerCase();
+  if (!hostname.endsWith(AMAZONAWS_DOMAIN_SUFFIX)) return false;
+
+  const serviceLabels = hostname
+    .slice(0, -AMAZONAWS_DOMAIN_SUFFIX.length)
+    .split(".");
+  return serviceLabels.some(
+    (label) => label === "s3" || label.startsWith("s3-"),
+  );
+}
+
 function matchesFreshFirstApiPath(url, base) {
   return FRESH_FIRST_API_PATH_PATTERN.test(apiPathForBase(url, base));
 }
@@ -220,7 +235,7 @@ export function shouldUseS3ImageRuntimeCache(url) {
   const parsed = parseUrl(url);
   if (!parsed) return false;
   return (
-    parsed.hostname.includes("amazonaws.com") &&
+    isS3AmazonAwsUrl(parsed) &&
     !S3_VIDEO_MEDIA_PATH_PATTERN.test(parsed.pathname) &&
     !hasSignedMediaQuery(parsed)
   );

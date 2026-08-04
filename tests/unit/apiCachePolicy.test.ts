@@ -219,15 +219,33 @@ describe("apiCachePolicy", () => {
       "https://eventi-bucket.s3.amazonaws.com/events/cover.webp?AWSAccessKeyId=key&Expires=1234567890&Signature=abc";
     const unsignedVideo =
       "https://eventi-bucket.s3.amazonaws.com/events/clip.mp4";
+    const regionalImage =
+      "https://eventi-bucket.s3.us-east-2.amazonaws.com/events/cover.webp";
 
     expect(shouldUseS3ImageRuntimeCache(unsignedImage)).toBe(true);
     expect(matcher({ url: new URL(unsignedImage) })).toBe(true);
+    expect(shouldUseS3ImageRuntimeCache(regionalImage)).toBe(true);
     expect(shouldUseS3ImageRuntimeCache(sigV4Image)).toBe(false);
     expect(matcher({ url: new URL(sigV4Image) })).toBe(false);
     expect(shouldUseS3ImageRuntimeCache(sigV2Image)).toBe(false);
     expect(shouldUseS3ImageRuntimeCache(unsignedVideo)).toBe(false);
     expect(
       shouldUseS3ImageRuntimeCache("https://cdn.example.com/events/cover.webp"),
+    ).toBe(false);
+    expect(
+      shouldUseS3ImageRuntimeCache(
+        "https://eventi-bucket.s3.amazonaws.com.attacker.example/events/cover.webp",
+      ),
+    ).toBe(false);
+    expect(
+      shouldUseS3ImageRuntimeCache(
+        "https://attacker-amazonaws.com/events/cover.webp",
+      ),
+    ).toBe(false);
+    expect(
+      shouldUseS3ImageRuntimeCache(
+        "http://eventi-bucket.s3.amazonaws.com/events/cover.webp",
+      ),
     ).toBe(false);
   });
 
