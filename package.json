@@ -40,7 +40,7 @@
     "framer-motion": "^12.42.2",
     "howler": "^2.2.4",
     "html-to-image": "^1.11.13",
-    "lucide-react": "^1.28.0",
+    "lucide-react": "^1.29.0",
     "motion": "^12.42.2",
     "postcss": "^8.5.19",
     "qrcode.react": "^4.2.0",
