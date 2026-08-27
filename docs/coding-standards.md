@@ -6,6 +6,8 @@
 - Prefer `interface` for component props and data shapes; `type` for unions and aliases.
 - Export types alongside their components: `export type { InvitationData }` or `export interface`.
 - Never use non-null assertion (`!`) on data from API responses — always null-check.
+- Prefer the React-typed DOM property casing (for example, `fetchPriority`) over
+  suppressing a valid platform attribute with `@ts-ignore`.
 - Catch blocks: type as `unknown`, not `any`. Use `err instanceof Error ? err.message : String(err)`.
 
 ```ts

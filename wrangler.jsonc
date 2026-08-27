@@ -2,6 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "eventiapp-public",
   "compatibility_date": "2026-07-19",
+  "compatibility_flags": ["nodejs_compat"],
   "preview_urls": true,
   "workers_dev": true,
   "limits": {

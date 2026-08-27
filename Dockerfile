@@ -1,6 +1,11 @@
 # ---------- Base image ----------
-FROM node:22.23.1-bookworm-slim AS base
+FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS base
 WORKDIR /app
+
+# Astro's Cloudflare prerenderer starts and fetches a localhost Worker during
+# image builds. Prefer one address family so Docker's localhost resolution
+# cannot bind the preview server on IPv6 and fetch it over IPv4 (or vice versa).
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
 
 # Public URLs are compiled into the Astro client bundle during the build.
 ARG PUBLIC_EVENTS_URL=http://localhost:8080/
@@ -24,7 +29,7 @@ RUN npm run build
 # ---------- Runtime image ----------
 FROM base AS runtime
 
-# Wrangler is a declared runtime dependency and serves the Cloudflare Pages
+# Wrangler is a declared runtime dependency and serves the Cloudflare Worker
 # artifact locally with the same worker semantics used in production.
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist

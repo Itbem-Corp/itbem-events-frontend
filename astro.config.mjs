@@ -1,10 +1,10 @@
 // @ts-check
 import { defineConfig, envField } from "astro/config";
 import react from "@astrojs/react";
-import tailwind from "@astrojs/tailwind";
 import cloudflare from "@astrojs/cloudflare";
-import Critters from "critters";
-import AstroPWA from "@vite-pwa/astro";
+import tailwindcss from "@tailwindcss/vite";
+import Beasties from "beasties";
+import AstroPWA from "./scripts/vite-pwa-astro.mjs";
 import {
   createApiRuntimeCacheMatcher,
   createFreshFirstApiMatcher,
@@ -24,7 +24,7 @@ const PUBLIC_DEV_PORT =
 
 // Static by default — pages with `export const prerender = false` opt into SSR.
 // SSR pages (e.g. /e/[identifier], /rsvp/[identifier], /evento) run on
-// Cloudflare Pages Functions for dynamic OG tags.
+// Cloudflare Worker SSR renders dynamic OG tags.
 // All interactivity is handled by client:only React islands that call
 // PUBLIC_EVENTS_URL (the Go backend) directly from the browser.
 export default defineConfig({
@@ -37,11 +37,9 @@ export default defineConfig({
 
   integrations: [
     react(),
-    tailwind(),
-
     // ── PWA ──────────────────────────────────────────────────────────────────
     // Generates service worker (Workbox) + injects manifest link into <head>.
-    // SW is output to dist/sw.js — served as a static Cloudflare Pages asset.
+    // SW is output to dist/sw.js — served as a static Cloudflare Worker asset.
     AstroPWA({
       registerType: "autoUpdate",
       // 'auto' injects the workbox-window registration snippet into every page.
@@ -115,7 +113,7 @@ export default defineConfig({
           // Optional local fonts are immutable assets. Cache after first use,
           // rather than making them part of the install-time download.
           {
-            urlPattern: ({ url }) =>
+            urlPattern: (/** @type {{ url: URL }} */ { url }) =>
               url.origin === self.location.origin &&
               url.pathname.startsWith("/fonts/"),
             handler: "CacheFirst",
@@ -184,7 +182,7 @@ export default defineConfig({
 
           // ── Google Fonts / Maps (NetworkFirst) ─────────────────────────────
           {
-            urlPattern: ({ url }) =>
+            urlPattern: (/** @type {{ url: URL }} */ { url }) =>
               url.hostname.includes("google") ||
               url.hostname.includes("googleapis"),
             handler: "NetworkFirst",
@@ -232,22 +230,24 @@ export default defineConfig({
     build: {
       rollupOptions: {
         output: {
-          // Required for Critters (critical CSS inlining) to work correctly.
+          // Required for Beasties (critical CSS inlining) to work correctly.
           manualChunks: undefined,
         },
       },
     },
     plugins: [
+      tailwindcss(),
       {
-        name: "vite-plugin-critters",
+        name: "vite-plugin-beasties",
         enforce: "post",
         apply: "build",
         /**
-         * @param {unknown} _
-         * @param {import('rollup').OutputBundle} bundle
+         * @param {import('rolldown').NormalizedOutputOptions} _
+         * @param {import('rolldown').OutputBundle} bundle
+         * @param {boolean} _isWrite
          */
-        async generateBundle(_, bundle) {
-          const critters = new Critters({ preload: "swap" });
+        async generateBundle(_, bundle, _isWrite) {
+          const beasties = new Beasties({ preload: "swap" });
           for (const file of Object.keys(bundle)) {
             const chunk = bundle[file];
             if (
@@ -255,7 +255,7 @@ export default defineConfig({
               chunk.fileName.endsWith(".html") &&
               typeof chunk.source === "string"
             ) {
-              chunk.source = await critters.process(chunk.source);
+              chunk.source = await beasties.process(chunk.source);
             }
           }
         },

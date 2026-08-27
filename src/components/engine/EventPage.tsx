@@ -48,10 +48,10 @@ import {
   removePageSpecCache,
   shouldRenderCachedPageSpecBeforeRevalidate,
   shouldRenderPageSpecCacheBeforeRevalidate,
-  sortPageSpecSections,
   writePageSpecCache,
   type PageSpecCacheMode,
-} from "../../lib/pageSpecCache";
+} from "../../lib/pageSpecStorageCache";
+import { sortPageSpecSections } from "../../lib/pageSpecCache";
 import {
   buildPageThemeFontFaces,
   buildPageThemeStyle,
