@@ -18,6 +18,7 @@ Do not raise CPU, sampling, or traffic percentages without recording the estimat
 1. Confirm the account Workers plan and current Pages Functions request/CPU usage.
 2. Set repository secrets `CLOUDFLARE_ACCOUNT_ID` and a narrowly scoped `CLOUDFLARE_API_TOKEN` that can edit only the `eventiapp-public` Worker.
 3. Set repository variable `WORKER_PRODUCTION_URL` to the final HTTPS URL used for post-promotion smoke tests.
+   The deployment workflow also uses this `workers.dev` hostname to derive the candidate alias when Wrangler uploads a version without printing its preview URL.
 4. Protect the GitHub `production` environment with required reviewers and prevent self-review.
 5. Enable Workers preview URLs and protect them with Cloudflare Access when possible.
 6. Configure billing notifications before any domain receives Worker traffic.
