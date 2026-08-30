@@ -28,9 +28,13 @@ assert(
   Array.isArray(config.compatibility_flags) && config.compatibility_flags.includes("nodejs_compat"),
   "Worker artifact must enable nodejs_compat for the Astro runtime.",
 );
+const sessionBinding = config.kv_namespaces?.find(
+  (binding) => binding.binding === "SESSION",
+);
+assert(sessionBinding, "Worker artifact must retain the SESSION KV binding.");
 assert(
-  config.kv_namespaces?.some((binding) => binding.binding === "SESSION"),
-  "Worker artifact must retain the SESSION KV binding.",
+  typeof sessionBinding.id === "string" && sessionBinding.id.length > 0,
+  "Worker artifact must pin SESSION to its provisioned KV namespace.",
 );
 
 console.log("Worker artifact contract passed.");

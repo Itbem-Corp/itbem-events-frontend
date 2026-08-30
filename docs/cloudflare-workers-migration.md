@@ -22,6 +22,10 @@ Do not raise CPU, sampling, or traffic percentages without recording the estimat
 5. Enable Workers preview URLs and protect them with Cloudflare Access when possible.
 6. Configure billing notifications before any domain receives Worker traffic.
 
+The `SESSION` binding is pinned to the provisioned `eventiapp-public-session`
+namespace in `wrangler.jsonc`. Do not remove its ID: automatic provisioning is
+not idempotent if a later upload fails after creating the namespace.
+
 ## Candidate and cutover
 
 1. Run **Deploy Cloudflare Worker** with `promote=false`.
