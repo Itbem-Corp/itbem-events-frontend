@@ -2,8 +2,9 @@
 export const prerender = true;
 
 import TemplateLayout from "../layouts/template.astro";
+import { PUBLIC_PRODUCT_DASHBOARD_URL } from "../config/public-product";
 
-const productionDashboardUrl = "https://dashboard.eventiapp.com.mx";
+const productionDashboardUrl = PUBLIC_PRODUCT_DASHBOARD_URL;
 const configuredDashboardUrl = (
   import.meta.env.PUBLIC_DASHBOARD_URL as string | undefined
 )?.trim();

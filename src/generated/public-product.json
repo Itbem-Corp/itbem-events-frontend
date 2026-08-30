@@ -1,0 +1,24 @@
+{
+  "code": "eventiapp",
+  "identity": {
+    "name": "EventiApp",
+    "productLabel": "Event operations",
+    "accent": "#818cf8"
+  },
+  "apiHostname": "api.eventiapp.com.mx",
+  "dashboardHostname": "dashboard.eventiapp.com.mx",
+  "canonicalHostname": "www.eventiapp.com.mx",
+  "hostnames": [
+    "eventiapp.com.mx",
+    "www.eventiapp.com.mx"
+  ],
+  "deploymentTarget": "cloudflare-workers",
+  "branding": {
+    "name": "EventiApp",
+    "shortName": "EventiApp",
+    "description": "Tu invitación digital",
+    "locale": "es-MX",
+    "themeColor": "#dd2284",
+    "backgroundColor": "#07293a"
+  }
+}

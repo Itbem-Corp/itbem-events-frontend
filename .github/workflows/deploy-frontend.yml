@@ -25,6 +25,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+          submodules: true
 
       - name: Verify source revision
         env:

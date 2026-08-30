@@ -4,6 +4,7 @@ import react from "@astrojs/react";
 import cloudflare from "@astrojs/cloudflare";
 import tailwindcss from "@tailwindcss/vite";
 import Beasties from "beasties";
+import publicProduct from "./src/generated/public-product.json" with { type: "json" };
 import AstroPWA from "./scripts/vite-pwa-astro.mjs";
 import {
   createApiRuntimeCacheMatcher,
@@ -12,7 +13,9 @@ import {
   createS3ImageRuntimeCacheMatcher,
 } from "./src/lib/apiCachePolicy.mjs";
 
-const EVENTS_API_URL = process.env.PUBLIC_EVENTS_URL;
+const EVENTS_API_URL =
+  process.env.PUBLIC_EVENTS_URL ?? `https://${publicProduct.apiHostname}`;
+const PUBLIC_SITE_URL = `https://${publicProduct.canonicalHostname}`;
 const requestedPublicDevPort = Number.parseInt(
   process.env.EVENTIAPP_PUBLIC_PORT ?? "4321",
   10,
@@ -33,7 +36,7 @@ export default defineConfig({
   // Avoid shipping Astro's Sharp endpoint to Workers, where native Sharp cannot run.
   adapter: cloudflare({ imageService: "passthrough" }),
 
-  site: "https://www.eventiapp.com.mx",
+  site: PUBLIC_SITE_URL,
 
   integrations: [
     react(),
@@ -46,15 +49,15 @@ export default defineConfig({
       injectRegister: "auto",
 
       manifest: {
-        name: "EventiApp",
-        short_name: "EventiApp",
-        description: "Tu invitación digital",
-        theme_color: "#dd2284",
-        background_color: "#07293A",
+        name: publicProduct.branding.name,
+        short_name: publicProduct.branding.shortName,
+        description: publicProduct.branding.description,
+        theme_color: publicProduct.branding.themeColor,
+        background_color: publicProduct.branding.backgroundColor,
         display: "standalone",
         orientation: "portrait-primary",
         start_url: "/",
-        lang: "es-MX",
+        lang: publicProduct.branding.locale,
         icons: [
           { src: "/icons/pwa-192.png", sizes: "192x192", type: "image/png" },
           { src: "/icons/pwa-512.png", sizes: "512x512", type: "image/png" },
