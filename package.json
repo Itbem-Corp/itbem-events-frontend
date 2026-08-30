@@ -19,6 +19,8 @@
     "preview": "node scripts/serve-cloudflare.mjs",
     "astro": "astro",
     "typecheck": "astro check",
+    "check:fast": "npm run typecheck",
+    "check": "npm run typecheck && npm run test:unit && npm run build",
     "test": "npm run test:unit",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",

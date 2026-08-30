@@ -5,9 +5,12 @@
   "compatibility_flags": ["nodejs_compat"],
   "preview_urls": true,
   "workers_dev": true,
-  "limits": {
-    "cpu_ms": 10
-  },
+  "kv_namespaces": [
+    {
+      "binding": "SESSION",
+      "id": "f9f5a5aec42f408280b37cf88f889edc"
+    }
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 0.1,

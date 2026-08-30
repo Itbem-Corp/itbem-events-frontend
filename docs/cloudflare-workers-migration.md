@@ -5,7 +5,8 @@ Astro 6 no longer produces Cloudflare Pages Functions. The application now build
 ## Cost controls
 
 - Static assets use the Workers assets binding and do not execute the Worker.
-- CPU is capped at 10 ms per invocation in `wrangler.jsonc`.
+- The Workers Free plan enforces its CPU cap at the platform boundary. Do not add
+  `limits.cpu_ms`: Cloudflare rejects configurable CPU limits on this plan.
 - Logs and traces are sampled at 10 percent.
 - Production promotion is manual and protected by the GitHub `production` environment.
 - The workflow uploads and smoke-tests a preview version before it can receive production traffic.
@@ -17,9 +18,14 @@ Do not raise CPU, sampling, or traffic percentages without recording the estimat
 1. Confirm the account Workers plan and current Pages Functions request/CPU usage.
 2. Set repository secrets `CLOUDFLARE_ACCOUNT_ID` and a narrowly scoped `CLOUDFLARE_API_TOKEN` that can edit only the `eventiapp-public` Worker.
 3. Set repository variable `WORKER_PRODUCTION_URL` to the final HTTPS URL used for post-promotion smoke tests.
+   The deployment workflow also uses this `workers.dev` hostname to derive the candidate alias when Wrangler uploads a version without printing its preview URL.
 4. Protect the GitHub `production` environment with required reviewers and prevent self-review.
 5. Enable Workers preview URLs and protect them with Cloudflare Access when possible.
 6. Configure billing notifications before any domain receives Worker traffic.
+
+The `SESSION` binding is pinned to the provisioned `eventiapp-public-session`
+namespace in `wrangler.jsonc`. Do not remove its ID: automatic provisioning is
+not idempotent if a later upload fails after creating the namespace.
 
 ## Candidate and cutover
 

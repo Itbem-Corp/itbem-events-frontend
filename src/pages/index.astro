@@ -29,7 +29,8 @@ const pageUrl = Astro.site ? new URL("/", Astro.site).toString() : Astro.url.hre
   ogDescription="Invitaciones, confirmaciones y recuerdos en una experiencia digital creada para celebrar."
   ogUrl={pageUrl}
 >
-  <main class="eventi-home" data-eventi-home>
+  <a class="eventi-home__skip-link" href="#contenido-principal">Saltar al contenido</a>
+  <main class="eventi-home" id="contenido-principal" data-eventi-home tabindex="-1">
     <header class="eventi-home__nav" aria-label="Navegación principal">
       <a class="eventi-home__brand" href="/" aria-label="EventiApp, inicio">
         <span class="eventi-home__mark" aria-hidden="true">
@@ -52,7 +53,7 @@ const pageUrl = Astro.site ? new URL("/", Astro.site).toString() : Astro.url.hre
 
         <div class="eventi-home__actions">
           <a class="eventi-home__primary" href={dashboardUrl}>Crear mi evento</a>
-          <a class="eventi-home__secondary" href="#experiencia">Descubrir EventiApp</a>
+          <a class="eventi-home__secondary" href="#experiencia">Ver cómo funciona</a>
         </div>
 
         <p class="eventi-home__trust">
@@ -123,6 +124,26 @@ const pageUrl = Astro.site ? new URL("/", Astro.site).toString() : Astro.url.hre
       linear-gradient(145deg, #fffdfd 0%, #fbfaf9 52%, #f5f8f8 100%);
   }
 
+  .eventi-home__skip-link {
+    position: fixed;
+    z-index: 10;
+    top: 0.75rem;
+    left: 50%;
+    transform: translate(-50%, -160%);
+    border-radius: 999px;
+    padding: 0.7rem 1rem;
+    color: #fff;
+    background: var(--home-ink);
+    font-size: 0.82rem;
+    font-weight: 750;
+    text-decoration: none;
+    transition: transform 160ms ease;
+  }
+
+  .eventi-home__skip-link:focus {
+    transform: translate(-50%, 0);
+  }
+
   .eventi-home::before {
     position: absolute;
     z-index: -1;
@@ -152,6 +173,7 @@ const pageUrl = Astro.site ? new URL("/", Astro.site).toString() : Astro.url.hre
 
   .eventi-home__brand {
     display: inline-flex;
+    min-height: 2.75rem;
     align-items: center;
     gap: 0.7rem;
     color: inherit;
@@ -179,10 +201,25 @@ const pageUrl = Astro.site ? new URL("/", Astro.site).toString() : Astro.url.hre
 
   .eventi-home__nav-link,
   .eventi-home__footer a {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    border: 1px solid rgba(16, 47, 63, 0.12);
+    border-radius: 999px;
+    padding-inline: 0.75rem;
     color: var(--home-ink);
-    font-size: 0.78rem;
+    background: rgba(255, 255, 255, 0.42);
+    font-size: 0.8rem;
     font-weight: 700;
+    text-decoration-thickness: 1px;
     text-underline-offset: 0.35rem;
+    transition: color 160ms ease, background 160ms ease;
+  }
+
+  .eventi-home__nav-link:hover,
+  .eventi-home__footer a:hover {
+    color: var(--home-pink);
+    background: rgba(255, 255, 255, 0.6);
   }
 
   .eventi-home__hero {
@@ -348,6 +385,7 @@ const pageUrl = Astro.site ? new URL("/", Astro.site).toString() : Astro.url.hre
     gap: 2rem;
     padding-block: clamp(4.5rem, 10vw, 7.5rem);
     border-top: 1px solid rgba(16, 47, 63, 0.1);
+    scroll-margin-top: 1rem;
   }
 
   .eventi-home__value h2 {
@@ -391,7 +429,9 @@ const pageUrl = Astro.site ? new URL("/", Astro.site).toString() : Astro.url.hre
     }
 
     .eventi-home__nav-link {
-      font-size: 0.72rem;
+      min-height: 2.75rem;
+      padding-inline: 0.6rem;
+      font-size: 0.76rem;
     }
 
     .eventi-home__hero {
@@ -412,13 +452,37 @@ const pageUrl = Astro.site ? new URL("/", Astro.site).toString() : Astro.url.hre
 
   @media (prefers-reduced-motion: reduce) {
     .eventi-home__primary,
-    .eventi-home__secondary {
+    .eventi-home__secondary,
+    .eventi-home__nav-link,
+    .eventi-home__footer a {
+      transition: none;
+    }
+
+    .eventi-home__skip-link {
       transition: none;
     }
 
     .eventi-home__primary:hover,
     .eventi-home__secondary:hover {
       transform: none;
+    }
+  }
+
+  @media (prefers-contrast: more) {
+    .eventi-home__story {
+      border-color: rgba(16, 47, 63, 0.24);
+      background: #fff;
+    }
+
+    .eventi-home__lead,
+    .eventi-home__story p,
+    .eventi-home__value > p {
+      color: #385260;
+    }
+
+    .eventi-home__secondary {
+      border-color: rgba(16, 47, 63, 0.34);
+      background: #fff;
     }
   }
 </style>
