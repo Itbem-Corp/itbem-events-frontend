@@ -5,7 +5,8 @@ Astro 6 no longer produces Cloudflare Pages Functions. The application now build
 ## Cost controls
 
 - Static assets use the Workers assets binding and do not execute the Worker.
-- CPU is capped at 10 ms per invocation in `wrangler.jsonc`.
+- The Workers Free plan enforces its CPU cap at the platform boundary. Do not add
+  `limits.cpu_ms`: Cloudflare rejects configurable CPU limits on this plan.
 - Logs and traces are sampled at 10 percent.
 - Production promotion is manual and protected by the GitHub `production` environment.
 - The workflow uploads and smoke-tests a preview version before it can receive production traffic.

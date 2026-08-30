@@ -19,7 +19,10 @@ const assert = (condition, message) => {
 
 assert(config.main === "entry.mjs", "Worker entrypoint must remain entry.mjs.");
 assert(config.assets?.directory === "../client", "Static assets must stay outside Worker execution.");
-assert(config.limits?.cpu_ms === 10, "Worker CPU limit must remain 10 ms.");
+assert(
+  config.limits?.cpu_ms === undefined,
+  "The Workers Free plan rejects configurable CPU limits; rely on its platform-enforced CPU cap.",
+);
 assert(config.preview_urls === true, "Version preview URLs must stay enabled.");
 assert(
   Array.isArray(config.compatibility_flags) && config.compatibility_flags.includes("nodejs_compat"),
