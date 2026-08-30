@@ -3,6 +3,7 @@ import "../styles/global.css";
 import "../styles/fonts.css";
 import { eventsUrlOrigin } from "../lib/eventsUrl";
 import { sanitizePublicShareUrl } from "../lib/publicShareUrl";
+import { PUBLIC_PRODUCT } from "../config/public-product";
 
 interface Props {
   title: string;
@@ -18,7 +19,7 @@ interface Props {
 const {
   title,
   ogTitle       = title,
-  ogDescription = 'Tu invitación digital',
+  ogDescription = PUBLIC_PRODUCT.branding.description,
   ogImage       = '',
   ogUrl         = '',
   language      = 'es',
@@ -61,7 +62,7 @@ const publicOgUrl = ogUrl ? sanitizePublicShareUrl(ogUrl) : '';
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="EventiApp" />
+    <meta name="apple-mobile-web-app-title" content={PUBLIC_PRODUCT.branding.shortName} />
     <link rel="apple-touch-icon" href="/icons/pwa-192.png" />
     {preloadFonts === 'invitation' && (
       <>
@@ -89,7 +90,7 @@ const publicOgUrl = ogUrl ? sanitizePublicShareUrl(ogUrl) : '';
     <meta property="og:title" content={ogTitle} />
     <meta property="og:description" content={ogDescription} />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="EventiApp" />
+    <meta property="og:site_name" content={PUBLIC_PRODUCT.branding.name} />
     <meta property="og:locale" content={ogLocale} />
     {publicOgUrl && <meta property="og:url" content={publicOgUrl} />}
     {ogImage && <meta property="og:image"          content={ogImage} />}
