@@ -40,3 +40,23 @@ export function readConfigText<K extends string>(
   }
   return result;
 }
+
+/** True when a config text has something to show (not only whitespace). */
+export function hasConfigText(value: string | null | undefined): value is string {
+  return Boolean(value?.trim());
+}
+
+/**
+ * Map/iframe URL from section config, or "" when it is empty or not http(s).
+ * Sections leave out the map box instead of drawing an empty grey frame.
+ */
+export function configEmbedUrl(value: string | null | undefined): string {
+  const raw = value?.trim() ?? "";
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" || url.protocol === "http:" ? raw : "";
+  } catch {
+    return "";
+  }
+}

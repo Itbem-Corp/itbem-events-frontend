@@ -30,6 +30,19 @@ export default function LegacyGallery({
   const resources = [0, 1, 2, 3, 4, 5]
     .map((position) => resourceAtPosition(section?.sectionResources, position))
     .filter((resource): resource is NonNullable<typeof resource> => Boolean(resource));
+  // Loaded and still no photos: a lone title is an empty box (QA STU-25).
+  const isEmpty = section !== null && resources.length === 0;
+
+  if (isEmpty) {
+    return (
+      <ResourcesBySectionSingle
+        sectionId={sectionId}
+        EVENTS_URL={EVENTS_URL}
+        publicAccess={publicAccess}
+        onLoaded={setSection}
+      />
+    );
+  }
 
   return (
     <section className="relative z-10 space-y-6 py-8">

@@ -110,7 +110,9 @@ export default function SectionRenderer({ spec, EVENTS_URL, publicAccess }: Prop
   return (
     <div
       id={`section-${spec.sectionId}`}
-      className="eventi-section scroll-mt-8"
+      // empty:hidden: a section with nothing to show renders no element, so
+      // it must not leave the page's vertical gap behind (QA EVT-71).
+      className="eventi-section scroll-mt-8 empty:hidden"
       data-section-type={spec.type}
     >
       <SectionErrorBoundary sectionType={spec.type}>

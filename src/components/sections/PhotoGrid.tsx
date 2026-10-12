@@ -38,7 +38,8 @@ export default function PhotoGrid({ sectionId, EVENTS_URL, publicAccess }: Secti
       <ResourcesBySectionSingle sectionId={sectionId} EVENTS_URL={EVENTS_URL} publicAccess={publicAccess} onLoaded={setSection} />
 
       <AnimatePresence mode="wait">
-        {section ? (
+        {/* No photos uploaded yet: render nothing (QA STU-25, EVT-71). */}
+        {section && topImages.length === 0 && bottomImages.length === 0 ? null : section ? (
           <motion.section
             key="loaded"
             className="space-y-6 relative z-0 pt-10"
@@ -48,6 +49,7 @@ export default function PhotoGrid({ sectionId, EVENTS_URL, publicAccess }: Secti
             transition={{ duration: 0.6 }}
           >
             {/* Top row — 2 columns */}
+            {topImages.length > 0 && (
             <motion.div
               className="grid grid-cols-2 gap-2 sm:gap-4"
               initial="hidden"
@@ -65,8 +67,10 @@ export default function PhotoGrid({ sectionId, EVENTS_URL, publicAccess }: Secti
                 </motion.div>
               ))}
             </motion.div>
+            )}
 
             {/* Bottom row — 3 columns */}
+            {bottomImages.length > 0 && (
             <motion.div
               className="grid grid-cols-3 gap-2 sm:gap-4"
               initial="hidden"
@@ -84,6 +88,7 @@ export default function PhotoGrid({ sectionId, EVENTS_URL, publicAccess }: Secti
                 </motion.div>
               ))}
             </motion.div>
+            )}
           </motion.section>
         ) : (
           <motion.div

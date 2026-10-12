@@ -5,8 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ResourcesBySectionSingle, { type Section } from '../ResourcesBySectionSingle';
 import ImageWithLoader from '../ImageWithLoader';
 import type { SectionComponentProps } from '../engine/types';
-import { readConfigText } from "../../lib/sectionConfig";
+import { configEmbedUrl, hasConfigText, readConfigText } from "../../lib/sectionConfig";
 import { resourceAtPosition } from '../../lib/publicResources';
+import { receptionSectionHasContent } from "../../lib/sectionContent";
 
 const bodyStyle = {
   color: 'var(--eventi-color-body, #07293A)',
@@ -45,13 +46,21 @@ export default function Reception({ sectionId, config, EVENTS_URL, publicAccess 
   const bottomImages = [2, 3]
     .map((position) => resourceAtPosition(section?.sectionResources, position))
     .filter((resource): resource is NonNullable<typeof resource> => Boolean(resource));
+  const embedUrl = configEmbedUrl(mapUrl);
+  const hasVenueText = hasConfigText(venueText);
+  // Never filled in Studio: render nothing, not grey frames (QA STU-25, EVT-71).
+  const isEmpty = !receptionSectionHasContent({
+    venueText,
+    mapUrl,
+    imageCount: topImages.length + bottomImages.length,
+  });
 
   return (
     <>
       <ResourcesBySectionSingle sectionId={sectionId} EVENTS_URL={EVENTS_URL} publicAccess={publicAccess} onLoaded={setSection} />
 
       <AnimatePresence mode="wait">
-        {section ? (
+        {section && isEmpty ? null : section ? (
           <motion.section
             key="loaded"
             className="space-y-6 text-center relative z-0 pt-10"
@@ -60,6 +69,7 @@ export default function Reception({ sectionId, config, EVENTS_URL, publicAccess 
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.6 }}
           >
+            {topImages.length > 0 && (
             <div className="grid grid-cols-2 gap-2 sm:gap-4">
               {topImages.map(r => (
                 <div key={r.position} className="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
@@ -67,12 +77,15 @@ export default function Reception({ sectionId, config, EVENTS_URL, publicAccess 
                 </div>
               ))}
             </div>
+            )}
 
+            {(hasVenueText || embedUrl) && (
             <div className="flex flex-col sm:flex-row">
-              <div className="sm:basis-2/3 px-2 pb-4 sm:pb-0">
+              {embedUrl && (
+              <div className={`${hasVenueText ? "sm:basis-2/3 pb-4 sm:pb-0" : "w-full"} px-2`}>
                 <div className="bg-gray-300 w-full max-w-[500px] aspect-[4/3] rounded mx-auto overflow-hidden">
                   <iframe
-                    src={mapUrl}
+                    src={embedUrl}
                     title={`Mapa de ${venueText || "la recepción"}`}
                     className="w-full h-full"
                     allowFullScreen
@@ -81,13 +94,18 @@ export default function Reception({ sectionId, config, EVENTS_URL, publicAccess 
                   />
                 </div>
               </div>
-              <div className="sm:basis-2/3 place-content-center sm:ps-2">
+              )}
+              {hasVenueText && (
+              <div className={`${embedUrl ? "sm:basis-2/3 sm:ps-2" : "w-full"} place-content-center`}>
                 <p className="text-sm sm:text-base md:text-lg lg:text-xl leading-relaxed font-quicksand whitespace-pre-line" style={bodyStyle}>
                   {venueText}
                 </p>
               </div>
+              )}
             </div>
+            )}
 
+            {bottomImages.length > 0 && (
             <div className="grid grid-cols-2 gap-2 sm:gap-4">
               {bottomImages.map(r => (
                 <div key={r.position} className="bg-gray-100 aspect-[3/2] rounded shadow-md overflow-hidden">
@@ -95,6 +113,7 @@ export default function Reception({ sectionId, config, EVENTS_URL, publicAccess 
                 </div>
               ))}
             </div>
+            )}
           </motion.section>
         ) : (
           <motion.div

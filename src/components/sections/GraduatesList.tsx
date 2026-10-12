@@ -33,6 +33,7 @@ import { resourceAtPosition } from "../../lib/publicResources";
 import ImageWithLoader from "../ImageWithLoader";
 import type { SectionComponentProps } from "../engine/types";
 import { readConfigText } from "../../lib/sectionConfig";
+import { attendeesSectionHasContent } from "../../lib/sectionContent";
 
 const headingStyle = {
   color: "var(--eventi-color-heading, #07293a)",
@@ -217,6 +218,15 @@ export default function GraduatesList({
 
   const isReady = section !== null && attendees !== null;
   const groupPhoto = resourceAtPosition(section?.sectionResources, 0);
+  // No names, no closing text and no group photo: only a default heading
+  // would remain, so render nothing (QA STU-25, EVT-71).
+  const isEmpty =
+    isReady &&
+    !attendeesSectionHasContent({
+      attendeeCount: attendees.length,
+      closing,
+      hasGroupPhoto: Boolean(groupPhoto?.view_url),
+    });
 
   return (
     <>
@@ -228,7 +238,7 @@ export default function GraduatesList({
       />
 
       <AnimatePresence mode="wait">
-        {isReady ? (
+        {isEmpty ? null : isReady ? (
           <motion.section
             key="loaded"
             className="space-y-6 text-center relative z-0 pt-10"

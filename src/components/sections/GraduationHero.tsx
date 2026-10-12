@@ -7,8 +7,9 @@ import ResourcesBySectionSingle, {
 } from "../ResourcesBySectionSingle";
 import ImageWithLoader from "../ImageWithLoader";
 import type { SectionComponentProps } from "../engine/types";
-import { readConfigText } from "../../lib/sectionConfig";
+import { hasConfigText, readConfigText } from "../../lib/sectionConfig";
 import { resourceAtPosition } from "../../lib/publicResources";
+import { graduationHeroHasContent } from "../../lib/sectionContent";
 
 const headingStyle = {
   color: "var(--eventi-color-heading, #07293a)",
@@ -54,6 +55,16 @@ export default function GraduationHero({
   const [section, setSection] = useState<Section | null>(null);
   const heroImage = resourceAtPosition(section?.sectionResources, 0);
   const schoolLogo = resourceAtPosition(section?.sectionResources, 1);
+  // Only what was filled in: no grey photo frame before an image is uploaded,
+  // and nothing at all for an untouched section (QA STU-25, EVT-71).
+  const hasHeroImage = Boolean(heroImage?.view_url);
+  const hasSchoolLogo = Boolean(schoolLogo?.view_url);
+  const isEmpty = !graduationHeroHasContent({
+    title,
+    years,
+    school,
+    imageCount: Number(hasHeroImage) + Number(hasSchoolLogo),
+  });
 
   return (
     <MotionConfig reducedMotion="user">
@@ -66,7 +77,7 @@ export default function GraduationHero({
         />
 
         <AnimatePresence mode="wait">
-          {section ? (
+          {section && isEmpty ? null : section ? (
             <motion.section
               key="loaded"
               className="text-center space-y-6 pb-4 relative z-10 pt-10"
@@ -75,52 +86,60 @@ export default function GraduationHero({
               exit={{ opacity: 0, y: -30 }}
               transition={{ duration: 0.6 }}
             >
-              <div>
-                <h2
-                  className="text-3xl sm:text-4xl md:text-5xl font-bigilla font-semibold"
-                  style={headingStyle}
-                >
-                  {title}
-                </h2>
-              </div>
+              {hasConfigText(title) && (
+                <div>
+                  <h2
+                    className="text-3xl sm:text-4xl md:text-5xl font-bigilla font-semibold"
+                    style={headingStyle}
+                  >
+                    {title}
+                  </h2>
+                </div>
+              )}
 
-              <div className="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-100 rounded shadow-md overflow-hidden">
-                {heroImage?.view_url && (
+              {heroImage?.view_url && (
+                <div className="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-100 rounded shadow-md overflow-hidden">
                   <ImageWithLoader
                     src={heroImage.view_url}
                     alt={heroImage.title || title || ""}
                     className="w-full h-full object-cover"
                     priority
                   />
-                )}
-              </div>
+                </div>
+              )}
 
-              <div>
-                <h3
-                  className="text-2xl sm:text-3xl md:text-4xl font-bigilla"
-                  style={headingStyle}
-                >
-                  {years}
-                </h3>
-              </div>
+              {hasConfigText(years) && (
+                <div>
+                  <h3
+                    className="text-2xl sm:text-3xl md:text-4xl font-bigilla"
+                    style={headingStyle}
+                  >
+                    {years}
+                  </h3>
+                </div>
+              )}
 
+              {(hasSchoolLogo || hasConfigText(school)) && (
               <div className="flex flex-row items-center justify-center gap-3 sm:gap-4 md:gap-6 max-w-4xl mx-auto">
-                <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 flex-shrink-0">
-                  {schoolLogo?.view_url && (
+                {schoolLogo?.view_url && (
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 flex-shrink-0">
                     <ImageWithLoader
                       src={schoolLogo.view_url}
                       alt={schoolLogo.title || title || ""}
                       className="w-full h-full object-cover"
                     />
-                  )}
-                </div>
+                  </div>
+                )}
+                {hasConfigText(school) && (
                 <h3
                   className="min-w-0 break-words [overflow-wrap:anywhere] text-xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold font-bigilla text-center md:text-start mt-4 md:mt-0"
                   style={accentStyle}
                 >
                   {school}
                 </h3>
+                )}
               </div>
+              )}
             </motion.section>
           ) : (
             <motion.div
