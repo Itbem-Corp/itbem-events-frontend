@@ -217,9 +217,24 @@ describe("4. 429 too_many_attempts with Retry-After", () => {
     );
   });
 
-  it("locks for a minute when Retry-After is missing", () => {
+  it("locks for the backend's 10-minute window when Retry-After is unreadable", () => {
+    // PUB-71: without Retry-After exposed through CORS the guest was told
+    // "1 minuto" and bumped into the same ~10 minute lock again.
     const failure = passwordVerifyFailure({ status: 429, payload: { code: "too_many_attempts" } });
-    expect(failure.retryAfterSeconds).toBe(60);
+    expect(failure.retryAfterSeconds).toBe(600);
+    expect(failure.message).toBe(
+      "Hiciste demasiados intentos con la contraseña. Espera 10 minutos e inténtalo de nuevo.",
+    );
+  });
+
+  it("uses the exposed Retry-After for both the message and the countdown", () => {
+    const failure = passwordVerifyFailure({
+      status: 429,
+      payload: { code: "too_many_attempts" },
+      retryAfterSeconds: 575,
+    });
+    expect(failure.retryAfterSeconds).toBe(575);
+    expect(failure.message).toContain("Espera 10 minutos");
   });
 
   it("a wrong password does not lock", () => {
