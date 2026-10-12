@@ -43,18 +43,35 @@ const location = meta.address?.trim() || meta.secondAddress?.trim() || "";
           {[date, location].filter(Boolean).join(" · ")}
         </p>
       )}
+      <noscript>
+        <p class="eventi-server-shell__details">
+          Para ver la invitación completa, activa JavaScript en tu navegador.
+        </p>
+      </noscript>
     </div>
   </div>
 </section>
 
 <script is:inline>
-  window.addEventListener('eventi:public-page-ready', () => {
+  (() => {
     const shell = document.getElementById('eventi-server-shell')
     if (!shell) return
-    shell.setAttribute('aria-hidden', 'true')
-    shell.classList.add('eventi-server-shell--ready')
-    window.setTimeout(() => shell.remove(), 250)
-  }, { once: true })
+    let released = false
+    let fallbackTimer = 0
+    const release = () => {
+      if (released) return
+      released = true
+      window.clearTimeout(fallbackTimer)
+      shell.setAttribute('aria-hidden', 'true')
+      shell.classList.add('eventi-server-shell--ready')
+      window.setTimeout(() => shell.remove(), 250)
+    }
+    // The page announces itself when the spec or a final error arrives. If it
+    // never does (a chunk that fails to load, a retry that never ends), stop
+    // covering the loading or error state rendered underneath.
+    fallbackTimer = window.setTimeout(release, 15000)
+    window.addEventListener('eventi:public-page-ready', release, { once: true })
+  })()
 </script>
 
 <style>
