@@ -12,6 +12,13 @@ const baseProps = {
 };
 
 describe("legacy dashboard sections", () => {
+  it("does not paint an empty HERO card when the config has no content", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(LegacyHero, { ...baseProps, config: {} }),
+    );
+
+    expect(html).toBe("");
+  });
   it("renders HERO config text without requiring resources first", () => {
     const html = renderToStaticMarkup(
       React.createElement(LegacyHero, {

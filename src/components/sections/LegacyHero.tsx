@@ -43,6 +43,19 @@ export default function LegacyHero({
   const heroResource = resourceAtPosition(section?.sectionResources, 0);
   const heroImage = heroResource?.view_url || imageUrl;
 
+  // A HERO saved without text or image must not paint an empty card (QA
+  // PUB-27). Keep the resource loader so an uploaded image still shows up.
+  if (!title && !subtitle && !content && !heroImage) {
+    return (
+      <ResourcesBySectionSingle
+        sectionId={sectionId}
+        EVENTS_URL={EVENTS_URL}
+        publicAccess={publicAccess}
+        onLoaded={setSection}
+      />
+    );
+  }
+
   return (
     <motion.section
       className="relative z-10 overflow-hidden rounded-lg px-5 py-12 text-center shadow-sm sm:px-8 sm:py-16"
