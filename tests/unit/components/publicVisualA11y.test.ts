@@ -32,6 +32,11 @@ describe("public visual a11y regressions", () => {
     expect(markup).toContain("lucide-triangle-alert");
     expect(markup).toContain("Error: No pudimos verificar la subida.");
     expect(markup).toContain('aria-label="Quitar foto.jpg"');
+    // QA PUB-N3: the warning sits bottom-left, away from the top-right X.
+    const overlay = markup.match(/<div[^>]*data-testid="upload-error-overlay"[^>]*>/)?.[0] ?? "";
+    expect(overlay).toContain("items-end");
+    expect(overlay).toContain("justify-start");
+    expect(markup).toContain("right-0.5 top-0.5");
   });
 
   it("gives every wall thumbnail button an accessible name", () => {
