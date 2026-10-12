@@ -10,7 +10,10 @@ import {
   createS3ImageRuntimeCacheMatcher,
   createServerCachePolicyPlugin,
 } from "../../src/lib/apiCachePolicy.mjs";
-import { buildServiceWorkerCachePolicyScript } from "../../scripts/sw-cache-policy.mjs";
+import {
+  buildServiceWorkerCachePolicyScript,
+  SW_CACHE_POLICY_SCRIPT,
+} from "../../scripts/sw-cache-policy.mjs";
 
 const read = (path: string) =>
   readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8");
@@ -110,6 +113,17 @@ describe("PWA wiring", () => {
     expect(config).toContain("{ url: OFFLINE_FALLBACK_URL, revision: OFFLINE_PAGE_REVISION }");
     expect(config.match(/precacheFallback: \{ fallbackURL: OFFLINE_FALLBACK_URL \}/g)).toHaveLength(2);
     expect(config).toContain("importScripts: [`/${SW_CACHE_POLICY_SCRIPT}`]");
+  });
+
+  // Review F6: the worker and the helper it imports must always revalidate, so
+  // a new sw.js never pairs with an HTTP-cached policy script.
+  it("pins Cache-Control: no-cache for sw.js and sw-cache-policy.js", () => {
+    const headers = read("../../public/_headers").replace(/\r\n/g, "\n");
+    for (const path of ["/sw.js", `/${SW_CACHE_POLICY_SCRIPT}`]) {
+      const block = headers.split(/\n(?=\S)/).find((rule) => rule.split("\n")[0].trim() === path);
+      expect(block, path).toBeDefined();
+      expect(block, path).toMatch(/^\s+Cache-Control: no-cache\s*$/m);
+    }
   });
 
   it("has a Spanish 404 page on the site layout (viewport included)", () => {
