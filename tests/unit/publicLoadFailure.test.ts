@@ -94,3 +94,89 @@ describe("PublicEventLoadError", () => {
     expect(markup).toContain("focus-visible:ring-2");
   });
 });
+
+describe("resolvePublicLoadFailure: invalid links and deleted events", () => {
+  it.each([
+    [401, "invitation_token_expired"],
+    [401, "invitation_token_invalid"],
+  ])("explains an expired or invalid link (%s %s) on /e/ and /rsvp/", (status, code) => {
+    for (const resource of ["event", "invitation"] as const) {
+      const failure = resolvePublicLoadFailure({ status, code, resource });
+      expect(failure).toMatchObject({
+        retryable: false,
+        title: "Este enlace ya no es válido o expiró",
+      });
+      expect(failure.message).not.toMatch(/publicado/);
+    }
+  });
+
+  it("maps the token route's bare 401 'token expired' to the invalid link copy", () => {
+    const failure = resolvePublicLoadFailure({
+      status: 401,
+      resource: "invitation",
+      backendMessage: "token expired",
+    });
+    expect(failure.title).toBe("Este enlace ya no es válido o expiró");
+  });
+
+  it("keeps the 'requires access' copy for a password 401", () => {
+    const failure = resolvePublicLoadFailure({
+      status: 401,
+      code: "event_password_required",
+      resource: "event",
+    });
+    expect(failure.title).toBe("Este evento requiere acceso");
+  });
+
+  it("keeps 'not published yet' for a real 403 without a token code", () => {
+    const failure = resolvePublicLoadFailure({ status: 403, resource: "event" });
+    expect(failure.title).toBe("Este evento aún no está disponible");
+  });
+
+  it("says a deleted event is no longer available (410 event_gone)", () => {
+    for (const failure of [
+      resolvePublicLoadFailure({ status: 410, resource: "event" }),
+      resolvePublicLoadFailure({ status: 404, code: "event_gone", resource: "invitation" }),
+    ]) {
+      expect(failure.title).toBe("Este evento ya no está disponible");
+      expect(failure.retryable).toBe(false);
+    }
+  });
+});
+
+describe("final backend codes (wave 2 contract)", () => {
+  it("maps ByToken/RSVP codes to Spanish guest copy", async () => {
+    const { getPublicApiErrorMessage } = await import("../../src/lib/apiError");
+    const err = (status: number, code: string) => ({
+      status,
+      payload: { status, code, error: code, message: "x" },
+    });
+    expect(getPublicApiErrorMessage(err(401, "invitation_token_expired"), "rsvp")).toContain(
+      "Este enlace ya no es válido o expiró",
+    );
+    expect(getPublicApiErrorMessage(err(401, "invitation_token_invalid"), "invitation")).toContain(
+      "Este enlace ya no es válido o expiró",
+    );
+    expect(getPublicApiErrorMessage(err(403, "event_unavailable"), "rsvp")).toBe(
+      "Esta invitación no está disponible en este momento.",
+    );
+    expect(getPublicApiErrorMessage(err(410, "event_gone"), "invitation")).toBe(
+      "Este evento ya no está disponible",
+    );
+  });
+
+  it("keeps 'not published' for 403 event_not_public on page-spec", () => {
+    const failure = resolvePublicLoadFailure({ status: 403, code: "event_not_public", resource: "event" });
+    expect(failure.title).toBe("Este evento aún no está disponible");
+  });
+});
+
+describe("flags-off invitation summary (PUB-36)", async () => {
+  const { shouldRenderEventSummary } = await import("../../src/lib/pageChrome");
+  it("adds name and date only when the footer is hidden and no section shows the date", () => {
+    const meta = { pageTitle: "Boda", eventDateTime: "2026-10-22T20:00:00Z", footerVisible: false };
+    expect(shouldRenderEventSummary(meta, false)).toBe(true);
+    expect(shouldRenderEventSummary(meta, true)).toBe(false);
+    expect(shouldRenderEventSummary({ ...meta, footerVisible: true }, false)).toBe(false);
+  });
+});

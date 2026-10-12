@@ -513,7 +513,7 @@ export default function TvSlideshow({
     return (
       <PublicEventPasswordGate
         title="Modo TV privado"
-        description="Ingresa la contrasena del evento para abrir el slideshow."
+        description="Ingresa la contraseña del evento para abrir el slideshow."
         className="min-h-screen bg-black"
         onVerify={eventAccess.verifyPassword}
       />

@@ -2,6 +2,7 @@ import type { PageMediaVariant, PageSpec } from "../components/engine/types";
 import { readApiData } from "./apiEnvelope";
 import { getPresignedUrlExpiry } from "./signedMedia";
 import { cacheTokenHash } from "./tokenHash";
+import { normalizeWindowStatus } from "./publicWindowGate";
 
 export type PageSpecCacheMode = "token" | "identifier";
 
@@ -1053,9 +1054,13 @@ function normalizePageSpecAccess(value: unknown): PageSpec["meta"]["access"] {
       "PasswordVerified",
     ]),
   );
+  const windowStatus = normalizeWindowStatus(
+    firstValue(value, ["windowStatus", "window_status", "WindowStatus"]),
+  );
   if (
     !activeFrom &&
     !activeUntil &&
+    !windowStatus &&
     passwordProtected === undefined &&
     !accessVersion &&
     previewAuthorized === undefined &&
@@ -1073,6 +1078,7 @@ function normalizePageSpecAccess(value: unknown): PageSpec["meta"]["access"] {
     access.previewAuthorized = previewAuthorized;
   if (passwordVerified !== undefined)
     access.passwordVerified = passwordVerified;
+  if (windowStatus) access.windowStatus = windowStatus;
   return access;
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { buildEventVerifyAccessUrl } from "../lib/apiUrls";
 import { fetchApiResult } from "../lib/apiFetch";
+import { passwordVerifyFailure } from "../lib/passwordVerify";
 import {
   readStoredEventAccessToken,
   removeStoredEventAccessToken,
@@ -26,6 +27,8 @@ interface UsePublicEventAccessOptions {
 interface VerifyResult {
   ok: boolean;
   message?: string;
+  /** Set on 429 `too_many_attempts`: keep submit disabled this long. */
+  retryAfterSeconds?: number;
 }
 
 interface PublicEventAccessState {
@@ -227,7 +230,7 @@ export function usePublicEventAccess({
       const id = clean(identifier);
       const value = clean(password);
       if (!id || !value) {
-        return { ok: false, message: "Ingresa la contrasena." };
+        return { ok: false, message: "Ingresa la contraseña." };
       }
 
       try {
@@ -243,21 +246,17 @@ export function usePublicEventAccess({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ password: value }),
           },
-          "Contrasena incorrecta. Intenta de nuevo.",
+          "Contraseña incorrecta. Intenta de nuevo.",
         );
         if (!result.ok) {
-          return {
-            ok: false,
-            message:
-              result.message || "Contrasena incorrecta. Intenta de nuevo.",
-          };
+          return passwordVerifyFailure(result);
         }
 
         const access = normalizeEventAccessVerification(result.data);
         if (!access.accessToken && access.passwordProtected) {
           return {
             ok: false,
-            message: "No pudimos abrir esta pagina. Intenta de nuevo.",
+            message: "No pudimos abrir esta página. Intenta de nuevo.",
           };
         }
 
@@ -330,7 +329,7 @@ export function usePublicEventAccess({
               setPasswordVerified(false);
               return {
                 ok: false,
-                message: "No pudimos abrir esta pagina. Intenta de nuevo.",
+                message: "No pudimos abrir esta página. Intenta de nuevo.",
               };
             }
           } catch {

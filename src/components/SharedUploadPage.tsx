@@ -34,10 +34,21 @@ import {
 } from "../lib/sharedUploadIdentifier";
 import {
   getSharedUploadGate,
+  limitReachedNotice,
+  resolveForbiddenUploadOutcome,
+  resolveUploadBatchOutcome,
+  type SharedUploadStatusSnapshot,
   isSharedUploadOpen,
 } from "../lib/sharedUploadAccess";
 import { buildEventMomentsUrl } from "../lib/apiUrls";
 import { fetchApiData, isApiFetchError } from "../lib/apiFetch";
+import {
+  mergeUploadPublicationHint,
+  sharedUploadSuccessCopy,
+  shouldShowOptimizingTransition,
+  uploadHintForMoment,
+  type SharedUploadPublicationHint,
+} from "../lib/uploadPublicationHint";
 import {
   classifyUploadStatusError,
   type UploadStatusError,
@@ -45,7 +56,6 @@ import {
 import {
   normalizePublicMomentsPage,
   normalizePublicMomentUploadResponse,
-  type PublicMoment,
 } from "../lib/publicMoments";
 import {
   getSelectableUploadSlots,
@@ -53,6 +63,8 @@ import {
   getUploadDisplayLimit,
   readUploadQuota,
   reconcileUploadQuotaRemaining,
+  sharedUploadLimitPhrase,
+  UPLOADS_CLOSED_COPY,
 } from "../lib/uploadQuota";
 import {
   UPLOAD_FILE_ACCEPT as FILE_ACCEPT,
@@ -130,34 +142,7 @@ function getPublicUploadBaseUrl(): string {
 const MAX_FILES = 10;
 
 // ── Upload state ───────────────────────────────────────────────────────────────
-type SharedUploadPublicationHint =
-  "published" | "processing" | "pending_review";
-
-function uploadHintForMoment(
-  moment: PublicMoment | null,
-): SharedUploadPublicationHint {
-  if (moment?.publication_status === "published") return "published";
-  if (
-    moment?.publication_status === "processing" ||
-    moment?.approval_status === "approved"
-  ) {
-    return "processing";
-  }
-  return "pending_review";
-}
-
-function mergeUploadPublicationHint(
-  current: SharedUploadPublicationHint,
-  next: SharedUploadPublicationHint,
-): SharedUploadPublicationHint {
-  if (current === "pending_review" || next === "pending_review") {
-    return "pending_review";
-  }
-  if (current === "processing" || next === "processing") {
-    return "processing";
-  }
-  return "published";
-}
+// Publication hints live in ../lib/uploadPublicationHint (PUB-1).
 
 type FileEntry = SharedUploadFileEntry;
 
@@ -200,6 +185,22 @@ function IconCheck({ className = "w-5 h-5" }: { className?: string }) {
         strokeLinejoin="round"
         d="M4.5 12.75l6 6 9-13.5"
       />
+    </svg>
+  );
+}
+
+function IconNotice({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden="true"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
+      <circle cx="12" cy="12" r="9" />
     </svg>
   );
 }
@@ -296,6 +297,10 @@ export default function SharedUploadPage({
   const [uploading, setUploading] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [allDone, setAllDone] = useState(false);
+  // Files that could not be uploaded because the quota ran out mid-batch
+  // (429): shown as a notice on the success screen.
+  const [limitSkippedCount, setLimitSkippedCount] = useState(0);
+  const quotaExhaustedRef = useRef(false);
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [uploadedCount, setUploadedCount] = useState(0);
@@ -335,6 +340,7 @@ export default function SharedUploadPage({
 
   const applyUploadQuota = useCallback((payload: unknown) => {
     const quota = readUploadQuota(payload);
+    if (quota.remaining === 0) quotaExhaustedRef.current = true;
     if (quota.remaining !== null) {
       setUploadsRemaining((prev) =>
         reconcileUploadQuotaRemaining(prev, quota.remaining),
@@ -369,6 +375,7 @@ export default function SharedUploadPage({
         return data;
       } catch (error) {
         if (isApiFetchError(error)) {
+          if (error.status === 429) quotaExhaustedRef.current = true;
           applyUploadQuota(error.payload);
         }
         throw error;
@@ -396,8 +403,8 @@ export default function SharedUploadPage({
   }, []);
 
   const checkQuota = useCallback(
-    async (id: string) => {
-      if (!id) return;
+    async (id: string): Promise<SharedUploadStatusSnapshot | null> => {
+      if (!id) return null;
       quotaAbortControllerRef.current?.abort();
       const controller = new AbortController();
       quotaAbortControllerRef.current = controller;
@@ -431,9 +438,15 @@ export default function SharedUploadPage({
           if (typeof data.event_name === "string")
             setWallEventName(data.event_name);
         }
+        return {
+          uploadsNotEnabled: !shareEnabled,
+          wallPublished: wallIsPublished,
+          uploadsRemaining: quota.remaining,
+        };
       } catch (error) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) return null;
         setUploadStatusError(classifyUploadStatusError(error));
+        return null;
       } finally {
         if (quotaAbortControllerRef.current === controller) {
           quotaAbortControllerRef.current = null;
@@ -755,6 +768,7 @@ export default function SharedUploadPage({
       if (startsFreshBatch) setUploadPublicationHint("published");
     });
     if (startsFreshBatch) uploadPublicationHintRef.current = "published";
+    quotaExhaustedRef.current = false;
     uploadAbortControllerRef.current?.abort();
     const uploadController = new AbortController();
     uploadAbortControllerRef.current = uploadController;
@@ -823,18 +837,44 @@ export default function SharedUploadPage({
       );
     }
     if (result.uploadsDisabled) {
-      setUploadsNotEnabled(true);
+      // PUB-5: a 403 does not always mean "uploads not enabled yet". Ask the
+      // server why (wall just published, limit reached, uploads turned off)
+      // and acknowledge any file that already made it.
+      const status = identifier ? await checkQuota(identifier) : null;
+      if (!mountedRef.current) return;
+      // Read after the await so the engine's last file updates are applied.
+      const doneAfterForbidden = filesRef.current.filter(
+        (entry) => entry.status === "done",
+      ).length;
       setUploading(false);
+      const outcome = resolveForbiddenUploadOutcome(doneAfterForbidden, status);
+      if (outcome === "acknowledge-uploaded") {
+        setUploadedCount(doneAfterForbidden);
+        setAllDone(true);
+      } else if (outcome === "retry") {
+        setError(
+          "No pudimos subir tus archivos en este momento. Intenta de nuevo.",
+        );
+      }
       return;
     }
 
     setUploading(false);
     commitFiles((previous) => {
-      const allUploadsSucceeded = previous.every(
-        (entry) => entry.status === "done",
+      const outcome = resolveUploadBatchOutcome(
+        previous,
+        quotaExhaustedRef.current,
       );
-      if (allUploadsSucceeded && previous.length > 0) {
-        if (uploadPublicationHintRef.current === "processing") {
+      if (outcome.kind === "partial-limit") {
+        // 429 mid-batch: acknowledge what made it, note what did not (same
+        // spirit as the 403 path) instead of jumping to "limit reached".
+        setUploadedCount(outcome.doneCount);
+        setLimitSkippedCount(outcome.skippedCount);
+        setAllDone(true);
+        return previous;
+      }
+      if (outcome.kind === "all-done") {
+        if (shouldShowOptimizingTransition(uploadPublicationHintRef.current)) {
           setOptimizing(true);
           window.setTimeout(() => {
             setOptimizing(false);
@@ -857,6 +897,7 @@ export default function SharedUploadPage({
     setVideoThumbs(new Map());
     setDescription("");
     setAllDone(false);
+    setLimitSkippedCount(0);
     setUploadPublicationHint("pending_review");
     uploadPublicationHintRef.current = "published";
     setUploadedCount(0);
@@ -899,7 +940,7 @@ export default function SharedUploadPage({
         <UploadThemeToggle theme={theme} onToggle={toggleTheme} />
         <PublicEventPasswordGate
           title="Uploads privados"
-          description="Ingresa la contrasena del evento para compartir tus momentos."
+          description="Ingresa la contraseña del evento para compartir tus momentos."
           className={theme === "dark" ? "bg-gray-950" : "bg-gray-50"}
           onVerify={eventAccess.verifyPassword}
         />
@@ -914,7 +955,12 @@ export default function SharedUploadPage({
         <SuccessScreen
           count={uploadedCount}
           publicationHint={uploadPublicationHint}
-          onUploadMore={handleUploadAnother}
+          limitSkippedCount={limitSkippedCount}
+          onUploadMore={
+            limitSkippedCount > 0 || (uploadsRemaining ?? 1) <= 0
+              ? undefined
+              : handleUploadAnother
+          }
         />
       </ThemeCtx.Provider>
     );
@@ -1148,7 +1194,7 @@ export default function SharedUploadPage({
             transition={{ delay: 0.2 }}
             className={`mt-2 text-sm max-w-[280px] mx-auto leading-relaxed ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}
           >
-            Sube hasta {displayMaxFiles} fotos o videos para la galería del
+            {sharedUploadLimitPhrase(displayMaxFiles)} para la galería del
             evento
           </motion.p>
         </header>
@@ -1560,32 +1606,24 @@ export default function SharedUploadPage({
 function SuccessScreen({
   count,
   publicationHint,
+  limitSkippedCount = 0,
   onUploadMore,
 }: {
   count: number;
   publicationHint: SharedUploadPublicationHint;
+  limitSkippedCount?: number;
   onUploadMore?: () => void;
 }) {
   const { theme } = useContext(ThemeCtx);
-  const successMessage =
-    publicationHint === "published"
-      ? count === 1
-        ? "Tu archivo ya está disponible en la galería del evento."
-        : `Tus ${count} archivos ya están disponibles en la galería del evento.`
-      : publicationHint === "processing"
-        ? count === 1
-          ? "Tu archivo ya fue aprobado y aparecerá en cuanto termine de procesarse."
-          : `Tus ${count} archivos ya fueron aprobados y aparecerán en cuanto terminen de procesarse.`
-        : count === 1
-          ? "Tu foto aparecerá en la galería del evento una vez que el organizador la apruebe."
-          : `Tus ${count} archivos aparecerán en la galería del evento una vez que el organizador los apruebe.`;
+  const copy = sharedUploadSuccessCopy(publicationHint, count);
+  const isWarning = copy.tone === "warning";
   return (
     <div
       className={`relative isolate flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 text-center${theme === "light" ? " bg-white" : ""}`}
     >
       <DarkBackground />
-      {/* Confetti dots */}
-      {Array.from({ length: 16 }).map((_, i) => (
+      {/* Confetti dots: only when the files will really reach the wall */}
+      {!isWarning && Array.from({ length: 16 }).map((_, i) => (
         <motion.div
           key={i}
           initial={{ opacity: 0, y: -20, x: 0 }}
@@ -1620,12 +1658,23 @@ function SuccessScreen({
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
         className={`w-24 h-24 rounded-full flex items-center justify-center mb-8 ${
-          theme === "dark"
-            ? "bg-gradient-to-br from-violet-500 to-indigo-500 shadow-[0_0_60px_rgba(139,92,246,0.55)]"
-            : "bg-gradient-to-br from-green-400 to-emerald-500 shadow-lg shadow-green-500/30"
+          isWarning
+            ? theme === "dark"
+              ? "bg-amber-500/20 ring-1 ring-amber-400/50"
+              : "bg-amber-100 ring-1 ring-amber-300"
+            : theme === "dark"
+              ? "bg-gradient-to-br from-violet-500 to-indigo-500 shadow-[0_0_60px_rgba(139,92,246,0.55)]"
+              : "bg-gradient-to-br from-green-400 to-emerald-500 shadow-lg shadow-green-500/30"
         }`}
+        aria-hidden="true"
       >
-        <IconCheck className="w-12 h-12 text-white" />
+        {isWarning ? (
+          <IconNotice
+            className={`w-12 h-12 ${theme === "dark" ? "text-amber-300" : "text-amber-600"}`}
+          />
+        ) : (
+          <IconCheck className="w-12 h-12 text-white" />
+        )}
       </motion.div>
 
       <motion.div
@@ -1637,15 +1686,27 @@ function SuccessScreen({
         <h2
           className={`text-2xl font-bold tracking-tight ${theme === "dark" ? "text-white" : "text-gray-900"}`}
         >
-          {count === 1
-            ? "¡Momento compartido!"
-            : `¡${count} momentos compartidos!`}
+          {copy.title}
         </h2>
         <p
+          role={isWarning ? "status" : undefined}
           className={`text-sm max-w-[280px] mx-auto leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
         >
-          {successMessage}
+          {copy.message}
         </p>
+
+        {limitSkippedCount > 0 && (
+          <p
+            role="status"
+            className={`mx-auto max-w-[300px] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+              theme === "dark"
+                ? "bg-amber-500/10 text-amber-200 ring-1 ring-amber-400/30"
+                : "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
+            }`}
+          >
+            {limitReachedNotice(limitSkippedCount)}
+          </p>
+        )}
 
         <motion.p
           initial={{ opacity: 0 }}
@@ -1710,8 +1771,9 @@ function UploadLimitReachedScreen() {
         <p
           className={`text-sm leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
         >
-          Ya registramos las contribuciones permitidas para este enlace. Tus
-          archivos aparecerán en la galería cuando el organizador los apruebe.
+          Ya usaste todas las subidas permitidas para este enlace. Los archivos
+          que se procesaron correctamente aparecerán en la galería cuando el
+          organizador los apruebe.
         </p>
       </motion.div>
     </div>
@@ -1719,9 +1781,11 @@ function UploadLimitReachedScreen() {
 }
 
 function ComingSoonScreen({
-  title = "Pronto podras compartir tus mejores momentos",
-  description = "El organizador esta preparando todo para que puedas subir tus fotos y videos del evento. Vuelve en un momento.",
-  statusLabel = "Preparando el evento",
+  // Shown when the organizer has uploads turned off (PUB-91): state the fact
+  // instead of promising they will open soon.
+  title = UPLOADS_CLOSED_COPY.title,
+  description = UPLOADS_CLOSED_COPY.description,
+  statusLabel = UPLOADS_CLOSED_COPY.statusLabel,
 }: {
   title?: string;
   description?: string;

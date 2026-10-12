@@ -167,6 +167,11 @@ export interface PageAccess {
   previewAuthorized?: boolean;
   /** True only when the backend accepted a signed password-access proof */
   passwordVerified?: boolean;
+  /**
+   * Server-computed access window state. Outside the window the backend sends
+   * a locked spec (`sections: []`); the site must not use the device clock.
+   */
+  windowStatus?: "open" | "not_started" | "ended";
 }
 
 export interface PageTheme {

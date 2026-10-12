@@ -7,6 +7,7 @@ import {
 import { normalizeEventsUrl } from "../lib/eventsUrl";
 import { buildInvitationByTokenUrl } from "../lib/apiUrls";
 import { fetchApiData } from "../lib/apiFetch";
+import { getPublicApiErrorMessage } from "../lib/apiError";
 import { buildInvitationLoadKey } from "../lib/invitationLoadKey";
 import {
   publicAccessFetchInit,
@@ -34,7 +35,9 @@ interface Props {
   EVENTS_URL: string;
   publicAccess?: PublicAccessFetchParams;
   onLoaded: (data: InvitationData) => void;
-  onError?: (message: string) => void;
+  /** The raw error is passed so callers can react to codes such as
+   * 401 event_password_required or 410 event_gone. */
+  onError?: (message: string, error?: unknown) => void;
 }
 
 export default function InvitationLoader({
@@ -92,10 +95,9 @@ export default function InvitationLoader({
         onLoaded(data);
       } catch (err: unknown) {
         if (err instanceof Error && err.name === "AbortError") return;
-        const message =
-          err instanceof Error ? err.message : "Error cargando invitación";
+        const message = getPublicApiErrorMessage(err, "invitation");
         console.error("Error loading invitation:", err);
-        onError?.(message);
+        onError?.(message, err);
       }
     };
 

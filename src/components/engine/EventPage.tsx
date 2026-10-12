@@ -12,7 +12,11 @@ import {
 } from "react";
 import { CalendarClock, PartyPopper } from "lucide-react";
 import SectionRenderer from "./SectionRenderer";
-import { isRsvpSectionType } from "./registry";
+import {
+  isRsvpSectionType,
+  resolveSectionRegistryEntry,
+  SECTION_REGISTRY,
+} from "./registry";
 import Footer from "../common/Footer";
 import PublicEventPasswordGate from "../common/PublicEventPasswordGate";
 import { PublicEventLoadError } from "../common/PublicEventLoadError";
@@ -25,12 +29,20 @@ import {
   viewTrackingSessionKey,
 } from "../../lib/eventTrackingUrl";
 import { fetchApiResult } from "../../lib/apiFetch";
+import { readApiErrorCode } from "../../lib/apiError";
+import { postPreviewReady } from "../../lib/previewReadySignal";
+import { passwordVerifyFailure } from "../../lib/passwordVerify";
+import { resolvePublicWindowGate } from "../../lib/publicWindowGate";
 import { fetchApiResultWithRetry as fetchPageSpecWithRetry } from "../../lib/apiRetry";
 import {
   buildIdentifierPageSpecUrl,
   buildTokenPageSpecUrl,
 } from "../../lib/pageSpecUrl";
-import { shouldRenderFooter } from "../../lib/pageChrome";
+import {
+  shouldRenderEventSummary,
+  shouldRenderFooter,
+} from "../../lib/pageChrome";
+import { formatPublicEventDate } from "../../lib/eventDate";
 import {
   publicAccessFetchInit,
   readPublicAccessParams,
@@ -233,22 +245,26 @@ function ComingSoonGate({
   activeFrom,
   timeZone,
 }: {
-  activeFrom: string;
+  activeFrom?: string;
   timeZone?: string | null;
 }) {
-  const formatted = formatPublicAccessDateTime(activeFrom, timeZone, {
-    weekday: true,
-  });
+  const formatted = activeFrom
+    ? formatPublicAccessDateTime(activeFrom, timeZone, { weekday: true })
+    : "";
   return (
     <PublicEventLifecycleGate
       eyebrow="Próximamente"
       title="Esta invitación aún no está disponible"
       description={
-        <>
-          Podrás abrirla el{" "}
-          <strong className="font-semibold text-gray-900">{formatted}</strong>.
-          Guarda este enlace para volver cuando llegue el momento.
-        </>
+        formatted ? (
+          <>
+            Podrás abrirla el{" "}
+            <strong className="font-semibold text-gray-900">{formatted}</strong>.
+            Guarda este enlace para volver cuando llegue el momento.
+          </>
+        ) : (
+          "Guarda este enlace para volver cuando llegue el momento."
+        )
       }
       Icon={CalendarClock}
     />
@@ -259,20 +275,26 @@ function EventEndedGate({
   activeUntil,
   timeZone,
 }: {
-  activeUntil: string;
+  activeUntil?: string;
   timeZone?: string | null;
 }) {
-  const formatted = formatPublicAccessDateTime(activeUntil, timeZone);
+  const formatted = activeUntil
+    ? formatPublicAccessDateTime(activeUntil, timeZone)
+    : "";
   return (
     <PublicEventLifecycleGate
       eyebrow="Gracias por acompañarnos"
       title="El evento ya concluyó"
       description={
-        <>
-          Esta invitación estuvo disponible hasta el{" "}
-          <strong className="font-semibold text-gray-900">{formatted}</strong>.
-          Gracias por haber sido parte de este momento especial.
-        </>
+        formatted ? (
+          <>
+            Esta invitación estuvo disponible hasta el{" "}
+            <strong className="font-semibold text-gray-900">{formatted}</strong>.
+            Gracias por haber sido parte de este momento especial.
+          </>
+        ) : (
+          "Gracias por haber sido parte de este momento especial."
+        )
       }
       Icon={PartyPopper}
     />
@@ -408,36 +430,20 @@ export default function EventPage({
         const clearStalePageSpecCache = () => {
           removePageSpecCache(scopedCacheId, cacheMode, undefined, EVENTS_URL);
         };
-        if (result.status === 404) {
+        // Access decisions (401/403/404) and a deleted event (410) are final:
+        // show the matching Spanish state, never a retry loop.
+        if (
+          result.status === 401 ||
+          result.status === 403 ||
+          result.status === 404 ||
+          result.status === 410
+        ) {
           clearStalePageSpecCache();
           setSpec(null);
           setError(
             resolvePublicLoadFailure({
               status: result.status,
-              resource: byIdentifier ? "event" : "invitation",
-              backendMessage: result.message,
-            }),
-          );
-          return;
-        }
-        if (result.status === 401) {
-          clearStalePageSpecCache();
-          setSpec(null);
-          setError(
-            resolvePublicLoadFailure({
-              status: result.status,
-              resource: byIdentifier ? "event" : "invitation",
-              backendMessage: result.message,
-            }),
-          );
-          return;
-        }
-        if (result.status === 403) {
-          clearStalePageSpecCache();
-          setSpec(null);
-          setError(
-            resolvePublicLoadFailure({
-              status: result.status,
+              code: readApiErrorCode(result.payload),
               resource: byIdentifier ? "event" : "invitation",
               backendMessage: result.message,
             }),
@@ -572,6 +578,20 @@ export default function EventPage({
     return () => window.cancelAnimationFrame(frame);
   }, [spec]);
 
+  // Studio waits for this before showing its preview frame. Sent once per
+  // load, also for a final error state, so Studio never waits forever.
+  const previewReadySentRef = useRef(false);
+  useEffect(() => {
+    if ((!spec && !error) || typeof window === "undefined") return;
+    if (previewReadySentRef.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (postPreviewReady(window, isPreview)) {
+        previewReadySentRef.current = true;
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [spec, error, isPreview]);
+
   const retryLoadSpec = useCallback(() => {
     if (!token) return;
     const accessParams = readPublicAccessParams(window.location.search);
@@ -616,10 +636,7 @@ export default function EventPage({
       );
 
       if (!result.ok) {
-        return {
-          ok: false,
-          message: result.message || "Contraseña incorrecta. Intenta de nuevo.",
-        };
+        return passwordVerifyFailure(result);
       }
 
       const access = normalizeEventAccessVerification(result.data);
@@ -780,31 +797,24 @@ export default function EventPage({
   // Dashboard Studio preview bypasses gates only when the backend validated the signed token.
   if (!previewAuthorized) {
     const access = spec.meta.access;
-    const now = new Date();
 
-    // Date gate: coming soon
-    if (access?.activeFrom) {
-      const from = new Date(access.activeFrom);
-      if (now < from)
-        return (
-          <ComingSoonGate
-            activeFrom={access.activeFrom}
-            timeZone={spec.meta.timezone}
-          />
-        );
-    }
-
-    // Date gate: event ended
-    if (access?.activeUntil) {
-      const until = new Date(access.activeUntil);
-      if (now > until)
-        return (
-          <EventEndedGate
-            activeUntil={access.activeUntil}
-            timeZone={spec.meta.timezone}
-          />
-        );
-    }
+    // Window gate: the backend's windowStatus decides; the device clock is
+    // only a fallback for payloads without it.
+    const windowGate = resolvePublicWindowGate(access);
+    if (windowGate === "coming_soon")
+      return (
+        <ComingSoonGate
+          activeFrom={access?.activeFrom}
+          timeZone={spec.meta.timezone}
+        />
+      );
+    if (windowGate === "ended")
+      return (
+        <EventEndedGate
+          activeUntil={access?.activeUntil}
+          timeZone={spec.meta.timezone}
+        />
+      );
 
     // Password gate
     if (
@@ -833,6 +843,32 @@ export default function EventPage({
   }
 
   const sorted = sortPageSpecSections(spec.sections);
+
+  // A spec with no visible sections (e.g. a locked spec the gates above did
+  // not claim, or an invitation still being built) gets a calm state instead
+  // of a blank page.
+  if (sorted.length === 0) {
+    return (
+      <PublicEventLifecycleGate
+        eyebrow="Invitación"
+        title="Esta invitación se está preparando"
+        description="Los detalles aún no están disponibles. Vuelve a abrir este enlace más tarde."
+        Icon={CalendarClock}
+      />
+    );
+  }
+  const hasDateSection = sorted.some((section) => {
+    const entry = resolveSectionRegistryEntry(section.type);
+    return (
+      entry === SECTION_REGISTRY.CountdownHeader ||
+      entry === SECTION_REGISTRY.GraduationHero
+    );
+  });
+  const summaryDate = formatPublicEventDate(
+    spec.meta.eventDateTime ?? spec.meta.eventDate,
+    spec.meta.timezone,
+  );
+  const showEventSummary = shouldRenderEventSummary(spec.meta, hasDateSection);
   const themeStyle = buildPageThemeStyle(spec.meta.theme);
   const themeFontFaces = buildPageThemeFontFaces(spec.meta.theme, EVENTS_URL);
   const accessParams = readPublicAccessParams();
@@ -873,6 +909,34 @@ export default function EventPage({
       )}
 
       <main className="eventi-event-page mx-auto max-w-screen-md space-y-10 overflow-x-hidden break-words [overflow-wrap:anywhere] px-3 py-4 sm:space-y-16 sm:px-4 lg:max-w-[1024px]">
+        {showEventSummary && (
+          <header
+            className="pt-6 text-center"
+            data-testid="event-summary"
+          >
+            {spec.meta.pageTitle && (
+              <h1
+                className="text-balance text-3xl font-semibold sm:text-4xl"
+                style={{
+                  color: "var(--eventi-color-heading, #07293A)",
+                  fontFamily:
+                    "var(--eventi-font-heading-effective, 'Astralaga SemiBold', serif)",
+                }}
+              >
+                {spec.meta.pageTitle}
+              </h1>
+            )}
+            {summaryDate && (
+              <p
+                className="mt-2 text-base"
+                style={{ color: "var(--eventi-color-muted, #5f6f78)" }}
+              >
+                {summaryDate}
+              </p>
+            )}
+          </header>
+        )}
+
         {sorted.map((section) => (
           <SectionRenderer
             key={section.sectionId || `${section.type}-${section.order}`}

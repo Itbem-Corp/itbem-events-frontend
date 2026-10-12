@@ -10,11 +10,13 @@ import {
   memo,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
+  type RefObject,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
+  ImageOff,
   LoaderCircle,
   Upload,
   X,
@@ -36,6 +38,7 @@ import {
 import { fetchApiData, isApiFetchError } from "../../lib/apiFetch";
 import {
   canShowPersonalUpload,
+  momentWallHeadingText,
   resolveMomentWallPublished,
 } from "../../lib/momentWallAccess";
 import {
@@ -57,6 +60,7 @@ import {
 import {
   readUploadQuota,
   reconcileUploadQuotaRemaining,
+  uploadFileCountPhrase,
 } from "../../lib/uploadQuota";
 import {
   UPLOAD_FILE_ACCEPT,
@@ -64,6 +68,7 @@ import {
 } from "../../lib/uploadFilePolicy";
 import { uploadToPresignedUrl } from "../../lib/presignedUpload";
 import { retryUploadApiOnce } from "../../lib/uploadRetry";
+import { uploadFailureMessage } from "../../lib/uploadErrorMessage";
 import {
   getPublicMomentsRefreshDelay,
   mergePublicMomentsById,
@@ -75,7 +80,8 @@ import {
   publicMomentsMediaRefreshKey,
   publicMomentPreviewUrl,
   publicMomentThumbnailUrl,
-  publicMomentUploadSuccessMessage,
+  publicMomentUploadOutcome,
+  boundedMediaRefreshDelay,
   shouldReplacePublicMomentsOnLiveRefresh,
   shouldShowProcessingStub,
   type PublicMoment as Moment,
@@ -243,6 +249,7 @@ function VideoMomentCard({
     <button
       type="button"
       onClick={onClick}
+      aria-label={momentCardLabel("Reproducir video", moment.description)}
       className="w-full break-inside-avoid block overflow-hidden rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-black relative group"
     >
       <div className="relative">
@@ -276,6 +283,147 @@ function VideoMomentCard({
   );
 }
 
+/** Shown when the upload form is sent without a file. */
+export const UPLOAD_FILE_REQUIRED_MESSAGE = "Elige una foto o un video para subir.";
+
+/**
+ * File input with Spanish copy: the native control shows the browser's own
+ * language ("Choose File"), so it stays in the DOM visually hidden and a
+ * styled label opens it (QA PUB-94). It is not natively `required`: the
+ * browser's bubble would point at the hidden input and speak its own
+ * language, so the wall checks for a file and shows the message inline.
+ */
+export function UploadFilePicker({
+  inputRef,
+  inputId,
+  disabled,
+  fileName: controlledFileName,
+  onFileNameChange,
+  invalid = false,
+  describedBy,
+}: {
+  inputRef?: RefObject<HTMLInputElement | null>;
+  inputId: string;
+  disabled: boolean;
+  /** Controlled name, so the wall can clear it after an upload or on close. */
+  fileName?: string;
+  onFileNameChange?: (name: string) => void;
+  /** The form was sent without a valid file; the message is `describedBy`. */
+  invalid?: boolean;
+  describedBy?: string;
+}) {
+  const [ownFileName, setOwnFileName] = useState("");
+  const fileName = controlledFileName ?? ownFileName;
+  const setFileName = (name: string) => {
+    setOwnFileName(name);
+    onFileNameChange?.(name);
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <input
+        ref={inputRef}
+        id={inputId}
+        name="file"
+        type="file"
+        accept={UPLOAD_FILE_ACCEPT}
+        disabled={disabled}
+        aria-required="true"
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
+        className="peer sr-only"
+        onChange={(event) =>
+          setFileName(event.currentTarget.files?.[0]?.name ?? "")
+        }
+      />
+      <label
+        htmlFor={inputId}
+        aria-hidden="true"
+        className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg bg-gray-100 px-4 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-200 peer-focus-visible:ring-2 peer-focus-visible:ring-black peer-disabled:cursor-default peer-disabled:opacity-60"
+      >
+        <Upload aria-hidden="true" className="size-4" />
+        {fileName ? "Cambiar archivo" : "Elegir archivo"}
+      </label>
+      <span
+        className="min-w-0 flex-1 truncate text-sm"
+        style={themedMutedStyle}
+        aria-live="polite"
+      >
+        {fileName || "Ningún archivo seleccionado"}
+      </span>
+    </div>
+  );
+}
+
+/** Wall thumbnails always carry a name, even before or without an image. */
+export function momentCardLabel(
+  action: string,
+  description: string | null | undefined,
+): string {
+  const text = description?.trim();
+  return text ? `${action}: ${text}` : action;
+}
+
+interface PhotoMomentCardProps {
+  src: string;
+  srcSet?: string;
+  description?: string | null;
+  position: number;
+  onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+}
+
+export function PhotoMomentCard({
+  src,
+  srcSet,
+  description,
+  position,
+  onClick,
+}: PhotoMomentCardProps) {
+  // Keyed by src (not reset in an effect): a blocked image can fail before
+  // effects run, and a reset would hide the fallback again.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const failed = failedSrc === src;
+  const markFailed = () => setFailedSrc(src);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={momentCardLabel(`Ver foto ${position}`, description)}
+      className="w-full break-inside-avoid block overflow-hidden rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-black relative group"
+    >
+      {failed ? (
+        // A broken image must not show the browser's broken-image icon.
+        <div
+          className="flex aspect-square w-full flex-col items-center justify-center gap-2 bg-black/5 text-xs"
+          style={{ color: "var(--eventi-color-muted, #607783)" }}
+        >
+          <ImageOff aria-hidden="true" className="size-6" />
+          <span>Imagen no disponible</span>
+        </div>
+      ) : (
+        <img
+          src={src}
+          srcSet={srcSet}
+          sizes="(max-width: 639px) 50vw, 33vw"
+          alt=""
+          className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          ref={(img) => {
+            // The error may have fired before React attached the handler.
+            if (img?.complete && img.naturalWidth === 0 && img.currentSrc) {
+              markFailed();
+            }
+          }}
+          onError={markFailed}
+        />
+      )}
+    </button>
+  );
+}
+
 export default function MomentWall({
   config,
   EVENTS_URL: rawEventsUrl,
@@ -284,8 +432,9 @@ export default function MomentWall({
   const EVENTS_URL = normalizeEventsUrl(rawEventsUrl);
   const cfg = config as unknown as MomentWallConfig;
   const title = configTextOr(cfg.title, "Momentos");
-  const subtitle =
-    configText(cfg.moment_request_message) ?? configText(cfg.subtitle);
+  // The studio saves both: a subtitle under the title and a separate message
+  // asking guests for photos. Show each one; never let one hide the other.
+  const { subtitle, requestMessage } = momentWallHeadingText(cfg);
   const identifier = configText(cfg.identifier);
   const allowUploads = cfg.allow_uploads ?? false;
   const allowMessages = cfg.allow_messages ?? false;
@@ -305,6 +454,8 @@ export default function MomentWall({
   const lightboxOpenerRef = useRef<HTMLElement | null>(null);
   const touchStartX = useRef<number | null>(null);
   const lastMediaRefreshKeyRef = useRef<string | null>(null);
+  const lastMediaRefreshAtRef = useRef<number | null>(null);
+  const momentsRef = useRef<Moment[]>([]);
   const wallTotalRef = useRef<number | null>(null);
   const [loadError, setLoadError] = useState<PublicLoadFailure | null>(null);
   const [loadMoreError, setLoadMoreError] = useState(false);
@@ -313,6 +464,9 @@ export default function MomentWall({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadSuccessMessage, setUploadSuccessMessage] = useState("");
+  const [uploadSuccessTone, setUploadSuccessTone] = useState<
+    "success" | "warning"
+  >("success");
   const uploadDialogRef = useRef<HTMLDivElement>(null);
   const uploadCloseRef = useRef<HTMLButtonElement>(null);
   const uploadOpenerRef = useRef<HTMLElement | null>(null);
@@ -321,6 +475,7 @@ export default function MomentWall({
   const uploadTitleId = useId();
   const uploadFileId = useId();
   const uploadNoteId = useId();
+  const uploadErrorId = useId();
   const lightboxTitleId = useId();
 
   const [invData, setInvData] = useState<InvitationData | null>(null);
@@ -398,6 +553,8 @@ export default function MomentWall({
   }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Name of the file chosen in the personal upload dialog (styled picker).
+  const [selectedUploadName, setSelectedUploadName] = useState("");
 
   useEffect(() => {
     const accessParams = resolvePublicAccessParams(
@@ -456,26 +613,28 @@ export default function MomentWall({
         const items = data?.items ?? [];
         const previousTotal = wallTotalRef.current;
         const nextTotal = data.total;
-        setMoments((prev) =>
-          append
-            ? mergePublicMomentsById(prev, items)
-            : refreshFirstPage
-              ? shouldReplacePublicMomentsOnLiveRefresh(
-                  previousTotal,
-                  nextTotal,
-                  prev,
-                  items,
-                )
-                ? mergePublicMomentsById([], items)
-                : mergePublicMomentsById(prev, items, {
-                    prependIncoming: true,
-                  })
-              : mergePublicMomentsById([], items),
-        );
+        const prev = momentsRef.current;
+        const replacedOnRefresh =
+          refreshFirstPage &&
+          shouldReplacePublicMomentsOnLiveRefresh(
+            previousTotal,
+            nextTotal,
+            prev,
+            items,
+          );
+        const nextMoments = append
+          ? mergePublicMomentsById(prev, items)
+          : refreshFirstPage && !replacedOnRefresh
+            ? mergePublicMomentsById(prev, items, { prependIncoming: true })
+            : mergePublicMomentsById([], items);
+        momentsRef.current = nextMoments;
+        setMoments(nextMoments);
         if (typeof nextTotal === "number") wallTotalRef.current = nextTotal;
-        if (!refreshFirstPage) {
+        // A replaced list holds only the first page again: restart pagination
+        // there, or "load more" would skip everything in between (PUB-3).
+        if (!refreshFirstPage || replacedOnRefresh) {
           setHasMore(data?.has_more ?? false);
-          setPage(pageNum);
+          setPage(refreshFirstPage ? 1 : pageNum);
         }
       } catch (err: unknown) {
         if (append) {
@@ -491,6 +650,7 @@ export default function MomentWall({
                   : "No se pudieron cargar los momentos",
             }),
           );
+          momentsRef.current = [];
           setMoments([]);
           setHasMore(false);
         }
@@ -531,16 +691,27 @@ export default function MomentWall({
 
     const refreshMedia = () => {
       lastMediaRefreshKeyRef.current = mediaRefreshKey;
+      lastMediaRefreshAtRef.current = Date.now();
       void fetchMoments(1, false);
     };
 
-    if (mediaRefreshDelay <= 0) {
-      if (lastMediaRefreshKeyRef.current === mediaRefreshKey) return;
+    if (
+      mediaRefreshDelay <= 0 &&
+      lastMediaRefreshKeyRef.current === mediaRefreshKey
+    ) {
+      return;
+    }
+
+    const delay = boundedMediaRefreshDelay(
+      mediaRefreshDelay,
+      lastMediaRefreshAtRef.current,
+    );
+    if (delay <= 0) {
       refreshMedia();
       return;
     }
 
-    const timer = window.setTimeout(refreshMedia, mediaRefreshDelay);
+    const timer = window.setTimeout(refreshMedia, delay);
     return () => window.clearTimeout(timer);
   }, [
     fetchMoments,
@@ -815,7 +986,11 @@ export default function MomentWall({
       "description",
     ) as HTMLTextAreaElement | null;
     const file = fileInput.files?.[0];
-    if (!file) return;
+    if (!file) {
+      setUploadError(UPLOAD_FILE_REQUIRED_MESSAGE);
+      fileInput.focus();
+      return;
+    }
     const fileError = validateUploadFile(file);
     if (fileError) {
       setUploadError(fileError);
@@ -900,9 +1075,12 @@ export default function MomentWall({
       applyPersonalUploadQuota(uploadResponse);
 
       setUploadProgress(100);
-      setUploadSuccessMessage(publicMomentUploadSuccessMessage(uploadedMoment));
+      const uploadOutcome = publicMomentUploadOutcome(uploadedMoment);
+      setUploadSuccessTone(uploadOutcome.tone);
+      setUploadSuccessMessage(uploadOutcome.message);
       setShowUpload(false);
       form.reset();
+      setSelectedUploadName("");
       // Store a local stub only when the backend says the moment is approved
       // but still waiting for media processing.
       if (identifier && shouldShowProcessingStub(uploadedMoment)) {
@@ -910,16 +1088,18 @@ export default function MomentWall({
         addPendingMoment(identifier, isVideoUpload ? "video" : "image");
       }
       fetchMoments(1, false);
-      setTimeout(() => setUploadSuccessMessage(""), 5000);
+      setTimeout(
+        () => setUploadSuccessMessage(""),
+        uploadOutcome.tone === "warning" ? 10000 : 5000,
+      );
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
         setUploadError("La subida fue cancelada. Puedes intentarlo de nuevo.");
         return;
       }
       if (isApiFetchError(err)) applyPersonalUploadQuota(err.payload);
-      setUploadError(
-        err instanceof Error ? err.message : "Error al subir el archivo",
-      );
+      // Backend confirm/prepare text is English (PUB-94); show Spanish.
+      setUploadError(uploadFailureMessage(err));
     } finally {
       if (uploadAbortControllerRef.current === uploadController) {
         uploadAbortControllerRef.current = null;
@@ -943,7 +1123,7 @@ export default function MomentWall({
     return (
       <PublicEventPasswordGate
         title="Momentos privados"
-        description="Ingresa la contrasena del evento para ver y compartir momentos."
+        description="Ingresa la contraseña del evento para ver y compartir momentos."
         className="min-h-[360px] bg-white"
         standalone={false}
         onVerify={eventAccess.verifyPassword}
@@ -975,6 +1155,14 @@ export default function MomentWall({
               {subtitle}
             </p>
           )}
+          {requestMessage && (
+            <p
+              className="mx-auto mt-2 max-w-xl text-pretty text-sm"
+              style={themedMutedStyle}
+            >
+              {requestMessage}
+            </p>
+          )}
         </div>
 
         {/* Success toast */}
@@ -986,7 +1174,11 @@ export default function MomentWall({
               initial={{ opacity: 0, y: -12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
-              className="mb-6 rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700 text-center"
+              className={
+                uploadSuccessTone === "warning"
+                  ? "mb-6 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800 text-center"
+                  : "mb-6 rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700 text-center"
+              }
             >
               {uploadSuccessMessage}
             </motion.div>
@@ -1000,6 +1192,7 @@ export default function MomentWall({
               type="button"
               onClick={(event) => {
                 uploadOpenerRef.current = event.currentTarget;
+                setSelectedUploadName("");
                 setShowUpload(true);
               }}
               className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium transition-opacity hover:opacity-90"
@@ -1060,25 +1253,16 @@ export default function MomentWall({
                 );
               }
               return (
-                <button
+                <PhotoMomentCard
                   key={m.id}
-                  type="button"
+                  src={src}
+                  srcSet={publicMomentMediaSrcSet(m, (url) =>
+                    resolvePublicMediaUrl(url, EVENTS_URL),
+                  )}
+                  description={m.description}
+                  position={idx + 1}
                   onClick={(event) => openLightbox(m, idx, event.currentTarget)}
-                  className="w-full break-inside-avoid block overflow-hidden rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-black relative group"
-                >
-                  <img
-                    src={src}
-                    srcSet={publicMomentMediaSrcSet(m, (url) =>
-                      resolvePublicMediaUrl(url, EVENTS_URL),
-                    )}
-                    sizes="(max-width: 639px) 50vw, 33vw"
-                    alt={m.description || "Momento del evento"}
-                    className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
-                    decoding="async"
-                    draggable={false}
-                  />
-                </button>
+                />
               );
             })}
           </div>
@@ -1279,21 +1463,23 @@ export default function MomentWall({
                       *
                     </span>
                   </label>
-                  <input
-                    ref={fileInputRef}
-                    id={uploadFileId}
-                    name="file"
-                    type="file"
-                    accept={UPLOAD_FILE_ACCEPT}
+                  <UploadFilePicker
+                    inputRef={fileInputRef}
+                    inputId={uploadFileId}
                     disabled={uploading}
-                    required
-                    className="w-full text-sm text-gray-500 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-gray-200"
-                    style={themedMutedStyle}
+                    fileName={selectedUploadName}
+                    onFileNameChange={(name) => {
+                      setSelectedUploadName(name);
+                      if (name) setUploadError("");
+                    }}
+                    invalid={uploadError === UPLOAD_FILE_REQUIRED_MESSAGE}
+                    describedBy={uploadError ? uploadErrorId : undefined}
                   />
                   {maxUploadsPerGuest && (
                     <p className="mt-2 text-xs" style={themedMutedStyle}>
-                      Puedes subir hasta {maxUploadsPerGuest} archivos en este
-                      evento.
+                      {maxUploadsPerGuest === 1
+                        ? "Puedes subir 1 archivo en este evento."
+                        : `Puedes subir hasta ${uploadFileCountPhrase(maxUploadsPerGuest)} en este evento.`}
                     </p>
                   )}
                 </div>
@@ -1319,7 +1505,7 @@ export default function MomentWall({
                   </div>
                 )}
                 {uploadError && (
-                  <p role="alert" className="text-sm text-red-600">
+                  <p id={uploadErrorId} role="alert" className="text-sm text-red-600">
                     {uploadError}
                   </p>
                 )}

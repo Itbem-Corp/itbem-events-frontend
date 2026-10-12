@@ -21,8 +21,25 @@ import type {
 } from "../engine/types";
 import { useToast } from "../../hooks/useToast";
 import ToastList from "../common/Toast";
-import { buildRsvpUrl } from "../../lib/apiUrls";
-import { fetchApiData } from "../../lib/apiFetch";
+import {
+  getPublicApiErrorMessage,
+  isEventPasswordRequiredError,
+  isRsvpClosedError,
+} from "../../lib/apiError";
+import { fetchApiData, fetchApiResult } from "../../lib/apiFetch";
+import { buildEventVerifyAccessUrl, buildRsvpUrl } from "../../lib/apiUrls";
+import { normalizeEventAccessVerification } from "../../lib/eventAccess";
+import { passwordVerifyFailure } from "../../lib/passwordVerify";
+import { storeEventAccessToken } from "../../lib/publicEventAccessStorage";
+import { extractPathIdentifier } from "../../lib/pathIdentifier";
+import PublicEventPasswordGate from "../common/PublicEventPasswordGate";
+import {
+  buildRsvpClosedMessage,
+  readRsvpAvailability,
+  RSVP_DIETARY_MAX_LENGTH,
+  RSVP_NOTES_INPUT_MAX_LENGTH,
+  RSVP_PERSONAL_LINK_HINT,
+} from "../../lib/rsvpAvailability";
 import { normalizeEventsUrl } from "../../lib/eventsUrl";
 import {
   buildRsvpThankYouMessage,
@@ -39,8 +56,6 @@ import {
 
 const RSVPConfirmationCard = lazy(() => import("../RSVPConfirmationCard"));
 
-const missingRsvpTokenMessage =
-  "Este enlace de RSVP necesita un token personal. Usa el enlace que recibiste por invitacion.";
 
 type RSVPAnswer = "yes" | "no" | null;
 
@@ -137,11 +152,23 @@ export default function RSVPConfirmation({
   const [message, setMessage] = useState<string | null>(null);
   const [showCard, setShowCard] = useState(false);
   const [sectionImages, setSectionImages] = useState<Section | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  // 401 event_password_required on ByToken/RSVP: ask for the password here,
+  // then retry with the proof in X-Event-Access-Token.
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [verifiedAccessToken, setVerifiedAccessToken] = useState("");
+  const [closedByServer, setClosedByServer] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
   const rsvpUrl = buildRsvpUrl(eventsUrl);
   const accessParams = useMemo(
-    () => resolvePublicAccessParams(publicAccess),
+    () =>
+      resolvePublicAccessParams(
+        verifiedAccessToken
+          ? { ...publicAccess, accessToken: verifiedAccessToken }
+          : publicAccess,
+      ),
     [
+      verifiedAccessToken,
       publicAccess?.accessToken,
       publicAccess?.cacheKey,
       publicAccess?.sendCacheKey,
@@ -150,7 +177,68 @@ export default function RSVPConfirmation({
     ],
   );
 
+  const rsvpAvailability = readRsvpAvailability(invData, config);
+  const rsvpClosed = closedByServer || !rsvpAvailability.open;
+  const rsvpClosedMessage = buildRsvpClosedMessage(
+    rsvpAvailability.deadline,
+    invData?.eventTimezone,
+  );
+
+  const verifyRsvpPassword = async (password: string) => {
+    const identifier =
+      invData?.eventIdentifier ||
+      (typeof window === "undefined"
+        ? ""
+        : extractPathIdentifier(
+            window.location.pathname,
+            /\/(?:e|rsvp)\/([^/]+)/,
+          ));
+    if (!identifier) {
+      return { ok: false, message: "No pudimos abrir la invitación. Intenta de nuevo." };
+    }
+    const result = await fetchApiResult<unknown>(
+      buildEventVerifyAccessUrl(
+        eventsUrl,
+        identifier,
+        token ?? accessParams.invitationToken,
+        accessParams.previewToken,
+      ),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      },
+      "Contraseña incorrecta. Intenta de nuevo.",
+    );
+    if (!result.ok) return passwordVerifyFailure(result);
+    const access = normalizeEventAccessVerification(result.data);
+    if (!access.accessToken) {
+      return { ok: false, message: "No pudimos abrir la invitación. Intenta de nuevo." };
+    }
+    storeEventAccessToken(
+      {
+        eventsUrl,
+        identifier,
+        accessVersion: access.accessVersion ?? "",
+        invitationToken: token ?? accessParams.invitationToken,
+      },
+      access.accessToken,
+    );
+    setVerifiedAccessToken(access.accessToken);
+    setPasswordRequired(false);
+    setInvError(null);
+    return { ok: true };
+  };
+
+  const handleRsvpClosed = () => {
+    setClosedByServer(true);
+    setInvData((prev) => (prev ? { ...prev, rsvpOpen: false } : prev));
+    setMessage(null);
+    setShowCard(false);
+  };
+
   const reopenRsvpForm = (initialAnswer: RSVPAnswer = null) => {
+    if (rsvpClosed) return;
     if (initialAnswer === "yes" && invData) {
       const guestCount =
         invData.rsvpGuestCount && invData.rsvpGuestCount > 0
@@ -185,13 +273,6 @@ export default function RSVPConfirmation({
   useEffect(() => {
     const nextToken = accessParams.invitationToken;
     setToken(nextToken);
-    if (!nextToken) {
-      setInvError(missingRsvpTokenMessage);
-      return;
-    }
-    setInvError((current) =>
-      current === missingRsvpTokenMessage ? null : current,
-    );
   }, [accessParams.invitationToken]);
 
   const handleConfirm = async () => {
@@ -199,13 +280,14 @@ export default function RSVPConfirmation({
     setLoading(true);
     setMessage(null);
 
+    // A "No podré" answer must not carry details typed for a "yes" (GST-29).
     const dietaryNote =
-      dietary === "none"
+      respuesta !== "yes" || dietary === "none"
         ? ""
         : dietary === "other"
           ? dietaryOther.trim()
           : dietary;
-    const cleanGuestNote = guestNote.trim();
+    const cleanGuestNote = respuesta === "yes" ? guestNote.trim() : "";
     const nextStatus = respuesta === "yes" ? "confirmed" : "declined";
     const nextGuestCount = respuesta === "yes" ? numPersonas : 0;
 
@@ -265,21 +347,24 @@ export default function RSVPConfirmation({
       );
       recordPublicRumMetric("rsvp_submit_ms", performance.now() - submitStartedAt);
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Error en la confirmación";
       console.error("Error confirmando invitación:", err);
-      addToast(`Error: ${msg}`, "error");
+      if (isRsvpClosedError(err)) {
+        handleRsvpClosed();
+      }
+      if (isEventPasswordRequiredError(err)) setPasswordRequired(true);
+      addToast(getPublicApiErrorMessage(err, "rsvp"), "error");
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancel = async () => {
-    if (!invData) return;
+    if (!invData || cancelling || rsvpClosed) return;
     const confirmed = window.confirm(
       "¿Quieres cancelar tu confirmación? Podrás responder de nuevo desde esta misma invitación.",
     );
     if (!confirmed) return;
+    setCancelling(true);
     try {
       const confirmationPayload = await fetchApiData<unknown>(
         rsvpUrl,
@@ -320,9 +405,14 @@ export default function RSVPConfirmation({
       setRespuesta("no");
       setShowCard(false);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error al cancelar";
       console.error("Error cancelando:", err);
-      addToast(`Error: ${msg}`, "error");
+      if (isRsvpClosedError(err)) {
+        handleRsvpClosed();
+      }
+      if (isEventPasswordRequiredError(err)) setPasswordRequired(true);
+      addToast(getPublicApiErrorMessage(err, "rsvp"), "error");
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -337,7 +427,13 @@ export default function RSVPConfirmation({
           EVENTS_URL={eventsUrl}
           publicAccess={accessParams}
           onLoaded={setInvData}
-          onError={(msg) => setInvError(msg)}
+          onError={(msg, err) => {
+            if (isEventPasswordRequiredError(err)) {
+              setPasswordRequired(true);
+              return;
+            }
+            setInvError(msg);
+          }}
         />
       )}
       <ResourcesBySectionSingle
@@ -347,19 +443,43 @@ export default function RSVPConfirmation({
         onLoaded={setSectionImages}
       />
 
-      {invError && (
-        <p className="font-aloevera text-red-600 text-lg sm:text-2xl mt-6">
+      {passwordRequired && (
+        <PublicEventPasswordGate
+          title="Tu invitación está protegida"
+          description="Ingresa la contraseña del evento para confirmar tu asistencia."
+          submitLabel="Continuar"
+          standalone={false}
+          className="bg-transparent"
+          onVerify={verifyRsvpPassword}
+        />
+      )}
+
+      {!passwordRequired && token === "" && !invError && (
+        <p
+          className="font-aloevera mx-auto mt-6 max-w-md text-pretty text-lg sm:text-xl"
+          style={themedBodyStyle}
+          data-testid="rsvp-personal-link-hint"
+        >
+          {RSVP_PERSONAL_LINK_HINT}
+        </p>
+      )}
+
+      {!passwordRequired && invError && (
+        <p
+          role="alert"
+          className="font-aloevera text-red-600 text-lg sm:text-2xl mt-6"
+        >
           {invError}
         </p>
       )}
 
-      {!invError && token && !invData && (
+      {!passwordRequired && !invError && token && !invData && (
         <p className="font-aloevera" style={themedBodyStyle}>
           Cargando...
         </p>
       )}
 
-      {invData && !invError && (
+      {invData && !invError && !passwordRequired && (
         <>
           {invData.rsvpStatus === "confirmed" ? (
             <div className="flex flex-col items-center">
@@ -392,6 +512,15 @@ export default function RSVPConfirmation({
                   />
                 </Suspense>
               )}
+              {rsvpClosed ? (
+                <p
+                  className="mt-8 text-sm font-aloevera break-words"
+                  style={themedBodyStyle}
+                  role="status"
+                >
+                  {rsvpClosedMessage}
+                </p>
+              ) : (
               <div className="mt-8 rounded-3xl border border-black/5 bg-white/45 px-5 py-5 text-center shadow-sm backdrop-blur-sm">
                 <p
                   className="mb-3 text-sm font-aloevera"
@@ -411,13 +540,16 @@ export default function RSVPConfirmation({
                   <button
                     type="button"
                     onClick={handleCancel}
-                    className="inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-sm font-medium font-aloevera opacity-70 transition hover:bg-black/5 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/30"
+                    disabled={cancelling}
+                    aria-busy={cancelling}
+                    className="inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-sm font-medium font-aloevera opacity-70 transition hover:bg-black/5 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/30 disabled:cursor-not-allowed disabled:opacity-40"
                     style={themedAccentTextStyle}
                   >
-                    Cancelar mi confirmación
+                    {cancelling ? "Cancelando..." : "Cancelar mi confirmación"}
                   </button>
                 </div>
               </div>
+              )}
             </div>
           ) : invData.rsvpStatus === "declined" ? (
             <div>
@@ -438,6 +570,15 @@ export default function RSVPConfirmation({
                   />
                 </div>
               )}
+              {rsvpClosed ? (
+                <p
+                  className="mt-8 px-4 text-base font-aloevera break-words"
+                  style={themedBodyStyle}
+                  role="status"
+                >
+                  {rsvpClosedMessage}
+                </p>
+              ) : (
               <div className="mt-8 text-center px-4">
                 <p
                   className="text-lg font-aloevera mb-2"
@@ -454,6 +595,23 @@ export default function RSVPConfirmation({
                   Cambiar mi respuesta
                 </button>
               </div>
+              )}
+            </div>
+          ) : rsvpClosed ? (
+            <div className="px-4">
+              <h3
+                className="text-xl sm:text-2xl md:text-3xl font-astralaga break-words"
+                style={themedHeadingStyle}
+              >
+                {invData.guestName}
+              </h3>
+              <p
+                className="mt-4 text-base sm:text-xl font-aloevera border-2 border-dashed rounded-xl px-4 sm:px-6 py-3 inline-block break-words"
+                style={themedPanelStyle}
+                role="status"
+              >
+                {rsvpClosedMessage}
+              </p>
             </div>
           ) : message ? (
             <div>
@@ -497,7 +655,7 @@ export default function RSVPConfirmation({
           ) : (
             <>
               <h3
-                className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-astralaga"
+                className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-astralaga break-words px-4"
                 style={themedHeadingStyle}
               >
                 {invData.guestName}
@@ -626,6 +784,7 @@ export default function RSVPConfirmation({
                       type="text"
                       value={dietaryOther}
                       onChange={(e) => setDietaryOther(e.target.value)}
+                      maxLength={RSVP_DIETARY_MAX_LENGTH}
                       placeholder="Escribe tu restricción..."
                       className="border-2 border-dashed rounded-xl px-4 py-2 font-aloevera text-sm w-full max-w-xs text-center"
                       style={themedPanelStyle}
@@ -638,7 +797,7 @@ export default function RSVPConfirmation({
                       onChange={(e) => setGuestNote(e.target.value)}
                       placeholder={guestSignatureTitle}
                       aria-label={guestSignatureTitle}
-                      maxLength={180}
+                      maxLength={RSVP_NOTES_INPUT_MAX_LENGTH}
                       rows={2}
                       className="border-2 border-dashed rounded-xl px-4 py-2 font-aloevera text-sm w-full max-w-xs text-center resize-none"
                       style={themedPanelStyle}

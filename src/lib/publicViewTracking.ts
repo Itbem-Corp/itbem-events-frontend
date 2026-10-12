@@ -2,6 +2,7 @@ export interface PublicViewAccess {
   activeFrom?: string | null;
   activeUntil?: string | null;
   passwordProtected?: boolean | null;
+  windowStatus?: "open" | "not_started" | "ended" | null;
 }
 
 export interface PublicViewTrackingState {
@@ -36,12 +37,19 @@ export function shouldTrackPublicView({
 }: PublicViewTrackingState): boolean {
   if (previewAuthorized) return false;
 
+  if (access?.windowStatus === "not_started" || access?.windowStatus === "ended") {
+    return false;
+  }
+  const windowOpenByServer = access?.windowStatus === "open";
+
   const currentTime = nowMillis(now);
   const activeFrom = dateMillis(access?.activeFrom);
-  if (activeFrom !== null && currentTime < activeFrom) return false;
+  if (!windowOpenByServer && activeFrom !== null && currentTime < activeFrom)
+    return false;
 
   const activeUntil = dateMillis(access?.activeUntil);
-  if (activeUntil !== null && currentTime > activeUntil) return false;
+  if (!windowOpenByServer && activeUntil !== null && currentTime > activeUntil)
+    return false;
 
   if (access?.passwordProtected && !passwordVerified) return false;
 
