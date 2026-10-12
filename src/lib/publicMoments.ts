@@ -735,3 +735,71 @@ export function publicMomentsMediaRefreshKey(moments: PublicMoment[]): string {
     })
     .join("|");
 }
+
+// ── Live / media refresh planning (PUB-2, PUB-3) ─────────────────────────────
+
+/** Backend `maxPageLimit` for public moment pages. */
+export const PUBLIC_MOMENTS_MAX_PAGE_LIMIT = 500;
+
+/**
+ * Never refresh presigned media more often than this, even when the backend
+ * hands back URLs that are already expired: a refresh loop must degrade to a
+ * slow retry, never a tight API loop.
+ */
+export const PUBLIC_MOMENTS_MIN_MEDIA_REFRESH_INTERVAL_MS = 60 * 1000;
+
+/**
+ * How many moments a media refresh must fetch so that every loaded moment gets
+ * fresh URLs: the whole loaded window, at least one page, at most the backend
+ * page cap.
+ */
+export function publicMomentsRefreshWindowLimit(
+  loadedCount: number,
+  pageSize: number,
+  maxTotal = PUBLIC_MOMENTS_MAX_PAGE_LIMIT,
+): number {
+  const loaded = Number.isFinite(loadedCount) ? Math.trunc(loadedCount) : 0;
+  return Math.min(
+    Math.max(loaded, pageSize),
+    maxTotal,
+    PUBLIC_MOMENTS_MAX_PAGE_LIMIT,
+  );
+}
+
+/**
+ * Delay before the next media refresh, honouring the minimum interval since
+ * the previous one. `lastRefreshAt` is null before the first refresh.
+ */
+export function boundedMediaRefreshDelay(
+  delay: number,
+  lastRefreshAt: number | null,
+  now = Date.now(),
+  minIntervalMs = PUBLIC_MOMENTS_MIN_MEDIA_REFRESH_INTERVAL_MS,
+): number {
+  const base = Math.max(0, delay);
+  if (lastRefreshAt === null) return base;
+  const sinceLast = now - lastRefreshAt;
+  return Math.max(base, minIntervalMs - sinceLast, 0);
+}
+
+export interface CursorPaginationState {
+  nextCursor: string | null;
+  reachedEnd: boolean;
+}
+
+/**
+ * Pagination after the list was replaced by a fresh first window: the old
+ * cursor pointed past items that are no longer loaded, so it must be reset to
+ * the cursor of the fresh response (or the end).
+ */
+export function cursorPaginationAfterReplace(
+  loadedCount: number,
+  nextCursor: string | null | undefined,
+  maxTotal: number,
+): CursorPaginationState {
+  const cursor = typeof nextCursor === "string" ? nextCursor.trim() : "";
+  if (loadedCount >= maxTotal || !cursor) {
+    return { nextCursor: null, reachedEnd: true };
+  }
+  return { nextCursor: cursor, reachedEnd: false };
+}
