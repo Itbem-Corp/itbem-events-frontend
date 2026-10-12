@@ -1,3 +1,5 @@
+import { PUBLIC_PREVIEW_TOKEN_QUERY_KEYS } from "./publicAccessParams";
+
 /**
  * The site's Content-Security-Policy. Production is HTTPS-only and must stay
  * byte-identical to `public/_headers`. Only a dev build pointed at a loopback
@@ -57,5 +59,56 @@ export function buildContentSecurityPolicy({
       if (name === "upgrade-insecure-requests") return [];
       return [directive];
     })
+    .join("; ");
+}
+
+// ---------------------------------------------------------------------------
+// Studio preview framing.
+//
+// Every route answers `frame-ancestors 'none'` + `X-Frame-Options: DENY`.
+// The single exception is the dashboard Studio preview: an event page
+// (/e/<identifier> or /rsvp/<identifier>) requested with a preview token.
+// Only the dashboard origins may frame it — the production dashboard host
+// from the product contract, plus loopback dashboards in `astro dev`.
+// ---------------------------------------------------------------------------
+
+const STUDIO_PREVIEW_PATH = /^\/(e|rsvp)\/[^/]+\/?$/;
+
+/** True for an event page request that carries a Studio preview token. */
+export function isStudioPreviewRequest(url: URL): boolean {
+  if (!STUDIO_PREVIEW_PATH.test(url.pathname)) return false;
+  return PUBLIC_PREVIEW_TOKEN_QUERY_KEYS.some((key) =>
+    Boolean(url.searchParams.get(key)?.trim()),
+  );
+}
+
+/** The origins allowed to frame the Studio preview. */
+export function studioPreviewFrameAncestors({
+  dev,
+  dashboardHostname,
+}: {
+  dev: boolean;
+  dashboardHostname?: string | null;
+}): string[] {
+  const origins: string[] = [];
+  const host = dashboardHostname?.trim().toLowerCase();
+  if (host && /^[a-z0-9.-]+$/.test(host)) origins.push(`https://${host}`);
+  if (dev) {
+    // Local dashboards: dashboard.<product>.localhost:3017, localhost:3017/3018.
+    origins.push("http://localhost:*", "http://*.localhost:*", "http://127.0.0.1:*");
+  }
+  return origins;
+}
+
+/** Replaces `frame-ancestors` in a policy with the given origins. */
+export function withFrameAncestors(policy: string, origins: readonly string[]): string {
+  if (origins.length === 0) return policy;
+  return policy
+    .split("; ")
+    .map((directive) =>
+      directive.split(" ")[0] === "frame-ancestors"
+        ? `frame-ancestors ${origins.join(" ")}`
+        : directive,
+    )
     .join("; ");
 }
