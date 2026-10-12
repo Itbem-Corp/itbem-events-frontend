@@ -3,16 +3,17 @@ import { parsePublicEventDate } from "./eventDate";
 
 /** Backend column sizes for the public RSVP fields (guests table). */
 export const RSVP_DIETARY_MAX_LENGTH = 255;
-/** rsvp_notes is `text`; requests are bounded so a note can never be unbounded. */
-export const RSVP_NOTES_MAX_LENGTH = 500;
-/** The guest form keeps a short, readable bound for new notes. */
-export const RSVP_NOTES_INPUT_MAX_LENGTH = 180;
+/** Backend limit for rsvp_notes (400 rsvp_text_too_long above it). */
+export const RSVP_NOTES_MAX_LENGTH = 1000;
+export const RSVP_NOTES_INPUT_MAX_LENGTH = RSVP_NOTES_MAX_LENGTH;
 
 export interface RsvpAvailability {
   /** False only when the backend explicitly says RSVPs are closed. */
   open: boolean;
   /** RFC3339 deadline, when the backend sends one. */
   deadline: string | null;
+  /** True when some source actually carried `rsvp_open`. */
+  known: boolean;
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -51,8 +52,10 @@ function candidateRecords(source: unknown): UnknownRecord[] {
 }
 
 /**
- * Reads `rsvp_open` / `rsvp_deadline` from any of the given sources (the
- * invitation payload, the normalised invitation, the section config). When
+ * Reads `rsvp_open` / `rsvp_deadline` from any of the given sources, first
+ * source wins. Contract paths: ByToken `data.event.*` and
+ * `data.invitation.event.*`; page-spec `data.meta.*` and the RSVPConfirmation
+ * section `config.*`; the normalised invitation's `rsvpOpen`. When
  * the fields are absent the RSVP is treated as open: the backend still
  * enforces the deadline and answers 403 `rsvp_closed`.
  */
@@ -75,7 +78,7 @@ export function readRsvpAvailability(...sources: unknown[]): RsvpAvailability {
       }
     }
   }
-  return { open: open !== false, deadline: deadline ?? null };
+  return { open: open !== false, deadline: deadline ?? null, known: open !== undefined };
 }
 
 function validTimeZone(timeZone?: string | null): string | undefined {

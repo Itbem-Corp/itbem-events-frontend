@@ -21,12 +21,18 @@ import type {
 } from "../engine/types";
 import { useToast } from "../../hooks/useToast";
 import ToastList from "../common/Toast";
-import { buildRsvpUrl } from "../../lib/apiUrls";
-import { fetchApiData } from "../../lib/apiFetch";
 import {
   getPublicApiErrorMessage,
+  isEventPasswordRequiredError,
   isRsvpClosedError,
 } from "../../lib/apiError";
+import { fetchApiData, fetchApiResult } from "../../lib/apiFetch";
+import { buildEventVerifyAccessUrl, buildRsvpUrl } from "../../lib/apiUrls";
+import { normalizeEventAccessVerification } from "../../lib/eventAccess";
+import { passwordVerifyFailure } from "../../lib/passwordVerify";
+import { storeEventAccessToken } from "../../lib/publicEventAccessStorage";
+import { extractPathIdentifier } from "../../lib/pathIdentifier";
+import PublicEventPasswordGate from "../common/PublicEventPasswordGate";
 import {
   buildRsvpClosedMessage,
   readRsvpAvailability,
@@ -148,12 +154,22 @@ export default function RSVPConfirmation({
   const [showCard, setShowCard] = useState(false);
   const [sectionImages, setSectionImages] = useState<Section | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  // 401 event_password_required on ByToken/RSVP: ask for the password here,
+  // then retry with the proof in X-Event-Access-Token.
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [verifiedAccessToken, setVerifiedAccessToken] = useState("");
   const [closedByServer, setClosedByServer] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
   const rsvpUrl = buildRsvpUrl(eventsUrl);
   const accessParams = useMemo(
-    () => resolvePublicAccessParams(publicAccess),
+    () =>
+      resolvePublicAccessParams(
+        verifiedAccessToken
+          ? { ...publicAccess, accessToken: verifiedAccessToken }
+          : publicAccess,
+      ),
     [
+      verifiedAccessToken,
       publicAccess?.accessToken,
       publicAccess?.cacheKey,
       publicAccess?.sendCacheKey,
@@ -168,6 +184,52 @@ export default function RSVPConfirmation({
     rsvpAvailability.deadline,
     invData?.eventTimezone,
   );
+
+  const verifyRsvpPassword = async (password: string) => {
+    const identifier =
+      invData?.eventIdentifier ||
+      (typeof window === "undefined"
+        ? ""
+        : extractPathIdentifier(
+            window.location.pathname,
+            /\/(?:e|rsvp)\/([^/]+)/,
+          ));
+    if (!identifier) {
+      return { ok: false, message: "No pudimos abrir la invitación. Intenta de nuevo." };
+    }
+    const result = await fetchApiResult<unknown>(
+      buildEventVerifyAccessUrl(
+        eventsUrl,
+        identifier,
+        token ?? accessParams.invitationToken,
+        accessParams.previewToken,
+      ),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      },
+      "Contraseña incorrecta. Intenta de nuevo.",
+    );
+    if (!result.ok) return passwordVerifyFailure(result);
+    const access = normalizeEventAccessVerification(result.data);
+    if (!access.accessToken) {
+      return { ok: false, message: "No pudimos abrir la invitación. Intenta de nuevo." };
+    }
+    storeEventAccessToken(
+      {
+        eventsUrl,
+        identifier,
+        accessVersion: access.accessVersion ?? "",
+        invitationToken: token ?? accessParams.invitationToken,
+      },
+      access.accessToken,
+    );
+    setVerifiedAccessToken(access.accessToken);
+    setPasswordRequired(false);
+    setInvError(null);
+    return { ok: true };
+  };
 
   const handleRsvpClosed = () => {
     setClosedByServer(true);
@@ -297,6 +359,7 @@ export default function RSVPConfirmation({
       if (isRsvpClosedError(err)) {
         handleRsvpClosed();
       }
+      if (isEventPasswordRequiredError(err)) setPasswordRequired(true);
       addToast(getPublicApiErrorMessage(err, "rsvp"), "error");
     } finally {
       setLoading(false);
@@ -354,6 +417,7 @@ export default function RSVPConfirmation({
       if (isRsvpClosedError(err)) {
         handleRsvpClosed();
       }
+      if (isEventPasswordRequiredError(err)) setPasswordRequired(true);
       addToast(getPublicApiErrorMessage(err, "rsvp"), "error");
     } finally {
       setCancelling(false);
@@ -371,7 +435,13 @@ export default function RSVPConfirmation({
           EVENTS_URL={eventsUrl}
           publicAccess={accessParams}
           onLoaded={setInvData}
-          onError={(msg) => setInvError(msg)}
+          onError={(msg, err) => {
+            if (isEventPasswordRequiredError(err)) {
+              setPasswordRequired(true);
+              return;
+            }
+            setInvError(msg);
+          }}
         />
       )}
       <ResourcesBySectionSingle
@@ -381,19 +451,30 @@ export default function RSVPConfirmation({
         onLoaded={setSectionImages}
       />
 
-      {invError && (
+      {passwordRequired && (
+        <PublicEventPasswordGate
+          title="Tu invitación está protegida"
+          description="Ingresa la contraseña del evento para confirmar tu asistencia."
+          submitLabel="Continuar"
+          standalone={false}
+          className="bg-transparent"
+          onVerify={verifyRsvpPassword}
+        />
+      )}
+
+      {!passwordRequired && invError && (
         <p className="font-aloevera text-red-600 text-lg sm:text-2xl mt-6">
           {invError}
         </p>
       )}
 
-      {!invError && token && !invData && (
+      {!passwordRequired && !invError && token && !invData && (
         <p className="font-aloevera" style={themedBodyStyle}>
           Cargando...
         </p>
       )}
 
-      {invData && !invError && (
+      {invData && !invError && !passwordRequired && (
         <>
           {invData.rsvpStatus === "confirmed" ? (
             <div className="flex flex-col items-center">

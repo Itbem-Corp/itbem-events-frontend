@@ -302,7 +302,7 @@ export function normalizeInvitationPayload(
   if (eventIdentifier) result.eventIdentifier = eventIdentifier;
   if (eventTimezone) result.eventTimezone = eventTimezone;
   const availability = readRsvpAvailability(root);
-  if (!availability.open) result.rsvpOpen = false;
+  if (availability.known) result.rsvpOpen = availability.open;
   if (availability.deadline) result.rsvpDeadline = availability.deadline;
   return result;
 }

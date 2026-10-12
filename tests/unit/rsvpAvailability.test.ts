@@ -17,8 +17,13 @@ describe("readRsvpAvailability", () => {
     expect(readRsvpAvailability({ data: { guest: {} } })).toEqual({
       open: true,
       deadline: null,
+      known: false,
     });
-    expect(readRsvpAvailability(null, undefined)).toEqual({ open: true, deadline: null });
+    expect(readRsvpAvailability(null, undefined)).toEqual({
+      open: true,
+      deadline: null,
+      known: false,
+    });
   });
 
   it("reads rsvp_open false and the deadline from nested payloads", () => {
@@ -26,7 +31,7 @@ describe("readRsvpAvailability", () => {
       readRsvpAvailability({
         data: { event: { rsvp_open: false, rsvp_deadline: "2026-10-01T23:59:00Z" } },
       }),
-    ).toEqual({ open: false, deadline: "2026-10-01T23:59:00Z" });
+    ).toEqual({ open: false, deadline: "2026-10-01T23:59:00Z", known: true });
   });
 
   it("reads camelCase fields from normalised invitation data or section config", () => {
@@ -38,6 +43,7 @@ describe("readRsvpAvailability", () => {
     expect(readRsvpAvailability({ rsvp_open: true, rsvp_deadline: null })).toEqual({
       open: true,
       deadline: null,
+      known: true,
     });
   });
 });
