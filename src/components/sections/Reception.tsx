@@ -82,7 +82,7 @@ export default function Reception({ sectionId, config, EVENTS_URL, publicAccess 
                 </div>
               </div>
               <div className="sm:basis-2/3 place-content-center sm:ps-2">
-                <p className="text-sm sm:text-base md:text-lg lg:text-xl leading-relaxed font-quicksand" style={bodyStyle}>
+                <p className="text-sm sm:text-base md:text-lg lg:text-xl leading-relaxed font-quicksand whitespace-pre-line" style={bodyStyle}>
                   {venueText}
                 </p>
               </div>

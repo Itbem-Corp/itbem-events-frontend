@@ -323,7 +323,7 @@ export default function GraduatesList({
             )}
 
             <p
-              className="font-bigilla font-semibold text-xl md:text-2xl"
+              className="whitespace-pre-line font-bigilla font-semibold text-xl md:text-2xl"
               style={accentStyle}
             >
               {closing}

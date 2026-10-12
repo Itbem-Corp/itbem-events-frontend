@@ -38,3 +38,27 @@ describe("section text wrapping", () => {
     expect(html).toContain("[overflow-wrap:anywhere]");
   });
 });
+
+// STU-13 / STU-15: line breaks typed in Studio were collapsed on the public
+// page. React renders a newline as text, so pre-line keeps it without any HTML.
+describe("section free text keeps its line breaks", () => {
+  const source = (name: string) =>
+    readFileSync(
+      fileURLToPath(new URL(`../../src/components/sections/${name}.tsx`, import.meta.url)),
+      "utf8",
+    );
+  const paragraphFor = (code: string, expr: string) => {
+    const at = code.indexOf(expr);
+    expect(at).toBeGreaterThan(-1);
+    return code.slice(code.lastIndexOf("<p", at), at);
+  };
+
+  it.each([
+    ["EventVenue", "{text}"],
+    ["EventVenue", "{venueText}"],
+    ["Reception", "{venueText}"],
+    ["GraduatesList", "{closing}"],
+  ])("%s %s", (name, expr) => {
+    expect(paragraphFor(source(name), expr)).toContain("whitespace-pre-line");
+  });
+});

@@ -75,7 +75,7 @@ export default function EventVenue({ sectionId, config, EVENTS_URL, publicAccess
               ))}
             </div>
 
-            <p className="text-lg sm:text-xl md:text-2xl font-semibold font-bigilla leading-snug" style={headingStyle}>{text}</p>
+            <p className="whitespace-pre-line text-lg sm:text-xl md:text-2xl font-semibold font-bigilla leading-snug" style={headingStyle}>{text}</p>
 
             {centerImage?.view_url && (
               <div className="mx-auto w-[90%] sm:w-[80%] md:w-[70%] lg:w-[600px] aspect-[3/2] bg-gray-100 rounded shadow-md overflow-hidden">
@@ -90,7 +90,7 @@ export default function EventVenue({ sectionId, config, EVENTS_URL, publicAccess
 
             <div className="flex flex-col sm:flex-row">
               <div className="sm:basis-2/3 place-content-center sm:pe-4 pb-4 sm:pb-0">
-                <p className="text-sm sm:text-base md:text-lg lg:text-xl leading-relaxed font-quicksand" style={bodyStyle}>
+                <p className="text-sm sm:text-base md:text-lg lg:text-xl leading-relaxed font-quicksand whitespace-pre-line" style={bodyStyle}>
                   {venueText}
                 </p>
               </div>
