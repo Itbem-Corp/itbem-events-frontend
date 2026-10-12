@@ -4,6 +4,7 @@ import {
   SECTION_REGISTRY,
   isRsvpSectionType,
   resolveSectionRegistryEntry,
+  sectionPlaceholderClassName,
 } from "../../src/components/engine/registry";
 
 describe("SECTION_REGISTRY", () => {
@@ -116,5 +117,22 @@ describe("section placeholders reserve the hydrated height (QA PUB-109)", () => 
     expect(resolveSectionRegistryEntry("CountdownHeader")?.placeholderClassName).toMatch(/h-\[/);
     expect(resolveSectionRegistryEntry("MUSIC")?.placeholderClassName).toBe("h-0");
     expect(resolveSectionRegistryEntry("TEXT")?.placeholderClassName).toBeUndefined();
+  });
+});
+
+describe("sectionPlaceholderClassName (QA PUB-N1)", () => {
+  it("reserves the RSVP form height only for a visitor with a personal link", () => {
+    const rsvp = resolveSectionRegistryEntry("RSVP")!;
+    expect(sectionPlaceholderClassName(rsvp, true)).toBe(rsvp.placeholderClassName);
+    const anon = sectionPlaceholderClassName(rsvp, false);
+    expect(anon).toBe(rsvp.placeholderWithoutInvitationClassName);
+    expect(anon).not.toBe(rsvp.placeholderClassName);
+  });
+
+  it("keeps every other section's placeholder with or without a link", () => {
+    const text = resolveSectionRegistryEntry("TEXT")!;
+    expect(sectionPlaceholderClassName(text, false)).toBe("h-64");
+    const countdown = resolveSectionRegistryEntry("CountdownHeader")!;
+    expect(sectionPlaceholderClassName(countdown, false)).toBe(countdown.placeholderClassName);
   });
 });

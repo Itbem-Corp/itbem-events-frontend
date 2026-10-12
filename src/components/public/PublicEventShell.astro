@@ -58,8 +58,10 @@ const location = meta.address?.trim() || meta.secondAddress?.trim() || "";
 </script>
 
 <style>
-  .eventi-server-shell { min-height: 100svh; padding: 0.75rem; background: #fbfaf9; }
-  .eventi-server-shell__frame { position: relative; display: grid; min-height: calc(100svh - 1.5rem); overflow: hidden; border-radius: 1.75rem; background: #17394a; color: white; isolation: isolate; }
+  /* Out of the page flow: the interactive page renders underneath, so taking
+     the shell away does not move it (QA PUB-N1, CLS ~1 without a token). */
+  .eventi-server-shell { position: fixed; inset: 0; z-index: 50; overflow: hidden; padding: 0.75rem; background: #fbfaf9; }
+  .eventi-server-shell__frame { position: relative; display: grid; height: 100%; min-height: calc(100svh - 1.5rem); overflow: hidden; border-radius: 1.75rem; background: #17394a; color: white; isolation: isolate; }
   .eventi-server-shell__cover { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
   .eventi-server-shell__cover--fallback { background: radial-gradient(circle at 20% 15%, #d74b96, transparent 45%), linear-gradient(135deg, #102f3f, #274f61); }
   .eventi-server-shell__veil { position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgb(0 0 0 / 12%), rgb(0 0 0 / 64%)); }

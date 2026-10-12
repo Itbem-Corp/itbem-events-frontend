@@ -569,14 +569,15 @@ export default function EventPage({
 
   // The Astro SSR shell is intentionally limited to non-private invitation
   // metadata. Once the interactive renderer has its authoritative PageSpec,
-  // replace it without leaving two invitation views in the DOM.
+  // replace it without leaving two invitation views in the DOM. The shell is
+  // an overlay, so it also goes away on a final error, or it would hide it.
   useEffect(() => {
-    if (!spec || typeof window === "undefined") return;
+    if ((!spec && !error) || typeof window === "undefined") return;
     const frame = window.requestAnimationFrame(() => {
       window.dispatchEvent(new CustomEvent("eventi:public-page-ready"));
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [spec]);
+  }, [spec, error]);
 
   // Studio waits for this before showing its preview frame. Sent once per
   // load, also for a final error state, so Studio never waits forever.

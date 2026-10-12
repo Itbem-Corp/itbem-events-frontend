@@ -147,7 +147,6 @@ export default function RSVPConfirmation({
   const [dietary, setDietary] = useState<string>("none");
   const [dietaryOther, setDietaryOther] = useState<string>("");
   const [guestNote, setGuestNote] = useState<string>("");
-  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [showCard, setShowCard] = useState(false);
@@ -175,6 +174,12 @@ export default function RSVPConfirmation({
       publicAccess?.invitationToken,
       publicAccess?.previewToken,
     ],
+  );
+
+  // Known on the first render, so a visitor without a personal link never
+  // sees the form skeleton flash before the hint (QA PUB-N1).
+  const [token, setToken] = useState<string | null>(
+    () => accessParams.invitationToken,
   );
 
   const rsvpAvailability = readRsvpAvailability(invData, config);
