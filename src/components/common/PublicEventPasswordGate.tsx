@@ -7,8 +7,10 @@ import {
   LockKeyhole,
   ShieldCheck,
 } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { SubmitEvent } from "react";
+import { formatRetryWait } from "../../lib/apiError";
+import { remainingLockSeconds } from "../../lib/passwordVerify";
 import { cn } from "../../lib/utils";
 
 interface PublicEventPasswordGateProps {
@@ -19,7 +21,9 @@ interface PublicEventPasswordGateProps {
   passwordPlaceholder?: string;
   submitLabel?: string;
   standalone?: boolean;
-  onVerify: (password: string) => Promise<{ ok: boolean; message?: string }>;
+  onVerify: (
+    password: string,
+  ) => Promise<{ ok: boolean; message?: string; retryAfterSeconds?: number }>;
 }
 
 export default function PublicEventPasswordGate({
@@ -36,6 +40,9 @@ export default function PublicEventPasswordGate({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
+  // 429 too_many_attempts: submit stays disabled until Retry-After passes.
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [lockSeconds, setLockSeconds] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const submittingRef = useRef(false);
   const titleId = useId();
@@ -43,11 +50,27 @@ export default function PublicEventPasswordGate({
   const errorId = useId();
   const inputId = useId();
   const RootElement = standalone ? "main" : "section";
+  const locked = lockSeconds > 0;
+
+  useEffect(() => {
+    if (lockedUntil === null) return;
+    const tick = () => {
+      const remaining = remainingLockSeconds(lockedUntil);
+      setLockSeconds(remaining);
+      if (remaining <= 0) {
+        setLockedUntil(null);
+        setError("");
+      }
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [lockedUntil]);
 
   const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const value = password.trim();
-    if (!value || submittingRef.current) return;
+    if (!value || submittingRef.current || locked) return;
 
     submittingRef.current = true;
     setError("");
@@ -58,6 +81,10 @@ export default function PublicEventPasswordGate({
       const result = await onVerify(value);
       if (!result.ok) {
         setError(result.message || "No pudimos verificar la contraseña.");
+        if (result.retryAfterSeconds && result.retryAfterSeconds > 0) {
+          setLockSeconds(Math.ceil(result.retryAfterSeconds));
+          setLockedUntil(Date.now() + result.retryAfterSeconds * 1000);
+        }
         shouldRestoreFocus = true;
       }
     } catch {
@@ -146,7 +173,7 @@ export default function PublicEventPasswordGate({
               value={password}
               onChange={(event) => {
                 setPassword(event.target.value);
-                if (error) setError("");
+                if (error && !locked) setError("");
               }}
               placeholder={passwordPlaceholder}
               autoComplete="current-password"
@@ -184,12 +211,20 @@ export default function PublicEventPasswordGate({
                 {error}
               </p>
             )}
+            {locked && (
+              <p
+                aria-live="polite"
+                className="mt-1 text-xs leading-5 text-[#607783]"
+              >
+                Podrás intentarlo de nuevo en {formatRetryWait(lockSeconds)}.
+              </p>
+            )}
           </div>
         </div>
 
         <button
           type="submit"
-          disabled={loading || !password.trim()}
+          disabled={loading || locked || !password.trim()}
           className="mt-1 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#102f3f] to-[#17455b] px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_30px_-18px_rgba(16,47,63,0.85)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_34px_-18px_rgba(16,47,63,0.8)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#dd2284]/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none motion-reduce:transform-none motion-reduce:transition-none"
         >
           {loading ? (

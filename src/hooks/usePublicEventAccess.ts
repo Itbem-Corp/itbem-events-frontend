@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { buildEventVerifyAccessUrl } from "../lib/apiUrls";
 import { fetchApiResult } from "../lib/apiFetch";
-import { getPublicApiErrorMessage } from "../lib/apiError";
+import { passwordVerifyFailure } from "../lib/passwordVerify";
 import {
   readStoredEventAccessToken,
   removeStoredEventAccessToken,
@@ -27,6 +27,8 @@ interface UsePublicEventAccessOptions {
 interface VerifyResult {
   ok: boolean;
   message?: string;
+  /** Set on 429 `too_many_attempts`: keep submit disabled this long. */
+  retryAfterSeconds?: number;
 }
 
 interface PublicEventAccessState {
@@ -247,14 +249,7 @@ export function usePublicEventAccess({
           "Contrasena incorrecta. Intenta de nuevo.",
         );
         if (!result.ok) {
-          return {
-            ok: false,
-            message: getPublicApiErrorMessage(
-              result,
-              "password",
-              "Contraseña incorrecta. Intenta de nuevo.",
-            ),
-          };
+          return passwordVerifyFailure(result);
         }
 
         const access = normalizeEventAccessVerification(result.data);

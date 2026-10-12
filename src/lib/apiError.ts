@@ -177,13 +177,23 @@ function extractStatusAndPayload(error: unknown): {
   return { status: null, payload: null };
 }
 
-/** Reads a machine-readable error code (e.g. `rsvp_closed`) from a payload. */
+const CODE_LIKE = /^[a-z][a-z0-9_]*_[a-z0-9_]+$/;
+
+/**
+ * Reads a machine-readable error code (e.g. `rsvp_closed`) from a payload.
+ * The backend puts it in `code`, or (older handlers) in `error` as a
+ * snake_case token such as `event_gone` or `rsvp_text_too_long`.
+ */
 export function readApiErrorCode(payload: unknown): string | null {
   if (!isRecord(payload)) return null;
   const direct = stringOrNull(
     firstValue(payload, ["code", "Code", "error_code", "errorCode", "ErrorCode"]),
   );
   if (direct) return direct.trim().toLowerCase();
+  const errorToken = stringOrNull(firstValue(payload, ["error", "Error"]))
+    ?.trim()
+    .toLowerCase();
+  if (errorToken && CODE_LIKE.test(errorToken)) return errorToken;
   const data = payload.data ?? payload.Data;
   if (isRecord(data)) {
     const nested = stringOrNull(
@@ -215,6 +225,36 @@ export function isRsvpClosedError(error: unknown): boolean {
   return /rsvp[_ ](is )?closed/.test(text);
 }
 
+export const EVENT_GONE_MESSAGE = "Este evento ya no está disponible";
+export const EVENT_PASSWORD_REQUIRED_MESSAGE =
+  "Esta invitación está protegida con contraseña. Ingrésala para continuar.";
+
+/** True for 401 `event_password_required` (ByToken and RSVP). */
+export function isEventPasswordRequiredError(error: unknown): boolean {
+  const { payload } = extractStatusAndPayload(error);
+  return readApiErrorCode(payload) === "event_password_required";
+}
+
+/** True for 410 `event_gone` (the event was deleted). */
+export function isEventGoneError(error: unknown): boolean {
+  const { status, payload } = extractStatusAndPayload(error);
+  return status === 410 || readApiErrorCode(payload) === "event_gone";
+}
+
+/** "45 segundos", "1 minuto", "15 minutos". */
+export function formatRetryWait(seconds: number): string {
+  const safe = Math.max(1, Math.ceil(seconds));
+  if (safe < 60) return safe === 1 ? "1 segundo" : `${safe} segundos`;
+  const minutes = Math.ceil(safe / 60);
+  return minutes === 1 ? "1 minuto" : `${minutes} minutos`;
+}
+
+export function tooManyPasswordAttemptsMessage(retryAfterSeconds?: number): string {
+  return retryAfterSeconds && retryAfterSeconds > 0
+    ? `Hiciste demasiados intentos con la contraseña. Espera ${formatRetryWait(retryAfterSeconds)} e inténtalo de nuevo.`
+    : "Hiciste demasiados intentos con la contraseña. Espera unos minutos e inténtalo de nuevo.";
+}
+
 function isNetworkFailure(error: unknown): boolean {
   if (error instanceof TypeError) return true;
   if (!(error instanceof Error)) return false;
@@ -233,11 +273,31 @@ export function getPublicApiErrorMessage(
   const text = `${code ?? ""} ${payloadText(payload)}`;
 
   if (isRsvpClosedError(error)) return RSVP_CLOSED_MESSAGE;
+  if (isEventGoneError(error)) return EVENT_GONE_MESSAGE;
+  if (code === "event_password_required") return EVENT_PASSWORD_REQUIRED_MESSAGE;
 
-  if (status === 429) {
+  if (status === 429 || code === "too_many_attempts") {
+    const retryAfter =
+      isRecord(error) && typeof error.retryAfterSeconds === "number"
+        ? error.retryAfterSeconds
+        : undefined;
     return context === "password"
-      ? "Hiciste demasiados intentos con la contraseña. Espera unos minutos e inténtalo de nuevo."
+      ? tooManyPasswordAttemptsMessage(retryAfter)
       : "Hiciste demasiados intentos. Espera un momento e inténtalo de nuevo.";
+  }
+
+  if (code === "rsvp_text_too_long") {
+    // The backend message is already Spanish: "El campo «…» admite máximo N caracteres."
+    const message = stringOrNull(
+      isRecord(payload) ? firstValue(payload, ["message", "Message"]) : null,
+    );
+    return message && /admite|caracteres/i.test(message)
+      ? message
+      : "Uno de los textos es demasiado largo. Acórtalo e inténtalo de nuevo.";
+  }
+
+  if (code === "rsvp_save_failed") {
+    return "No pudimos guardar tu respuesta. Inténtalo de nuevo en unos minutos.";
   }
 
   if (/exceeds allowed max|guest count/.test(text)) {
