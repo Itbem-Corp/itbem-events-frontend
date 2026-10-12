@@ -822,7 +822,11 @@ export default function RSVPConfirmation({
         </>
       )}
 
-      <ToastList toasts={toasts} onRemove={removeToast} />
+      <ToastList
+        toasts={toasts}
+        onRemove={removeToast}
+        placement="bottom-mobile"
+      />
     </section>
   );
 }
