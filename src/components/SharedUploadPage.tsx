@@ -34,6 +34,8 @@ import {
 } from "../lib/sharedUploadIdentifier";
 import {
   getSharedUploadGate,
+  resolveForbiddenUploadOutcome,
+  type SharedUploadStatusSnapshot,
   isSharedUploadOpen,
 } from "../lib/sharedUploadAccess";
 import { buildEventMomentsUrl } from "../lib/apiUrls";
@@ -391,8 +393,8 @@ export default function SharedUploadPage({
   }, []);
 
   const checkQuota = useCallback(
-    async (id: string) => {
-      if (!id) return;
+    async (id: string): Promise<SharedUploadStatusSnapshot | null> => {
+      if (!id) return null;
       quotaAbortControllerRef.current?.abort();
       const controller = new AbortController();
       quotaAbortControllerRef.current = controller;
@@ -426,9 +428,15 @@ export default function SharedUploadPage({
           if (typeof data.event_name === "string")
             setWallEventName(data.event_name);
         }
+        return {
+          uploadsNotEnabled: !shareEnabled,
+          wallPublished: wallIsPublished,
+          uploadsRemaining: quota.remaining,
+        };
       } catch (error) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) return null;
         setUploadStatusError(classifyUploadStatusError(error));
+        return null;
       } finally {
         if (quotaAbortControllerRef.current === controller) {
           quotaAbortControllerRef.current = null;
@@ -818,8 +826,25 @@ export default function SharedUploadPage({
       );
     }
     if (result.uploadsDisabled) {
-      setUploadsNotEnabled(true);
+      // PUB-5: a 403 does not always mean "uploads not enabled yet". Ask the
+      // server why (wall just published, limit reached, uploads turned off)
+      // and acknowledge any file that already made it.
+      const status = identifier ? await checkQuota(identifier) : null;
+      if (!mountedRef.current) return;
+      // Read after the await so the engine's last file updates are applied.
+      const doneAfterForbidden = filesRef.current.filter(
+        (entry) => entry.status === "done",
+      ).length;
       setUploading(false);
+      const outcome = resolveForbiddenUploadOutcome(doneAfterForbidden, status);
+      if (outcome === "acknowledge-uploaded") {
+        setUploadedCount(doneAfterForbidden);
+        setAllDone(true);
+      } else if (outcome === "retry") {
+        setError(
+          "No pudimos subir tus archivos en este momento. Intenta de nuevo.",
+        );
+      }
       return;
     }
 

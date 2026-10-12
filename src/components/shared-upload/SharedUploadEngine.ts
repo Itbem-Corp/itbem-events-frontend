@@ -73,6 +73,29 @@ export function normalizeConnectionAbortedEntries(
   );
 }
 
+export const SHARED_UPLOAD_FORBIDDEN_ENTRY_MESSAGE =
+  "No se pudo subir este archivo.";
+
+/**
+ * After a 403 the remaining entries were never uploaded; never leave them
+ * spinning in "uploading" (PUB-5).
+ */
+export function releaseForbiddenEntries(
+  entries: SharedUploadFileEntry[],
+): SharedUploadFileEntry[] {
+  return entries.map((entry) =>
+    entry.status === "uploading"
+      ? {
+          ...entry,
+          status: "error" as const,
+          errorMsg: SHARED_UPLOAD_FORBIDDEN_ENTRY_MESSAGE,
+          progress: undefined,
+          subtitle: undefined,
+        }
+      : entry,
+  );
+}
+
 export function collectConnectionAbortedEntryIds(
   ...groups: ReadonlyArray<Iterable<string>>
 ): Set<string> {
@@ -1102,6 +1125,7 @@ export async function uploadSharedFiles({
   });
   await runPool(uploadTasks, getAdaptivePoolSize());
   progressBatcher.cancel();
+  if (uploadsDisabled) updateFiles(releaseForbiddenEntries);
 
   return {
     abortedEarly: false,
