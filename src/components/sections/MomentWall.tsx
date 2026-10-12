@@ -67,6 +67,7 @@ import {
 } from "../../lib/uploadFilePolicy";
 import { uploadToPresignedUrl } from "../../lib/presignedUpload";
 import { retryUploadApiOnce } from "../../lib/uploadRetry";
+import { uploadFailureMessage } from "../../lib/uploadErrorMessage";
 import {
   getPublicMomentsRefreshDelay,
   mergePublicMomentsById,
@@ -290,12 +291,22 @@ export function UploadFilePicker({
   inputRef,
   inputId,
   disabled,
+  fileName: controlledFileName,
+  onFileNameChange,
 }: {
   inputRef?: RefObject<HTMLInputElement | null>;
   inputId: string;
   disabled: boolean;
+  /** Controlled name, so the wall can clear it after an upload or on close. */
+  fileName?: string;
+  onFileNameChange?: (name: string) => void;
 }) {
-  const [fileName, setFileName] = useState("");
+  const [ownFileName, setOwnFileName] = useState("");
+  const fileName = controlledFileName ?? ownFileName;
+  const setFileName = (name: string) => {
+    setOwnFileName(name);
+    onFileNameChange?.(name);
+  };
 
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -522,6 +533,8 @@ export default function MomentWall({
   }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Name of the file chosen in the personal upload dialog (styled picker).
+  const [selectedUploadName, setSelectedUploadName] = useState("");
 
   useEffect(() => {
     const accessParams = resolvePublicAccessParams(
@@ -1043,6 +1056,7 @@ export default function MomentWall({
       setUploadSuccessMessage(uploadOutcome.message);
       setShowUpload(false);
       form.reset();
+      setSelectedUploadName("");
       // Store a local stub only when the backend says the moment is approved
       // but still waiting for media processing.
       if (identifier && shouldShowProcessingStub(uploadedMoment)) {
@@ -1060,9 +1074,8 @@ export default function MomentWall({
         return;
       }
       if (isApiFetchError(err)) applyPersonalUploadQuota(err.payload);
-      setUploadError(
-        err instanceof Error ? err.message : "Error al subir el archivo",
-      );
+      // Backend confirm/prepare text is English (PUB-94); show Spanish.
+      setUploadError(uploadFailureMessage(err));
     } finally {
       if (uploadAbortControllerRef.current === uploadController) {
         uploadAbortControllerRef.current = null;
@@ -1155,6 +1168,7 @@ export default function MomentWall({
               type="button"
               onClick={(event) => {
                 uploadOpenerRef.current = event.currentTarget;
+                setSelectedUploadName("");
                 setShowUpload(true);
               }}
               className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium transition-opacity hover:opacity-90"
@@ -1429,6 +1443,8 @@ export default function MomentWall({
                     inputRef={fileInputRef}
                     inputId={uploadFileId}
                     disabled={uploading}
+                    fileName={selectedUploadName}
+                    onFileNameChange={setSelectedUploadName}
                   />
                   {maxUploadsPerGuest && (
                     <p className="mt-2 text-xs" style={themedMutedStyle}>

@@ -25,6 +25,10 @@ import {
 } from "../../lib/presignedUpload";
 import { retryUploadApiOnce } from "../../lib/uploadRetry";
 import {
+  UPLOAD_CONNECTION_MESSAGE,
+  uploadFailureMessage,
+} from "../../lib/uploadErrorMessage";
+import {
   isVideoUploadFile,
   uploadFileExtension,
 } from "../../lib/uploadFilePolicy";
@@ -53,8 +57,17 @@ export interface SharedUploadFileEntry {
   subtitle?: string;
 }
 
-export const SHARED_UPLOAD_CONNECTION_ERROR_MESSAGE =
-  "No se pudo conectar al servidor. Verifica tu conexión a internet.";
+export const SHARED_UPLOAD_CONNECTION_ERROR_MESSAGE = UPLOAD_CONNECTION_MESSAGE;
+
+/** Confirm retries: 3 tries, 1 s then 2 s apart, given up after 12 s. */
+export const CONFIRM_MAX_ATTEMPTS = 3;
+export const CONFIRM_RETRY_BASE_DELAY_MS = 1000;
+export const CONFIRM_RETRY_DEADLINE_MS = 12_000;
+
+/** Shown on the thumbnail while the confirm step is retried. */
+export function confirmRetrySubtitle(nextAttempt: number, maxAttempts: number): string {
+  return `Reintentando… (${nextAttempt} de ${maxAttempts})`;
+}
 
 export function normalizeConnectionAbortedEntries(
   entries: SharedUploadFileEntry[],
@@ -348,12 +361,24 @@ export async function convertSharedUploadHeic(
 const yieldToBrowser = () =>
   new Promise<void>((resolve) => window.setTimeout(resolve, 0));
 
+export interface WithRetryOptions {
+  /** Called before each retry with the attempt about to run (2, 3, …). */
+  onRetry?: (nextAttempt: number, maxAttempts: number) => void;
+  /**
+   * Stop retrying once this many milliseconds have passed since the first
+   * attempt, so a struggling backend cannot hold the guest at 95 % for long.
+   */
+  deadlineMs?: number;
+}
+
 export async function withRetry<T>(
   operation: () => Promise<T>,
   maxAttempts = 3,
   baseDelayMs = 1000,
+  { onRetry, deadlineMs }: WithRetryOptions = {},
 ): Promise<T> {
   let lastError: unknown;
+  const startedAt = Date.now();
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       return await operation();
@@ -370,10 +395,17 @@ export async function withRetry<T>(
       if (error instanceof Error && /\(4\d\d\)/.test(error.message)) {
         throw error;
       }
-      if (attempt < maxAttempts && baseDelayMs > 0) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, baseDelayMs * 2 ** (attempt - 1)),
-        );
+      if (attempt >= maxAttempts) break;
+      const delayMs = baseDelayMs > 0 ? baseDelayMs * 2 ** (attempt - 1) : 0;
+      if (
+        deadlineMs !== undefined &&
+        Date.now() - startedAt + delayMs >= deadlineMs
+      ) {
+        break;
+      }
+      onRetry?.(attempt + 1, maxAttempts);
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     }
   }
@@ -694,8 +726,10 @@ export async function uploadSharedFiles({
                     if (!responseEtag) {
                       rejectRequest(
                         Object.assign(
+                          // The bucket CORS does not expose ETag: an operator
+                          // problem, so guests get plain Spanish copy.
                           new Error(
-                            `Part ${partNumber}: S3 no devolvió ETag (configura ExposeHeaders en CORS del bucket)`,
+                            "No pudimos completar la subida de este archivo. Inténtalo de nuevo más tarde.",
                           ),
                           { permanent: true },
                         ),
@@ -793,7 +827,12 @@ export async function uploadSharedFiles({
       updateFiles((previous) =>
         previous.map((candidate) =>
           candidate.id === entry.id
-            ? { ...candidate, status: "done" as const, progress: 100 }
+            ? {
+                ...candidate,
+                status: "done" as const,
+                progress: 100,
+                subtitle: undefined,
+              }
             : candidate,
         ),
       );
@@ -937,7 +976,8 @@ export async function uploadSharedFiles({
             : candidate,
         ),
       );
-      const confirmResponse = await withRetry(() =>
+      const confirmResponse = await withRetry(
+        () =>
         fetchUploadApiData<unknown>(
           buildSharedMomentConfirmUrl(
             eventsUrl,
@@ -961,6 +1001,22 @@ export async function uploadSharedFiles({
           },
           "Error confirmando subida",
         ),
+        CONFIRM_MAX_ATTEMPTS,
+        CONFIRM_RETRY_BASE_DELAY_MS,
+        {
+          deadlineMs: CONFIRM_RETRY_DEADLINE_MS,
+          onRetry: (nextAttempt, maxAttempts) =>
+            updateFiles((previous) =>
+              previous.map((candidate) =>
+                candidate.id === entry.id
+                  ? {
+                      ...candidate,
+                      subtitle: confirmRetrySubtitle(nextAttempt, maxAttempts),
+                    }
+                  : candidate,
+              ),
+            ),
+        },
       );
       onPublicationResponse(confirmResponse);
       updateFiles((previous) =>
@@ -976,16 +1032,17 @@ export async function uploadSharedFiles({
       progressBatcher.delete(entry.id);
       if ((error as { silent?: boolean }).silent) return;
       let message: string;
-      if (error instanceof Error && error.name === "AbortError") {
-        message = "La subida tardó demasiado. Revisa tu conexión.";
-      } else if (error instanceof TypeError) {
+      if (error instanceof TypeError) {
         message = SHARED_UPLOAD_CONNECTION_ERROR_MESSAGE;
         connectionError = true;
         abortActiveRequestsForConnection();
-      } else if (error instanceof Error) {
-        message = error.message;
       } else {
-        message = "Ocurrió un error inesperado. Intenta de nuevo.";
+        // Backend confirm/prepare failures arrive in English; guests only
+        // see Spanish (PUB-93, STU-57).
+        message = uploadFailureMessage(
+          error,
+          "Ocurrió un error inesperado. Intenta de nuevo.",
+        );
       }
       updateFiles((previous) =>
         previous.map((candidate) =>
@@ -994,6 +1051,7 @@ export async function uploadSharedFiles({
                 ...candidate,
                 status: "error" as const,
                 errorMsg: message,
+                subtitle: undefined,
               }
             : candidate,
         ),

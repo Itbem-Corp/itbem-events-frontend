@@ -200,7 +200,7 @@ function UploadMediaPreviewCardComponent({
             className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 shadow-lg"
             title={errorMsg}
           >
-            {/* Not an "X": the remove button in the corner already uses one. */}
+            {/* Not an X: the corner button already means "quitar" (PUB-93). */}
             <AlertTriangle aria-hidden="true" className="h-5 w-5 text-white" />
           </div>
           <span className="sr-only">
