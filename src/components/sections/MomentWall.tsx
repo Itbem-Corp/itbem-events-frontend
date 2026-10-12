@@ -76,6 +76,7 @@ import {
   publicMomentPreviewUrl,
   publicMomentThumbnailUrl,
   publicMomentUploadOutcome,
+  boundedMediaRefreshDelay,
   shouldReplacePublicMomentsOnLiveRefresh,
   shouldShowProcessingStub,
   type PublicMoment as Moment,
@@ -305,6 +306,8 @@ export default function MomentWall({
   const lightboxOpenerRef = useRef<HTMLElement | null>(null);
   const touchStartX = useRef<number | null>(null);
   const lastMediaRefreshKeyRef = useRef<string | null>(null);
+  const lastMediaRefreshAtRef = useRef<number | null>(null);
+  const momentsRef = useRef<Moment[]>([]);
   const wallTotalRef = useRef<number | null>(null);
   const [loadError, setLoadError] = useState<PublicLoadFailure | null>(null);
   const [loadMoreError, setLoadMoreError] = useState(false);
@@ -459,26 +462,28 @@ export default function MomentWall({
         const items = data?.items ?? [];
         const previousTotal = wallTotalRef.current;
         const nextTotal = data.total;
-        setMoments((prev) =>
-          append
-            ? mergePublicMomentsById(prev, items)
-            : refreshFirstPage
-              ? shouldReplacePublicMomentsOnLiveRefresh(
-                  previousTotal,
-                  nextTotal,
-                  prev,
-                  items,
-                )
-                ? mergePublicMomentsById([], items)
-                : mergePublicMomentsById(prev, items, {
-                    prependIncoming: true,
-                  })
-              : mergePublicMomentsById([], items),
-        );
+        const prev = momentsRef.current;
+        const replacedOnRefresh =
+          refreshFirstPage &&
+          shouldReplacePublicMomentsOnLiveRefresh(
+            previousTotal,
+            nextTotal,
+            prev,
+            items,
+          );
+        const nextMoments = append
+          ? mergePublicMomentsById(prev, items)
+          : refreshFirstPage && !replacedOnRefresh
+            ? mergePublicMomentsById(prev, items, { prependIncoming: true })
+            : mergePublicMomentsById([], items);
+        momentsRef.current = nextMoments;
+        setMoments(nextMoments);
         if (typeof nextTotal === "number") wallTotalRef.current = nextTotal;
-        if (!refreshFirstPage) {
+        // A replaced list holds only the first page again: restart pagination
+        // there, or "load more" would skip everything in between (PUB-3).
+        if (!refreshFirstPage || replacedOnRefresh) {
           setHasMore(data?.has_more ?? false);
-          setPage(pageNum);
+          setPage(refreshFirstPage ? 1 : pageNum);
         }
       } catch (err: unknown) {
         if (append) {
@@ -494,6 +499,7 @@ export default function MomentWall({
                   : "No se pudieron cargar los momentos",
             }),
           );
+          momentsRef.current = [];
           setMoments([]);
           setHasMore(false);
         }
@@ -534,16 +540,27 @@ export default function MomentWall({
 
     const refreshMedia = () => {
       lastMediaRefreshKeyRef.current = mediaRefreshKey;
+      lastMediaRefreshAtRef.current = Date.now();
       void fetchMoments(1, false);
     };
 
-    if (mediaRefreshDelay <= 0) {
-      if (lastMediaRefreshKeyRef.current === mediaRefreshKey) return;
+    if (
+      mediaRefreshDelay <= 0 &&
+      lastMediaRefreshKeyRef.current === mediaRefreshKey
+    ) {
+      return;
+    }
+
+    const delay = boundedMediaRefreshDelay(
+      mediaRefreshDelay,
+      lastMediaRefreshAtRef.current,
+    );
+    if (delay <= 0) {
       refreshMedia();
       return;
     }
 
-    const timer = window.setTimeout(refreshMedia, mediaRefreshDelay);
+    const timer = window.setTimeout(refreshMedia, delay);
     return () => window.clearTimeout(timer);
   }, [
     fetchMoments,
