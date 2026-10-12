@@ -100,7 +100,7 @@ export default function SectionRenderer({ spec, EVENTS_URL, publicAccess }: Prop
     return (
       <div
         ref={sentinelRef}
-        className="eventi-skeleton h-64 w-full rounded-[2rem]"
+        className={`eventi-skeleton w-full rounded-[2rem] ${entry.placeholderClassName ?? 'h-64'}`}
         data-section-type={spec.type}
         aria-hidden="true"
       />

@@ -106,3 +106,15 @@ describe("SECTION_REGISTRY", () => {
     }
   });
 });
+
+describe("section placeholders reserve the hydrated height (QA PUB-109)", () => {
+  it("sizes the above-the-fold placeholders instead of the generic card", async () => {
+    const { resolveSectionRegistryEntry } = await import(
+      "../../src/components/engine/registry"
+    );
+    expect(resolveSectionRegistryEntry("RSVPConfirmation")?.placeholderClassName).toMatch(/h-\[/);
+    expect(resolveSectionRegistryEntry("CountdownHeader")?.placeholderClassName).toMatch(/h-\[/);
+    expect(resolveSectionRegistryEntry("MUSIC")?.placeholderClassName).toBe("h-0");
+    expect(resolveSectionRegistryEntry("TEXT")?.placeholderClassName).toBeUndefined();
+  });
+});

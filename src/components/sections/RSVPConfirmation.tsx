@@ -82,13 +82,13 @@ const themedHeadingStyle: CSSProperties = {
 
 const themedBodyStyle: CSSProperties = {
   color: "var(--eventi-color-body, #07293A)",
-  fontFamily: "var(--eventi-font-body-effective, Aloevera Display, sans-serif)",
+  fontFamily: "var(--eventi-font-body-effective, Aloevera, sans-serif)",
 };
 
 const themedAccentTextStyle: CSSProperties = {
   color: "var(--eventi-color-accent, #8B5D3D)",
   fontFamily:
-    "var(--eventi-font-accent-effective, Aloevera Display, sans-serif)",
+    "var(--eventi-font-accent-effective, Aloevera, sans-serif)",
 };
 
 const themedPanelStyle: CSSProperties = {
@@ -112,14 +112,14 @@ const themedSelectedButtonStyle: CSSProperties = {
   backgroundColor: "var(--eventi-color-accent, #C7A44C)",
   borderColor: "var(--eventi-color-border, #C7A44C)",
   fontFamily:
-    "var(--eventi-font-accent-effective, Aloevera Display, sans-serif)",
+    "var(--eventi-font-accent-effective, Aloevera, sans-serif)",
 };
 
 const themedUnselectedButtonStyle: CSSProperties = {
   color: "var(--eventi-color-body, #07293A)",
   backgroundColor: "var(--eventi-color-surface, #ffffff)",
   borderColor: "var(--eventi-color-border, #C7A44C)",
-  fontFamily: "var(--eventi-font-body-effective, Aloevera Display, sans-serif)",
+  fontFamily: "var(--eventi-font-body-effective, Aloevera, sans-serif)",
 };
 
 const themedPrimaryButtonStyle: CSSProperties = {
@@ -473,10 +473,22 @@ export default function RSVPConfirmation({
         </p>
       )}
 
-      {!passwordRequired && !invError && token && !invData && (
-        <p className="font-aloevera" style={themedBodyStyle}>
-          Cargando...
-        </p>
+      {/* Reserve the form's height while the invitation loads so the
+          sections below do not jump when it arrives (QA PUB-109). */}
+      {!passwordRequired && !invError && !invData && (
+        <div
+          role="status"
+          className="mx-auto flex min-h-[25.25rem] max-w-md flex-col items-center gap-5 px-2 sm:min-h-[23.5rem]"
+          data-testid="rsvp-loading"
+        >
+          <span className="sr-only">Cargando tu invitación…</span>
+          <div aria-hidden="true" className="eventi-skeleton h-8 w-3/4 rounded-full" />
+          <div aria-hidden="true" className="eventi-skeleton h-6 w-1/3 rounded-full" />
+          <div aria-hidden="true" className="eventi-skeleton h-14 w-2/3 rounded-full" />
+          <div aria-hidden="true" className="eventi-skeleton h-12 w-full rounded-xl" />
+          <div aria-hidden="true" className="eventi-skeleton h-12 w-full rounded-xl" />
+          <div aria-hidden="true" className="eventi-skeleton h-14 w-32 rounded-full" />
+        </div>
       )}
 
       {invData && !invError && !passwordRequired && (
