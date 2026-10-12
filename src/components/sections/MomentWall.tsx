@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
+  ImageOff,
   LoaderCircle,
   Upload,
   X,
@@ -245,6 +246,7 @@ function VideoMomentCard({
     <button
       type="button"
       onClick={onClick}
+      aria-label={momentCardLabel("Reproducir video", moment.description)}
       className="w-full break-inside-avoid block overflow-hidden rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-black relative group"
     >
       <div className="relative">
@@ -274,6 +276,69 @@ function VideoMomentCard({
           </div>
         </div>
       </div>
+    </button>
+  );
+}
+
+/** Wall thumbnails always carry a name, even before or without an image. */
+export function momentCardLabel(
+  action: string,
+  description: string | null | undefined,
+): string {
+  const text = description?.trim();
+  return text ? `${action}: ${text}` : action;
+}
+
+interface PhotoMomentCardProps {
+  src: string;
+  srcSet?: string;
+  description?: string | null;
+  position: number;
+  onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+}
+
+export function PhotoMomentCard({
+  src,
+  srcSet,
+  description,
+  position,
+  onClick,
+}: PhotoMomentCardProps) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={momentCardLabel(`Ver foto ${position}`, description)}
+      className="w-full break-inside-avoid block overflow-hidden rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-black relative group"
+    >
+      {failed ? (
+        // A broken image must not show the browser's broken-image icon.
+        <div
+          className="flex aspect-square w-full flex-col items-center justify-center gap-2 bg-black/5 text-xs"
+          style={{ color: "var(--eventi-color-muted, #607783)" }}
+        >
+          <ImageOff aria-hidden="true" className="size-6" />
+          <span>Imagen no disponible</span>
+        </div>
+      ) : (
+        <img
+          src={src}
+          srcSet={srcSet}
+          sizes="(max-width: 639px) 50vw, 33vw"
+          alt=""
+          className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          onError={() => setFailed(true)}
+        />
+      )}
     </button>
   );
 }
@@ -970,7 +1035,7 @@ export default function MomentWall({
     return (
       <PublicEventPasswordGate
         title="Momentos privados"
-        description="Ingresa la contrasena del evento para ver y compartir momentos."
+        description="Ingresa la contraseña del evento para ver y compartir momentos."
         className="min-h-[360px] bg-white"
         standalone={false}
         onVerify={eventAccess.verifyPassword}
@@ -1099,25 +1164,16 @@ export default function MomentWall({
                 );
               }
               return (
-                <button
+                <PhotoMomentCard
                   key={m.id}
-                  type="button"
+                  src={src}
+                  srcSet={publicMomentMediaSrcSet(m, (url) =>
+                    resolvePublicMediaUrl(url, EVENTS_URL),
+                  )}
+                  description={m.description}
+                  position={idx + 1}
                   onClick={(event) => openLightbox(m, idx, event.currentTarget)}
-                  className="w-full break-inside-avoid block overflow-hidden rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-black relative group"
-                >
-                  <img
-                    src={src}
-                    srcSet={publicMomentMediaSrcSet(m, (url) =>
-                      resolvePublicMediaUrl(url, EVENTS_URL),
-                    )}
-                    sizes="(max-width: 639px) 50vw, 33vw"
-                    alt={m.description || "Momento del evento"}
-                    className="w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
-                    decoding="async"
-                    draggable={false}
-                  />
-                </button>
+                />
               );
             })}
           </div>

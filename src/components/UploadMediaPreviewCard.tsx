@@ -2,7 +2,14 @@
 
 import { memo } from "react";
 import { motion } from "framer-motion";
-import { Camera, Check, LoaderCircle, Play, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Camera,
+  Check,
+  LoaderCircle,
+  Play,
+  X,
+} from "lucide-react";
 import type { UploadPreviewItem } from "./UploadPreviewDialog";
 
 export type UploadMediaStatus = "pending" | "uploading" | "done" | "error";
@@ -193,8 +200,12 @@ function UploadMediaPreviewCardComponent({
             className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 shadow-lg"
             title={errorMsg}
           >
-            <X aria-hidden="true" className="h-5 w-5 text-white" />
+            {/* Not an "X": the remove button in the corner already uses one. */}
+            <AlertTriangle aria-hidden="true" className="h-5 w-5 text-white" />
           </div>
+          <span className="sr-only">
+            {errorMsg ? `Error: ${errorMsg}` : "No se pudo subir este archivo"}
+          </span>
         </div>
       )}
 
