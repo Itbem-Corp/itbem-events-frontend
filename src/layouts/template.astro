@@ -72,6 +72,10 @@ const resolvedOgImage = resolvePageOgImage(ogImage, Astro.url);
         <!-- The SSR invitation shell needs these before the interactive page starts. -->
         <link rel="preload" href="/fonts/Bigilla.woff2" as="font" type="font/woff2" crossorigin>
         <link rel="preload" href="/fonts/Quicksand-VariableFont_wght.woff2" as="font" type="font/woff2" crossorigin>
+        <!-- RSVP heading/buttons and body copy: without these the first paint
+             uses a serif fallback and swaps (QA PUB-65). -->
+        <link rel="preload" href="/fonts/Astralaga%20SemiBold.woff2" as="font" type="font/woff2" crossorigin>
+        <link rel="preload" href="/fonts/Aloevera-Regular.woff2" as="font" type="font/woff2" crossorigin>
       </>
     )}
 

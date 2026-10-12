@@ -73,7 +73,7 @@ const headingStyle: CSSProperties = {
 
 const mutedStyle: CSSProperties = {
   color: "var(--eventi-color-muted, #8B5D3D)",
-  fontFamily: "var(--eventi-font-body-effective, Aloevera Display, sans-serif)",
+  fontFamily: "var(--eventi-font-body-effective, Aloevera, sans-serif)",
 };
 
 const dividerLineStyle: CSSProperties = {
