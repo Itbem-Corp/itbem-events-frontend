@@ -115,8 +115,8 @@ export function buildPublicEventOgMeta(
   eventsUrl?: string,
 ): PublicOgMeta {
   const fallback: PublicOgMeta = {
-    title: "Estas invitado",
-    description: "Abre tu invitacion y descubre todos los detalles del evento.",
+    title: "Estás invitado",
+    description: "Abre tu invitación y descubre todos los detalles del evento.",
     image: "",
   };
 
@@ -144,7 +144,7 @@ export function buildRsvpOgMeta(
   const fallback: PublicOgMeta = {
     title: "Confirma tu asistencia",
     description:
-      "Te esperamos. Confirma en un tap y no te pierdas ningun detalle.",
+      "Te esperamos. Confirma en un tap y no te pierdas ningún detalle.",
     image: "",
   };
 
@@ -176,7 +176,7 @@ export function buildMomentsOgMeta(
   const title = `Momentos - ${eventName}`;
   return {
     title,
-    description: `Galeria de fotos y videos de ${eventName}. Revive los mejores momentos.`,
+    description: `Galería de fotos y videos de ${eventName}. Revive los mejores momentos.`,
     image: buildEventOgImage(event, title, eventsUrl),
   };
 }
@@ -611,4 +611,37 @@ export async function fetchEventOgData(
   } catch {
     return null;
   }
+}
+
+/** Branded 1200x630 image served from `public/` for pages without a cover. */
+export const DEFAULT_OG_IMAGE_PATH = "/og-default.png";
+
+export interface ResolvedOgImage {
+  url: string;
+  /** True when the image is a 1200x630 PNG we generate (default or /api/og). */
+  isBrandedPng: boolean;
+}
+
+/**
+ * Every shareable page gets an og:image: the event image when the page built
+ * one, otherwise the branded default resolved against the request origin.
+ */
+export function resolvePageOgImage(
+  ogImage: string | null | undefined,
+  pageUrl: URL | string,
+): ResolvedOgImage {
+  const explicit = ogImage?.trim() ?? "";
+  if (explicit) {
+    let isBrandedPng = false;
+    try {
+      isBrandedPng = new URL(explicit).pathname === "/api/og";
+    } catch {
+      isBrandedPng = false;
+    }
+    return { url: explicit, isBrandedPng };
+  }
+  return {
+    url: new URL(DEFAULT_OG_IMAGE_PATH, pageUrl).toString(),
+    isBrandedPng: true,
+  };
 }

@@ -4,6 +4,7 @@ import "../styles/fonts.css";
 import { eventsUrlOrigin } from "../lib/eventsUrl";
 import { sanitizePublicShareUrl } from "../lib/publicShareUrl";
 import { PUBLIC_PRODUCT } from "../config/public-product";
+import { resolvePageOgImage } from "../lib/og";
 
 interface Props {
   title: string;
@@ -48,6 +49,8 @@ const ogLocale = ogLocaleForLanguage(htmlLanguage);
 // query string. Open Graph metadata is public/shareable, so it must never echo
 // those credentials even when an individual page passes Astro.url.href.
 const publicOgUrl = ogUrl ? sanitizePublicShareUrl(ogUrl) : '';
+// Pages without an event image still share a branded card (QA PUB-100).
+const resolvedOgImage = resolvePageOgImage(ogImage, Astro.url);
 ---
 
 <!DOCTYPE html>
@@ -93,17 +96,17 @@ const publicOgUrl = ogUrl ? sanitizePublicShareUrl(ogUrl) : '';
     <meta property="og:site_name" content={PUBLIC_PRODUCT.branding.name} />
     <meta property="og:locale" content={ogLocale} />
     {publicOgUrl && <meta property="og:url" content={publicOgUrl} />}
-    {ogImage && <meta property="og:image"          content={ogImage} />}
-    {ogImage && <meta property="og:image:alt"      content={ogTitle} />}
-    {ogImage && <meta property="og:image:width"    content="1200" />}
-    {ogImage && <meta property="og:image:height"   content="630" />}
-    {ogImage && <meta property="og:image:type"     content="image/png" />}
+    <meta property="og:image" content={resolvedOgImage.url} />
+    <meta property="og:image:alt" content={ogTitle} />
+    {resolvedOgImage.isBrandedPng && <meta property="og:image:width" content="1200" />}
+    {resolvedOgImage.isBrandedPng && <meta property="og:image:height" content="630" />}
+    {resolvedOgImage.isBrandedPng && <meta property="og:image:type" content="image/png" />}
 
     <!-- Twitter Card -->
-    <meta name="twitter:card"        content={ogImage ? 'summary_large_image' : 'summary'} />
+    <meta name="twitter:card"        content="summary_large_image" />
     <meta name="twitter:title"       content={ogTitle} />
     <meta name="twitter:description" content={ogDescription} />
-    {ogImage && <meta name="twitter:image" content={ogImage} />}
+    <meta name="twitter:image" content={resolvedOgImage.url} />
     <!-- Cloudflare Web Analytics is production-only; local development stays private and quiet. -->
     {cloudflareAnalyticsEnabled && (
       <script is:inline defer src="https://static.cloudflareinsights.com/beacon.min.js"
