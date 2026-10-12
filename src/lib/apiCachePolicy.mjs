@@ -3,21 +3,32 @@ const DEFAULT_EVENTS_URLS = [
   "http://localhost:8080/",
 ];
 
-const SENSITIVE_PUBLIC_ACCESS_QUERY_KEYS = [
-  "token",
-  "Token",
-  "pretty_token",
-  "prettyToken",
-  "PrettyToken",
-  "invitation_token",
-  "invitationToken",
-  "InvitationToken",
+// Mirror of CREDENTIAL_QUERY_KEYS (src/lib/publicRouteCredentials.ts):
+// PUBLIC_ACCESS_DISPLAY_QUERY_KEYS from publicAccessParams.ts plus the legacy
+// `access` alias. This module must stay import-free (the service worker loads
+// it as a classic script), so the list is inlined; a unit test asserts it
+// equals the middleware list, so a new alias cannot be missed here.
+export const SENSITIVE_PUBLIC_ACCESS_QUERY_KEYS = [
+  "preview",
+  "t",
   "preview_token",
   "previewToken",
   "PreviewToken",
+  "token",
+  "Token",
+  "invitation_token",
+  "invitationToken",
+  "InvitationToken",
+  "pretty_token",
+  "prettyToken",
+  "PrettyToken",
   "event_access_token",
   "eventAccessToken",
   "EventAccessToken",
+  "access_token",
+  "accessToken",
+  "AccessToken",
+  "access",
 ];
 
 const SENSITIVE_PUBLIC_ACCESS_HEADERS = ["x-event-access-token"];
@@ -99,11 +110,12 @@ function matchesApiBase(url, base) {
   return apiPathForBase(url, base).startsWith("/api/");
 }
 
+// Presence, not value, decides: the middleware answers `private, no-store`
+// for any of these keys, even an empty one, and the worker must agree.
 function hasSensitivePublicAccessQuery(url) {
-  return SENSITIVE_PUBLIC_ACCESS_QUERY_KEYS.some((key) => {
-    const value = url.searchParams.get(key);
-    return typeof value === "string" && value.trim() !== "";
-  });
+  return SENSITIVE_PUBLIC_ACCESS_QUERY_KEYS.some((key) =>
+    url.searchParams.has(key),
+  );
 }
 
 function hasSensitivePublicAccessPath(url, base) {
@@ -243,4 +255,28 @@ export function shouldUseS3ImageRuntimeCache(url) {
 
 export function createS3ImageRuntimeCacheMatcher() {
   return ({ url }) => shouldUseS3ImageRuntimeCache(url);
+}
+
+// The server's Cache-Control always wins over the worker's routes: a response
+// marked `no-store` or `private` (e.g. a page rendered for an access token) is
+// never written to Cache Storage, whatever the URL matcher decided. Opaque
+// responses expose no headers and are left to the route's own rules.
+export function serverAllowsWorkerCache(response) {
+  if (!response || typeof response !== "object") return false;
+  const headers = response.headers;
+  const cacheControl =
+    headers && typeof headers.get === "function"
+      ? String(headers.get("cache-control") ?? "")
+      : "";
+  return !/(?:^|[\s,])(?:no-store|private)(?:$|[\s,=])/i.test(cacheControl);
+}
+
+// Workbox plugin for every runtime cache that stores HTML or API data. The
+// callback is stringified into sw.js, so it may only call globals defined by
+// sw-cache-policy.js (this module).
+export function createServerCachePolicyPlugin() {
+  return {
+    cacheWillUpdate: async ({ response }) =>
+      serverAllowsWorkerCache(response) ? response : null,
+  };
 }

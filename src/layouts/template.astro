@@ -29,6 +29,9 @@ const {
 
 const apiOrigin = eventsUrlOrigin(import.meta.env.PUBLIC_EVENTS_URL as string | undefined);
 const cloudflareAnalyticsEnabled = import.meta.env.PROD;
+// The service worker (and /registerSW.js) only exist in production builds;
+// `astro dev` keeps it off to avoid stale caches while developing.
+const serviceWorkerEnabled = import.meta.env.PROD;
 
 function normalizeLanguage(value: string): string {
   const trimmed = value.trim().toLowerCase();
@@ -67,6 +70,8 @@ const resolvedOgImage = resolvePageOgImage(ogImage, Astro.url);
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content={PUBLIC_PRODUCT.branding.shortName} />
     <link rel="apple-touch-icon" href="/icons/pwa-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    {serviceWorkerEnabled && <script is:inline defer src="/registerSW.js"></script>}
     {preloadFonts === 'invitation' && (
       <>
         <!-- The SSR invitation shell needs these before the interactive page starts. -->
