@@ -83,6 +83,12 @@ export interface EventOgData {
   organizer_name?: string;
   event_type?: string;
   content_version?: string;
+  /**
+   * Stable cover for share cards: the API's /api/events/:identifier/cover-image
+   * route (302 to a fresh view URL), already resolved against the API origin.
+   * Absent when the event has no public cover.
+   */
+  og_image_url?: string;
 }
 
 export interface PublicOgMeta {
@@ -134,9 +140,15 @@ function isResolvedStorageKey(value: string, eventsUrl?: string): boolean {
  * the page falls back to the branded /og-default.png.
  */
 export function stableOgCoverUrl(
-  event: Pick<EventOgData, "cover_view_url" | "view_url" | "cover_image_url">,
+  event: Pick<
+    EventOgData,
+    "cover_view_url" | "view_url" | "cover_image_url" | "og_image_url"
+  >,
   eventsUrl?: string,
 ): string {
+  // The API's stable cover route wins whenever /meta sends it.
+  const ogImageUrl = event.og_image_url?.trim();
+  if (ogImageUrl) return ogImageUrl;
   const candidates = [event.cover_view_url, event.view_url, event.cover_image_url]
     .map((value) => value?.trim() ?? "")
     .filter(Boolean);
@@ -503,7 +515,44 @@ function readEventOgRecord(
       data.contentVersion,
       data.ContentVersion,
     ),
+    og_image_url: resolveApiOgImageUrl(
+      firstString(
+        event.og_image_url,
+        event.ogImageUrl,
+        event.ogImageURL,
+        event.OgImageURL,
+        event.OGImageURL,
+        data.og_image_url,
+        data.ogImageUrl,
+        data.ogImageURL,
+        data.OgImageURL,
+        data.OGImageURL,
+      ),
+      eventsUrl,
+    ),
   };
+}
+
+/**
+ * `og_image_url` from /meta is a path relative to the API origin
+ * (`/api/events/:identifier/cover-image`). Only http(s) results are kept.
+ */
+export function resolveApiOgImageUrl(
+  value: string | undefined,
+  eventsUrl?: string,
+): string | undefined {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  try {
+    const url = eventsUrl
+      ? new URL(raw, normalizeEventsUrl(eventsUrl))
+      : new URL(raw);
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function hasEventOgData(event: EventOgData): boolean {
