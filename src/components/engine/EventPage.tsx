@@ -12,7 +12,11 @@ import {
 } from "react";
 import { CalendarClock, PartyPopper } from "lucide-react";
 import SectionRenderer from "./SectionRenderer";
-import { isRsvpSectionType } from "./registry";
+import {
+  isRsvpSectionType,
+  resolveSectionRegistryEntry,
+  SECTION_REGISTRY,
+} from "./registry";
 import Footer from "../common/Footer";
 import PublicEventPasswordGate from "../common/PublicEventPasswordGate";
 import { PublicEventLoadError } from "../common/PublicEventLoadError";
@@ -33,7 +37,11 @@ import {
   buildIdentifierPageSpecUrl,
   buildTokenPageSpecUrl,
 } from "../../lib/pageSpecUrl";
-import { shouldRenderFooter } from "../../lib/pageChrome";
+import {
+  shouldRenderEventSummary,
+  shouldRenderFooter,
+} from "../../lib/pageChrome";
+import { formatPublicEventDate } from "../../lib/eventDate";
 import {
   publicAccessFetchInit,
   readPublicAccessParams,
@@ -834,6 +842,18 @@ export default function EventPage({
       />
     );
   }
+  const hasDateSection = sorted.some((section) => {
+    const entry = resolveSectionRegistryEntry(section.type);
+    return (
+      entry === SECTION_REGISTRY.CountdownHeader ||
+      entry === SECTION_REGISTRY.GraduationHero
+    );
+  });
+  const summaryDate = formatPublicEventDate(
+    spec.meta.eventDateTime ?? spec.meta.eventDate,
+    spec.meta.timezone,
+  );
+  const showEventSummary = shouldRenderEventSummary(spec.meta, hasDateSection);
   const themeStyle = buildPageThemeStyle(spec.meta.theme);
   const themeFontFaces = buildPageThemeFontFaces(spec.meta.theme, EVENTS_URL);
   const accessParams = readPublicAccessParams();
@@ -874,6 +894,34 @@ export default function EventPage({
       )}
 
       <main className="eventi-event-page mx-auto max-w-screen-md space-y-10 overflow-x-hidden break-words [overflow-wrap:anywhere] px-3 py-4 sm:space-y-16 sm:px-4 lg:max-w-[1024px]">
+        {showEventSummary && (
+          <header
+            className="pt-6 text-center"
+            data-testid="event-summary"
+          >
+            {spec.meta.pageTitle && (
+              <h1
+                className="text-balance text-3xl font-semibold sm:text-4xl"
+                style={{
+                  color: "var(--eventi-color-heading, #07293A)",
+                  fontFamily:
+                    "var(--eventi-font-heading-effective, 'Astralaga SemiBold', serif)",
+                }}
+              >
+                {spec.meta.pageTitle}
+              </h1>
+            )}
+            {summaryDate && (
+              <p
+                className="mt-2 text-base"
+                style={{ color: "var(--eventi-color-muted, #5f6f78)" }}
+              >
+                {summaryDate}
+              </p>
+            )}
+          </header>
+        )}
+
         {sorted.map((section) => (
           <SectionRenderer
             key={section.sectionId || `${section.type}-${section.order}`}

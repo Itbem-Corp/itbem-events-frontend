@@ -143,3 +143,40 @@ describe("resolvePublicLoadFailure: invalid links and deleted events", () => {
     }
   });
 });
+
+describe("final backend codes (wave 2 contract)", () => {
+  it("maps ByToken/RSVP codes to Spanish guest copy", async () => {
+    const { getPublicApiErrorMessage } = await import("../../src/lib/apiError");
+    const err = (status: number, code: string) => ({
+      status,
+      payload: { status, code, error: code, message: "x" },
+    });
+    expect(getPublicApiErrorMessage(err(401, "invitation_token_expired"), "rsvp")).toContain(
+      "Este enlace ya no es válido o expiró",
+    );
+    expect(getPublicApiErrorMessage(err(401, "invitation_token_invalid"), "invitation")).toContain(
+      "Este enlace ya no es válido o expiró",
+    );
+    expect(getPublicApiErrorMessage(err(403, "event_unavailable"), "rsvp")).toBe(
+      "Esta invitación no está disponible en este momento.",
+    );
+    expect(getPublicApiErrorMessage(err(410, "event_gone"), "invitation")).toBe(
+      "Este evento ya no está disponible",
+    );
+  });
+
+  it("keeps 'not published' for 403 event_not_public on page-spec", () => {
+    const failure = resolvePublicLoadFailure({ status: 403, code: "event_not_public", resource: "event" });
+    expect(failure.title).toBe("Este evento aún no está disponible");
+  });
+});
+
+describe("flags-off invitation summary (PUB-36)", async () => {
+  const { shouldRenderEventSummary } = await import("../../src/lib/pageChrome");
+  it("adds name and date only when the footer is hidden and no section shows the date", () => {
+    const meta = { pageTitle: "Boda", eventDateTime: "2026-10-22T20:00:00Z", footerVisible: false };
+    expect(shouldRenderEventSummary(meta, false)).toBe(true);
+    expect(shouldRenderEventSummary(meta, true)).toBe(false);
+    expect(shouldRenderEventSummary({ ...meta, footerVisible: true }, false)).toBe(false);
+  });
+});
