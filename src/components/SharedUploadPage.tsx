@@ -63,6 +63,8 @@ import {
   getUploadDisplayLimit,
   readUploadQuota,
   reconcileUploadQuotaRemaining,
+  sharedUploadLimitPhrase,
+  UPLOADS_CLOSED_COPY,
 } from "../lib/uploadQuota";
 import {
   UPLOAD_FILE_ACCEPT as FILE_ACCEPT,
@@ -1192,7 +1194,7 @@ export default function SharedUploadPage({
             transition={{ delay: 0.2 }}
             className={`mt-2 text-sm max-w-[280px] mx-auto leading-relaxed ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}
           >
-            Sube hasta {displayMaxFiles} fotos o videos para la galería del
+            {sharedUploadLimitPhrase(displayMaxFiles)} para la galería del
             evento
           </motion.p>
         </header>
@@ -1769,8 +1771,9 @@ function UploadLimitReachedScreen() {
         <p
           className={`text-sm leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
         >
-          Ya registramos las contribuciones permitidas para este enlace. Tus
-          archivos aparecerán en la galería cuando el organizador los apruebe.
+          Ya usaste todas las subidas permitidas para este enlace. Los archivos
+          que se procesaron correctamente aparecerán en la galería cuando el
+          organizador los apruebe.
         </p>
       </motion.div>
     </div>
@@ -1778,9 +1781,11 @@ function UploadLimitReachedScreen() {
 }
 
 function ComingSoonScreen({
-  title = "Por ahora no se pueden compartir momentos",
-  description = "El organizador no ha abierto la subida de fotos y videos para este evento. Si se habilita, podrás usar este mismo enlace.",
-  statusLabel = "Subidas cerradas",
+  // Shown when the organizer has uploads turned off (PUB-91): state the fact
+  // instead of promising they will open soon.
+  title = UPLOADS_CLOSED_COPY.title,
+  description = UPLOADS_CLOSED_COPY.description,
+  statusLabel = UPLOADS_CLOSED_COPY.statusLabel,
 }: {
   title?: string;
   description?: string;

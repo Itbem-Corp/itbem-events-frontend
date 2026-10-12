@@ -60,6 +60,7 @@ import {
 import {
   readUploadQuota,
   reconcileUploadQuotaRemaining,
+  uploadFileCountPhrase,
 } from "../../lib/uploadQuota";
 import {
   UPLOAD_FILE_ACCEPT,
@@ -1448,8 +1449,9 @@ export default function MomentWall({
                   />
                   {maxUploadsPerGuest && (
                     <p className="mt-2 text-xs" style={themedMutedStyle}>
-                      Puedes subir hasta {maxUploadsPerGuest} archivos en este
-                      evento.
+                      {maxUploadsPerGuest === 1
+                        ? "Puedes subir 1 archivo en este evento."
+                        : `Puedes subir hasta ${uploadFileCountPhrase(maxUploadsPerGuest)} en este evento.`}
                     </p>
                   )}
                 </div>

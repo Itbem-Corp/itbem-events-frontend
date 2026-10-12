@@ -121,3 +121,23 @@ export function getUploadDisplayLimit(perBatchLimit: number, quotaRemaining: num
   if (quotaRemaining === null) return Math.max(0, Math.trunc(perBatchLimit));
   return Math.max(0, Math.min(Math.trunc(perBatchLimit), Math.trunc(quotaRemaining)));
 }
+
+/** "Sube 1 foto o video" / "Sube hasta 5 fotos o videos" (STU-66). */
+export function sharedUploadLimitPhrase(limit: number): string {
+  const safe = Math.max(0, Math.trunc(limit));
+  return safe === 1 ? "Sube 1 foto o video" : `Sube hasta ${safe} fotos o videos`;
+}
+
+/** "1 archivo" / "3 archivos". */
+export function uploadFileCountPhrase(count: number): string {
+  const safe = Math.max(0, Math.trunc(count));
+  return safe === 1 ? "1 archivo" : `${safe} archivos`;
+}
+
+/** Copy for the shared QR page when the organizer has uploads turned off. */
+export const UPLOADS_CLOSED_COPY = {
+  title: "Por ahora no se pueden compartir momentos",
+  description:
+    "El organizador no ha abierto la subida de fotos y videos para este evento. Si se habilita, podrás usar este mismo enlace.",
+  statusLabel: "Subidas cerradas",
+} as const;
