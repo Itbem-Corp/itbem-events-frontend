@@ -23,6 +23,7 @@ import InvitationLoader, { type InvitationData } from "../InvitationDataLoader";
 import PublicEventPasswordGate from "../common/PublicEventPasswordGate";
 import { PublicEventLoadError } from "../common/PublicEventLoadError";
 import type { SectionComponentProps, MomentWallConfig } from "../engine/types";
+import { configText, configTextOr } from "../../lib/sectionConfig";
 import { addPendingMoment } from "../../lib/momentGalleryState";
 import { usePublicEventAccess } from "../../hooks/usePublicEventAccess";
 import { useVideoThumbnail } from "../../hooks/useVideoThumbnail";
@@ -282,9 +283,10 @@ export default function MomentWall({
 }: SectionComponentProps) {
   const EVENTS_URL = normalizeEventsUrl(rawEventsUrl);
   const cfg = config as unknown as MomentWallConfig;
-  const title = cfg.title ?? "Momentos";
-  const subtitle = cfg.moment_request_message ?? cfg.subtitle;
-  const identifier = cfg.identifier;
+  const title = configTextOr(cfg.title, "Momentos");
+  const subtitle =
+    configText(cfg.moment_request_message) ?? configText(cfg.subtitle);
+  const identifier = configText(cfg.identifier);
   const allowUploads = cfg.allow_uploads ?? false;
   const allowMessages = cfg.allow_messages ?? false;
   const wallPublished = resolveMomentWallPublished(cfg);

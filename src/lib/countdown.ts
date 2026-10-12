@@ -12,14 +12,20 @@ const ZERO_TIME_LEFT: TimeLeft = {
   seconds: 0,
 };
 
-function readTargetDate(targetDate: string | Date): Date | null {
-  const date =
-    targetDate instanceof Date ? targetDate : new Date(targetDate.trim());
+function readTargetDate(targetDate: unknown): Date | null {
+  // Config is free-form JSON: null, numbers or objects must not throw.
+  if (targetDate instanceof Date) {
+    return Number.isNaN(targetDate.getTime()) ? null : targetDate;
+  }
+  if (typeof targetDate !== "string") return null;
+  const trimmed = targetDate.trim();
+  if (!trimmed) return null;
+  const date = new Date(trimmed);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export function calculateCountdownTimeLeft(
-  targetDate: string | Date,
+  targetDate: string | Date | null | undefined,
   now = new Date(),
 ): TimeLeft {
   const target = readTargetDate(targetDate);

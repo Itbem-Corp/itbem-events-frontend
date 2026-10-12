@@ -1,7 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { LegacyMapConfig, SectionComponentProps } from "../engine/types";
+import type { SectionComponentProps } from "../engine/types";
+import { readConfigText } from "../../lib/sectionConfig";
 
 const headingStyle = {
   color: "var(--eventi-color-heading, #07293a)",
@@ -13,7 +14,7 @@ const bodyStyle = {
 };
 
 export default function LegacyMap({ config }: SectionComponentProps) {
-  const { title, content, mapUrl } = config as unknown as LegacyMapConfig;
+  const { title, content, mapUrl } = readConfigText(config, ["title", "content", "mapUrl"]);
 
   if (!mapUrl) return null;
 

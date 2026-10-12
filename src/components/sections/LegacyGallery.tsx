@@ -6,10 +6,8 @@ import ResourcesBySectionSingle, {
   type Section,
 } from "../ResourcesBySectionSingle";
 import ImageWithLoader from "../ImageWithLoader";
-import type {
-  LegacyGalleryConfig,
-  SectionComponentProps,
-} from "../engine/types";
+import type { SectionComponentProps } from "../engine/types";
+import { readConfigText } from "../../lib/sectionConfig";
 import { resourceAtPosition } from "../../lib/publicResources";
 
 const headingStyle = {
@@ -27,7 +25,7 @@ export default function LegacyGallery({
   EVENTS_URL,
   publicAccess,
 }: SectionComponentProps) {
-  const { title, subtitle } = config as unknown as LegacyGalleryConfig;
+  const { title, subtitle } = readConfigText(config, ["title", "subtitle"]);
   const [section, setSection] = useState<Section | null>(null);
   const resources = [0, 1, 2, 3, 4, 5]
     .map((position) => resourceAtPosition(section?.sectionResources, position))

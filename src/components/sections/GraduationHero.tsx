@@ -6,10 +6,8 @@ import ResourcesBySectionSingle, {
   type Section,
 } from "../ResourcesBySectionSingle";
 import ImageWithLoader from "../ImageWithLoader";
-import type {
-  SectionComponentProps,
-  GraduationHeroConfig,
-} from "../engine/types";
+import type { SectionComponentProps } from "../engine/types";
+import { readConfigText } from "../../lib/sectionConfig";
 import { resourceAtPosition } from "../../lib/publicResources";
 
 const headingStyle = {
@@ -25,7 +23,10 @@ const accentStyle = {
 function Skeleton({
   title,
   years,
-}: Pick<GraduationHeroConfig, "title" | "years">) {
+}: {
+  title?: string;
+  years?: string;
+}) {
   return (
     <section className="text-center space-y-6 pb-4 relative z-10 animate-pulse pt-10">
       <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-300">
@@ -49,7 +50,7 @@ export default function GraduationHero({
   EVENTS_URL,
   publicAccess,
 }: SectionComponentProps) {
-  const { title, years, school } = config as unknown as GraduationHeroConfig;
+  const { title, years, school } = readConfigText(config, ["title", "years", "school"]);
   const [section, setSection] = useState<Section | null>(null);
   const heroImage = resourceAtPosition(section?.sectionResources, 0);
   const schoolLogo = resourceAtPosition(section?.sectionResources, 1);

@@ -31,10 +31,8 @@ import ResourcesBySectionSingle, {
 } from "../ResourcesBySectionSingle";
 import { resourceAtPosition } from "../../lib/publicResources";
 import ImageWithLoader from "../ImageWithLoader";
-import type {
-  SectionComponentProps,
-  GraduatesListConfig,
-} from "../engine/types";
+import type { SectionComponentProps } from "../engine/types";
+import { readConfigText } from "../../lib/sectionConfig";
 
 const headingStyle = {
   color: "var(--eventi-color-heading, #07293a)",
@@ -78,7 +76,7 @@ export default function GraduatesList({
   publicAccess,
 }: SectionComponentProps) {
   const eventsUrl = normalizeEventsUrl(EVENTS_URL);
-  const { closing } = config as unknown as GraduatesListConfig;
+  const { closing } = readConfigText(config, ["closing"]);
   const heading = publicAttendeesSectionTitle(
     sectionType,
     sectionTitle,

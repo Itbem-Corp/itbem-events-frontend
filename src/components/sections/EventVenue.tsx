@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ResourcesBySectionSingle, { type Section } from '../ResourcesBySectionSingle';
 import ImageWithLoader from '../ImageWithLoader';
-import type { SectionComponentProps, EventVenueConfig } from '../engine/types';
+import type { SectionComponentProps } from '../engine/types';
+import { readConfigText } from "../../lib/sectionConfig";
 import { resourceAtPosition } from '../../lib/publicResources';
 
 const headingStyle = {
@@ -45,7 +46,7 @@ function Skeleton() {
 }
 
 export default function EventVenue({ sectionId, config, EVENTS_URL, publicAccess }: SectionComponentProps) {
-  const { text, date, venueText, mapUrl } = config as unknown as EventVenueConfig;
+  const { text, date, venueText, mapUrl } = readConfigText(config, ["text", "date", "venueText", "mapUrl"]);
   const [section, setSection] = useState<Section | null>(null);
   const topImages = [0, 1]
     .map((position) => resourceAtPosition(section?.sectionResources, position))

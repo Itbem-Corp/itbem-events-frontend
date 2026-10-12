@@ -1,10 +1,11 @@
 "use client";
 
 import MusicWidget from "../MusicWidget";
-import type { LegacyMusicConfig, SectionComponentProps } from "../engine/types";
+import type { SectionComponentProps } from "../engine/types";
+import { readConfigText } from "../../lib/sectionConfig";
 
 export default function LegacyMusic({ config }: SectionComponentProps) {
-  const { musicUrl, audioUrl, url } = config as unknown as LegacyMusicConfig;
+  const { musicUrl, audioUrl, url } = readConfigText(config, ["musicUrl", "audioUrl", "url"]);
   const src = musicUrl || audioUrl || url;
 
   if (!src) return null;

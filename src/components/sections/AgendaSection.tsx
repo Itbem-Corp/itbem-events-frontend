@@ -13,11 +13,13 @@ import {
   Utensils,
   type LucideIcon,
 } from "lucide-react";
-import type {
-  SectionComponentProps,
-  AgendaConfig,
-  AgendaItem,
-} from "../engine/types";
+import type { SectionComponentProps, AgendaItem } from "../engine/types";
+import {
+  configList,
+  configRecord,
+  configText,
+  configTextOr,
+} from "../../lib/sectionConfig";
 
 const ICONS: Record<string, LucideIcon> = {
   ceremony: Landmark,
@@ -58,23 +60,34 @@ const lineStyle = {
   minHeight: 32,
 };
 
-function AgendaSkeleton() {
-  return (
-    <section className="py-16 px-4 animate-pulse">
-      <div className="max-w-lg mx-auto space-y-8">
-        <div className="h-8 bg-gray-200 rounded w-48 mx-auto" />
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="flex gap-4">
-            <div className="h-10 w-14 bg-gray-200 rounded" />
-            <div className="flex-1 space-y-2">
-              <div className="h-5 bg-gray-200 rounded w-32" />
-              <div className="h-4 bg-gray-100 rounded w-48" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
+const AGENDA_ICONS = new Set<string>(Object.keys(ICONS));
+
+/**
+ * Turns whatever `items` holds into renderable rows. Non-arrays become [],
+ * non-object entries are dropped and text fields are coerced so a config
+ * edited by hand can never take the section down.
+ */
+export function normalizeAgendaItems(value: unknown): AgendaItem[] {
+  const rows: AgendaItem[] = [];
+  for (const entry of configList(value)) {
+    const record = configRecord(entry);
+    const title = configText(record.title)?.trim() ?? "";
+    const time = configText(record.time)?.trim() ?? "";
+    const description = configText(record.description)?.trim() || undefined;
+    const location = configText(record.location)?.trim() || undefined;
+    if (!title && !time && !description && !location) continue;
+    const icon = configText(record.icon);
+    rows.push({
+      time,
+      title,
+      ...(description ? { description } : {}),
+      ...(location ? { location } : {}),
+      ...(icon && AGENDA_ICONS.has(icon)
+        ? { icon: icon as AgendaItem["icon"] }
+        : {}),
+    });
+  }
+  return rows;
 }
 
 interface AgendaItemRowProps {
@@ -139,14 +152,14 @@ function AgendaItemRow({ item, index, isLast }: AgendaItemRowProps) {
 }
 
 export default function AgendaSection({ config }: SectionComponentProps) {
-  const {
-    title = "Programa del día",
-    subtitle,
-    content,
-    items = [],
-  } = config as unknown as AgendaConfig;
+  const title = configTextOr(config.title, "Programa del día");
+  const subtitle = configText(config.subtitle);
+  const content = configText(config.content)?.trim();
+  const items = normalizeAgendaItems(config.items);
 
-  if ((!items || items.length === 0) && !content) return <AgendaSkeleton />;
+  // Config is synchronous: an Agenda without activities or text has nothing to
+  // show, so hide it instead of rendering a skeleton that never resolves.
+  if (items.length === 0 && !content) return null;
 
   return (
     <MotionConfig reducedMotion="user">

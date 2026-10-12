@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ResourcesBySectionSingle, { type Section } from '../ResourcesBySectionSingle';
 import ImageWithLoader from '../ImageWithLoader';
-import type { SectionComponentProps, ReceptionConfig } from '../engine/types';
+import type { SectionComponentProps } from '../engine/types';
+import { readConfigText } from "../../lib/sectionConfig";
 import { resourceAtPosition } from '../../lib/publicResources';
 
 const bodyStyle = {
@@ -36,7 +37,7 @@ function Skeleton() {
 }
 
 export default function Reception({ sectionId, config, EVENTS_URL, publicAccess }: SectionComponentProps) {
-  const { venueText, mapUrl } = config as unknown as ReceptionConfig;
+  const { venueText, mapUrl } = readConfigText(config, ["venueText", "mapUrl"]);
   const [section, setSection] = useState<Section | null>(null);
   const topImages = [0, 1]
     .map((position) => resourceAtPosition(section?.sectionResources, position))
