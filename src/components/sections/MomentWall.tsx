@@ -367,11 +367,11 @@ export function PhotoMomentCard({
   position,
   onClick,
 }: PhotoMomentCardProps) {
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setFailed(false);
-  }, [src]);
+  // Keyed by src (not reset in an effect): a blocked image can fail before
+  // effects run, and a reset would hide the fallback again.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const failed = failedSrc === src;
+  const markFailed = () => setFailedSrc(src);
 
   return (
     <button
@@ -399,7 +399,13 @@ export function PhotoMomentCard({
           loading="lazy"
           decoding="async"
           draggable={false}
-          onError={() => setFailed(true)}
+          ref={(img) => {
+            // The error may have fired before React attached the handler.
+            if (img?.complete && img.naturalWidth === 0 && img.currentSrc) {
+              markFailed();
+            }
+          }}
+          onError={markFailed}
         />
       )}
     </button>
