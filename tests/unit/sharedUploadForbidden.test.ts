@@ -7,7 +7,9 @@ import {
 } from "../../src/components/shared-upload/SharedUploadEngine";
 import {
   getSharedUploadGate,
+  limitReachedNotice,
   resolveForbiddenUploadOutcome,
+  resolveUploadBatchOutcome,
 } from "../../src/lib/sharedUploadAccess";
 
 const open = { uploadsNotEnabled: false, wallPublished: false, uploadsRemaining: 5 };
@@ -69,5 +71,35 @@ describe("releaseForbiddenEntries (PUB-5)", () => {
     expect(result.map((e) => e.status)).toEqual(["done", "error", "pending"]);
     expect(result[1].errorMsg).toBe(SHARED_UPLOAD_FORBIDDEN_ENTRY_MESSAGE);
     expect(result[1].progress).toBeUndefined();
+  });
+});
+
+describe("resolveUploadBatchOutcome (429 mid-batch)", () => {
+  const done = { status: "done" };
+  const failed = { status: "error" };
+
+  it("acknowledges uploaded files when the quota ran out mid-batch", () => {
+    expect(resolveUploadBatchOutcome([done, done, failed], true)).toEqual({
+      kind: "partial-limit",
+      doneCount: 2,
+      skippedCount: 1,
+    });
+  });
+
+  it("keeps the normal success when everything uploaded", () => {
+    expect(resolveUploadBatchOutcome([done, done], true).kind).toBe("all-done");
+  });
+
+  it("stays on the form when nothing uploaded or the failure was not the quota", () => {
+    expect(resolveUploadBatchOutcome([failed, failed], true).kind).toBe("incomplete");
+    expect(resolveUploadBatchOutcome([done, failed], false).kind).toBe("incomplete");
+    expect(resolveUploadBatchOutcome([], true).kind).toBe("incomplete");
+  });
+
+  it("explains how many files did not upload", () => {
+    expect(limitReachedNotice(1)).toBe(
+      "Llegaste al límite de archivos para este evento, así que 1 archivo no se subió.",
+    );
+    expect(limitReachedNotice(3)).toMatch(/3 archivos no se subieron/);
   });
 });

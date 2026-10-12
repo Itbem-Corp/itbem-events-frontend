@@ -34,7 +34,9 @@ import {
 } from "../lib/sharedUploadIdentifier";
 import {
   getSharedUploadGate,
+  limitReachedNotice,
   resolveForbiddenUploadOutcome,
+  resolveUploadBatchOutcome,
   type SharedUploadStatusSnapshot,
   isSharedUploadOpen,
 } from "../lib/sharedUploadAccess";
@@ -293,6 +295,10 @@ export default function SharedUploadPage({
   const [uploading, setUploading] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [allDone, setAllDone] = useState(false);
+  // Files that could not be uploaded because the quota ran out mid-batch
+  // (429): shown as a notice on the success screen.
+  const [limitSkippedCount, setLimitSkippedCount] = useState(0);
+  const quotaExhaustedRef = useRef(false);
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [uploadedCount, setUploadedCount] = useState(0);
@@ -332,6 +338,7 @@ export default function SharedUploadPage({
 
   const applyUploadQuota = useCallback((payload: unknown) => {
     const quota = readUploadQuota(payload);
+    if (quota.remaining === 0) quotaExhaustedRef.current = true;
     if (quota.remaining !== null) {
       setUploadsRemaining((prev) =>
         reconcileUploadQuotaRemaining(prev, quota.remaining),
@@ -366,6 +373,7 @@ export default function SharedUploadPage({
         return data;
       } catch (error) {
         if (isApiFetchError(error)) {
+          if (error.status === 429) quotaExhaustedRef.current = true;
           applyUploadQuota(error.payload);
         }
         throw error;
@@ -758,6 +766,7 @@ export default function SharedUploadPage({
       if (startsFreshBatch) setUploadPublicationHint("published");
     });
     if (startsFreshBatch) uploadPublicationHintRef.current = "published";
+    quotaExhaustedRef.current = false;
     uploadAbortControllerRef.current?.abort();
     const uploadController = new AbortController();
     uploadAbortControllerRef.current = uploadController;
@@ -850,10 +859,19 @@ export default function SharedUploadPage({
 
     setUploading(false);
     commitFiles((previous) => {
-      const allUploadsSucceeded = previous.every(
-        (entry) => entry.status === "done",
+      const outcome = resolveUploadBatchOutcome(
+        previous,
+        quotaExhaustedRef.current,
       );
-      if (allUploadsSucceeded && previous.length > 0) {
+      if (outcome.kind === "partial-limit") {
+        // 429 mid-batch: acknowledge what made it, note what did not (same
+        // spirit as the 403 path) instead of jumping to "limit reached".
+        setUploadedCount(outcome.doneCount);
+        setLimitSkippedCount(outcome.skippedCount);
+        setAllDone(true);
+        return previous;
+      }
+      if (outcome.kind === "all-done") {
         if (shouldShowOptimizingTransition(uploadPublicationHintRef.current)) {
           setOptimizing(true);
           window.setTimeout(() => {
@@ -877,6 +895,7 @@ export default function SharedUploadPage({
     setVideoThumbs(new Map());
     setDescription("");
     setAllDone(false);
+    setLimitSkippedCount(0);
     setUploadPublicationHint("pending_review");
     uploadPublicationHintRef.current = "published";
     setUploadedCount(0);
@@ -934,7 +953,12 @@ export default function SharedUploadPage({
         <SuccessScreen
           count={uploadedCount}
           publicationHint={uploadPublicationHint}
-          onUploadMore={handleUploadAnother}
+          limitSkippedCount={limitSkippedCount}
+          onUploadMore={
+            limitSkippedCount > 0 || (uploadsRemaining ?? 1) <= 0
+              ? undefined
+              : handleUploadAnother
+          }
         />
       </ThemeCtx.Provider>
     );
@@ -1580,10 +1604,12 @@ export default function SharedUploadPage({
 function SuccessScreen({
   count,
   publicationHint,
+  limitSkippedCount = 0,
   onUploadMore,
 }: {
   count: number;
   publicationHint: SharedUploadPublicationHint;
+  limitSkippedCount?: number;
   onUploadMore?: () => void;
 }) {
   const { theme } = useContext(ThemeCtx);
@@ -1666,6 +1692,19 @@ function SuccessScreen({
         >
           {copy.message}
         </p>
+
+        {limitSkippedCount > 0 && (
+          <p
+            role="status"
+            className={`mx-auto max-w-[300px] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+              theme === "dark"
+                ? "bg-amber-500/10 text-amber-200 ring-1 ring-amber-400/30"
+                : "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
+            }`}
+          >
+            {limitReachedNotice(limitSkippedCount)}
+          </p>
+        )}
 
         <motion.p
           initial={{ opacity: 0 }}
