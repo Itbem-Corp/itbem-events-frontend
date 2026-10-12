@@ -1,0 +1,56 @@
+---
+/**
+ * Not-found page for any unknown path. Static and framework-free so it is
+ * served without the Worker and renders the same on every device.
+ */
+export const prerender = true;
+
+import TemplateLayout from '../layouts/template.astro';
+---
+
+<TemplateLayout title="Página no encontrada — EventiApp">
+  <main
+    class="eventi-public-state flex min-h-[100svh] items-center justify-center px-4 py-10"
+    data-not-found
+  >
+    <section
+      aria-labelledby="not-found-title"
+      aria-describedby="not-found-description"
+      class="eventi-state-card relative w-full max-w-sm overflow-hidden px-6 py-8 text-center sm:px-8 sm:py-9"
+    >
+      <div
+        aria-hidden="true"
+        class="absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-[#dd2284]/[0.55] to-transparent"
+      ></div>
+
+      <div class="mx-auto flex w-fit items-center gap-2 rounded-full border border-[#dd2284]/10 bg-[#fff0f7]/80 px-3 py-1.5">
+        <img src="/favicon.svg" alt="" width="16" height="16" class="size-4" />
+        <span class="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-[#b91468]">
+          EventiApp
+        </span>
+      </div>
+
+      <p class="eventi-eyebrow mt-6">Error 404</p>
+      <h1
+        id="not-found-title"
+        class="mt-2 text-balance text-[1.4rem] font-semibold tracking-[-0.025em] text-[#102f3f]"
+      >
+        No encontramos esta página
+      </h1>
+      <p
+        id="not-found-description"
+        class="mx-auto mt-2 max-w-xs text-pretty text-sm leading-6 text-[#607783]"
+      >
+        Es posible que el enlace esté incompleto o haya cambiado. Si buscabas una
+        invitación, abre de nuevo el enlace que te compartió el organizador.
+      </p>
+
+      <a
+        href="/"
+        class="mt-7 inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[#dd2284] px-5 text-sm font-semibold text-white shadow-[0_14px_35px_-20px_rgba(221,34,132,0.9)] transition hover:bg-[#c91d76] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#dd2284]/25 motion-reduce:transition-none"
+      >
+        Ir al inicio
+      </a>
+    </section>
+  </main>
+</TemplateLayout>
