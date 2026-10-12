@@ -7,6 +7,13 @@ export const RSVP_DIETARY_MAX_LENGTH = 255;
 export const RSVP_NOTES_MAX_LENGTH = 1000;
 export const RSVP_NOTES_INPUT_MAX_LENGTH = RSVP_NOTES_MAX_LENGTH;
 
+/**
+ * Shown, in the section's own body color, to a visitor who opened the shared
+ * event page without a personal invitation link. It is guidance, not an error.
+ */
+export const RSVP_PERSONAL_LINK_HINT =
+  "Para confirmar tu asistencia, abre el enlace personal que recibiste del organizador.";
+
 export interface RsvpAvailability {
   /** False only when the backend explicitly says RSVPs are closed. */
   open: boolean;

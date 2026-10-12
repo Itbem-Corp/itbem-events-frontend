@@ -38,6 +38,7 @@ import {
   readRsvpAvailability,
   RSVP_DIETARY_MAX_LENGTH,
   RSVP_NOTES_INPUT_MAX_LENGTH,
+  RSVP_PERSONAL_LINK_HINT,
 } from "../../lib/rsvpAvailability";
 import { normalizeEventsUrl } from "../../lib/eventsUrl";
 import {
@@ -55,8 +56,6 @@ import {
 
 const RSVPConfirmationCard = lazy(() => import("../RSVPConfirmationCard"));
 
-const missingRsvpTokenMessage =
-  "Este enlace de RSVP necesita un token personal. Usa el enlace que recibiste por invitacion.";
 
 type RSVPAnswer = "yes" | "no" | null;
 
@@ -274,13 +273,6 @@ export default function RSVPConfirmation({
   useEffect(() => {
     const nextToken = accessParams.invitationToken;
     setToken(nextToken);
-    if (!nextToken) {
-      setInvError(missingRsvpTokenMessage);
-      return;
-    }
-    setInvError((current) =>
-      current === missingRsvpTokenMessage ? null : current,
-    );
   }, [accessParams.invitationToken]);
 
   const handleConfirm = async () => {
@@ -460,6 +452,16 @@ export default function RSVPConfirmation({
           className="bg-transparent"
           onVerify={verifyRsvpPassword}
         />
+      )}
+
+      {!passwordRequired && token === "" && !invError && (
+        <p
+          className="font-aloevera mx-auto mt-6 max-w-md text-pretty text-lg sm:text-xl"
+          style={themedBodyStyle}
+          data-testid="rsvp-personal-link-hint"
+        >
+          {RSVP_PERSONAL_LINK_HINT}
+        </p>
       )}
 
       {!passwordRequired && invError && (
