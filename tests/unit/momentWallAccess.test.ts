@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canShowPersonalUpload,
+  momentWallHeadingText,
   resolveMomentWallPublished,
 } from "../../src/lib/momentWallAccess";
 
@@ -92,5 +93,31 @@ describe("canShowPersonalUpload", () => {
         wallPublished: false,
       }),
     ).toBe(true);
+  });
+});
+
+// STU-16: the studio saves `subtitle`, but the wall preferred
+// `moment_request_message` and never showed the subtitle.
+describe("momentWallHeadingText", () => {
+  it("shows the subtitle and the request message together", () => {
+    expect(
+      momentWallHeadingText({
+        subtitle: "Nuestra boda en fotos",
+        moment_request_message: "Comparte tus fotos del evento",
+      }),
+    ).toEqual({
+      subtitle: "Nuestra boda en fotos",
+      requestMessage: "Comparte tus fotos del evento",
+    });
+  });
+
+  it("shows a repeated text only once and ignores non-text values", () => {
+    expect(
+      momentWallHeadingText({ subtitle: "Hola", moment_request_message: "Hola" }),
+    ).toEqual({ subtitle: "Hola", requestMessage: undefined });
+    expect(momentWallHeadingText({ subtitle: { x: 1 } })).toEqual({
+      subtitle: undefined,
+      requestMessage: undefined,
+    });
   });
 });
