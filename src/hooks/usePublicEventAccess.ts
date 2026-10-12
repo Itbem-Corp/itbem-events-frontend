@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { buildEventVerifyAccessUrl } from "../lib/apiUrls";
 import { fetchApiResult } from "../lib/apiFetch";
+import { getPublicApiErrorMessage } from "../lib/apiError";
 import {
   readStoredEventAccessToken,
   removeStoredEventAccessToken,
@@ -248,8 +249,11 @@ export function usePublicEventAccess({
         if (!result.ok) {
           return {
             ok: false,
-            message:
-              result.message || "Contrasena incorrecta. Intenta de nuevo.",
+            message: getPublicApiErrorMessage(
+              result,
+              "password",
+              "Contraseña incorrecta. Intenta de nuevo.",
+            ),
           };
         }
 

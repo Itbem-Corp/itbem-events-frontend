@@ -7,6 +7,7 @@ import {
 import { normalizeEventsUrl } from "../lib/eventsUrl";
 import { buildInvitationByTokenUrl } from "../lib/apiUrls";
 import { fetchApiData } from "../lib/apiFetch";
+import { getPublicApiErrorMessage } from "../lib/apiError";
 import { buildInvitationLoadKey } from "../lib/invitationLoadKey";
 import {
   publicAccessFetchInit,
@@ -92,8 +93,7 @@ export default function InvitationLoader({
         onLoaded(data);
       } catch (err: unknown) {
         if (err instanceof Error && err.name === "AbortError") return;
-        const message =
-          err instanceof Error ? err.message : "Error cargando invitación";
+        const message = getPublicApiErrorMessage(err, "invitation");
         console.error("Error loading invitation:", err);
         onError?.(message);
       }
