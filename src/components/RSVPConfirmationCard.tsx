@@ -206,7 +206,7 @@ export default function RSVPConfirmationCard({ invData, token }: Props) {
 
           {/* Guest name */}
           <p
-            className="text-2xl font-astralaga leading-tight"
+            className="text-2xl font-astralaga leading-tight break-words [overflow-wrap:anywhere]"
             style={headingStyle}
           >
             {invData.guestName}
