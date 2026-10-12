@@ -5,6 +5,29 @@ export interface RegistryEntry {
   /** Dynamic import — section JS is only fetched when needed */
   loader: () => Promise<{ default: ComponentType<SectionComponentProps> }>;
   hydration: HydrationMode;
+  /**
+   * Size of the placeholder shown until the section JS loads. Defaults to the
+   * generic h-64 card; set it when the real section is much taller or shorter
+   * so the page does not jump when it hydrates (QA PUB-109).
+   */
+  placeholderClassName?: string;
+  /**
+   * Placeholder for a visitor without a personal invitation link, when the
+   * section renders something much smaller for them (RSVP shows a one-line
+   * hint instead of the form; QA PUB-N1).
+   */
+  placeholderWithoutInvitationClassName?: string;
+}
+
+/** Placeholder classes for the section while its JS loads. */
+export function sectionPlaceholderClassName(
+  entry: RegistryEntry,
+  hasInvitationToken: boolean,
+): string {
+  if (!hasInvitationToken && entry.placeholderWithoutInvitationClassName) {
+    return entry.placeholderWithoutInvitationClassName;
+  }
+  return entry.placeholderClassName ?? "h-64";
 }
 
 const agendaEntry: RegistryEntry = {
@@ -40,11 +63,14 @@ const legacyMapEntry: RegistryEntry = {
 const legacyMusicEntry: RegistryEntry = {
   loader: () => import("../sections/LegacyMusic"),
   hydration: "immediate",
+  // A floating player: it takes no room in the page flow.
+  placeholderClassName: "h-0",
 };
 
 const countdownEntry: RegistryEntry = {
   loader: () => import("../sections/CountdownHeader"),
   hydration: "immediate",
+  placeholderClassName: "h-[7.75rem] sm:h-32",
 };
 
 const graduationHeroEntry: RegistryEntry = {
@@ -70,6 +96,10 @@ const photoGridEntry: RegistryEntry = {
 const rsvpEntry: RegistryEntry = {
   loader: () => import("../sections/RSVPConfirmation"),
   hydration: "immediate",
+  // Matches the loading skeleton inside RSVPConfirmation plus its padding.
+  placeholderClassName: "h-[30.75rem] sm:h-[29rem]",
+  // Without a personal link only the "abre tu enlace personal" hint renders.
+  placeholderWithoutInvitationClassName: "h-40 sm:h-36",
 };
 
 const momentWallEntry: RegistryEntry = {

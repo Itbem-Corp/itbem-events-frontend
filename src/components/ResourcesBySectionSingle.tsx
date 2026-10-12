@@ -6,6 +6,7 @@ import { fetchApiData } from "../lib/apiFetch";
 import { normalizeEventsUrl } from "../lib/eventsUrl";
 import {
   normalizeSectionResourcesPayload,
+  sectionResourcesLoadFailureFallback,
   type SectionResource,
   type SectionResourcesPayload,
 } from "../lib/publicResources";
@@ -187,6 +188,11 @@ export default function ResourcesBySectionSingle({
       } catch (err: unknown) {
         if (err instanceof Error && err.name === "AbortError") return;
         console.error(`Error loading section ${sectionId}:`, err);
+        const fallback = sectionResourcesLoadFailureFallback(
+          sectionId,
+          forceNetwork,
+        );
+        if (fallback) onLoaded(fallback);
       }
     };
 

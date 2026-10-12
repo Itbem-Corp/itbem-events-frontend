@@ -6,7 +6,8 @@ import ResourcesBySectionSingle, {
   type Section,
 } from "../ResourcesBySectionSingle";
 import ImageWithLoader from "../ImageWithLoader";
-import type { LegacyHeroConfig, SectionComponentProps } from "../engine/types";
+import type { SectionComponentProps } from "../engine/types";
+import { readConfigText } from "../../lib/sectionConfig";
 import { resourceAtPosition } from "../../lib/publicResources";
 
 const surfaceStyle = {
@@ -32,11 +33,28 @@ export default function LegacyHero({
   EVENTS_URL,
   publicAccess,
 }: SectionComponentProps) {
-  const { title, subtitle, content, imageUrl } =
-    config as unknown as LegacyHeroConfig;
+  const { title, subtitle, content, imageUrl } = readConfigText(config, [
+    "title",
+    "subtitle",
+    "content",
+    "imageUrl",
+  ]);
   const [section, setSection] = useState<Section | null>(null);
   const heroResource = resourceAtPosition(section?.sectionResources, 0);
   const heroImage = heroResource?.view_url || imageUrl;
+
+  // A HERO saved without text or image must not paint an empty card (QA
+  // PUB-27). Keep the resource loader so an uploaded image still shows up.
+  if (!title && !subtitle && !content && !heroImage) {
+    return (
+      <ResourcesBySectionSingle
+        sectionId={sectionId}
+        EVENTS_URL={EVENTS_URL}
+        publicAccess={publicAccess}
+        onLoaded={setSection}
+      />
+    );
+  }
 
   return (
     <motion.section

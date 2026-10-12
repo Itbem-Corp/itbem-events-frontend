@@ -44,6 +44,8 @@ import { extractPathIdentifier } from "../../lib/pathIdentifier";
 import { formatPublicEventDate } from "../../lib/eventDate";
 import { isVideoMedia, resolvePublicMediaUrl } from "../../lib/mediaUrl";
 import {
+  boundedMediaRefreshDelay,
+  cursorPaginationAfterReplace,
   getPublicMomentsRefreshDelay,
   mergePublicMomentsById,
   normalizePublicMomentsPage,
@@ -52,6 +54,7 @@ import {
   publicMomentMediaSrcSet,
   publicMomentsMediaRefreshKey,
   publicMomentPreviewUrl,
+  publicMomentsRefreshWindowLimit,
   shouldReplacePublicMomentsOnLiveRefresh,
   type PublicMoment as Moment,
 } from "../../lib/publicMoments";
@@ -211,6 +214,7 @@ export default function MomentsGallery({
   const totalRef = React.useRef<number>(0);
   const momentsRef = React.useRef<Moment[]>([]);
   const lastMediaRefreshKeyRef = useRef<string | null>(null);
+  const lastMediaRefreshAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     momentsRef.current = moments;
@@ -404,15 +408,32 @@ export default function MomentsGallery({
     void fetchMoments(identifier, null, false).finally(() => setLoading(false));
   }, [fetchMoments, identifier]);
 
-  const refreshLatestMoments = useCallback(async () => {
+  /**
+   * "live": poll the newest page and prepend new moments.
+   * "media": re-fetch the whole loaded window so every loaded moment gets
+   * fresh presigned URLs (PUB-2), then replace the list.
+   * Whenever the list is replaced, pagination restarts from the fresh
+   * response's cursor so "load more" never skips moments (PUB-3).
+   */
+  const refreshLatestMoments = useCallback(async (
+    mode: "live" | "media" = "live",
+  ) => {
     if (!identifier) return;
 
     try {
+      const limit =
+        mode === "media"
+          ? publicMomentsRefreshWindowLimit(
+              momentsRef.current.length,
+              PAGE_SIZE,
+              MAX_TOTAL,
+            )
+          : PAGE_SIZE;
       const data = normalizePublicMomentsPage(
         await fetchApiData<unknown>(
           buildEventMomentsUrl(EVENTS_URL, identifier, {
-            page: 1,
-            limit: PAGE_SIZE,
+            cursor: "",
+            limit,
             ...publicAccessQueryParams(requestAccess),
           }),
           publicAccessFetchInit(requestAccess),
@@ -421,21 +442,23 @@ export default function MomentsGallery({
       const freshItems: Moment[] = data.items ?? [];
       const previousTotal = totalRef.current;
       const nextTotal = data.total;
-      const shouldReplace = shouldReplacePublicMomentsOnLiveRefresh(
-        previousTotal,
-        nextTotal,
-        momentsRef.current,
-        freshItems,
-      );
+      const shouldReplace =
+        mode === "media" ||
+        shouldReplacePublicMomentsOnLiveRefresh(
+          previousTotal,
+          nextTotal,
+          momentsRef.current,
+          freshItems,
+        );
 
-      setMoments((existing) =>
-        shouldReplace
-          ? mergePublicMomentsById([], freshItems, { limit: MAX_TOTAL })
-          : mergePublicMomentsById(existing, freshItems, {
-              prependIncoming: true,
-              limit: MAX_TOTAL,
-            }),
-      );
+      const nextMoments = shouldReplace
+        ? mergePublicMomentsById([], freshItems, { limit: MAX_TOTAL })
+        : mergePublicMomentsById(momentsRef.current, freshItems, {
+            prependIncoming: true,
+            limit: MAX_TOTAL,
+          });
+      momentsRef.current = nextMoments;
+      setMoments(nextMoments);
       totalRef.current =
         nextTotal ?? Math.max(previousTotal, freshItems.length);
       setPublished(data.moments_wall_published === true);
@@ -446,13 +469,13 @@ export default function MomentsGallery({
       }
       if (data.timezone) setEventTimezone(data.timezone);
       if (shouldReplace) {
-        if (data.next_cursor) {
-          setReachedEnd(false);
-          setNextCursor(data.next_cursor);
-        } else if ((data.total ?? freshItems.length) <= freshItems.length) {
-          setReachedEnd(true);
-          setNextCursor(null);
-        }
+        const pagination = cursorPaginationAfterReplace(
+          nextMoments.length,
+          data.next_cursor,
+          MAX_TOTAL,
+        );
+        setReachedEnd(pagination.reachedEnd);
+        setNextCursor(pagination.nextCursor);
       }
     } catch {
       /* Live refresh is best-effort; the normal loader owns visible errors. */
@@ -499,16 +522,29 @@ export default function MomentsGallery({
 
     const refreshMedia = () => {
       lastMediaRefreshKeyRef.current = mediaRefreshKey;
-      void refreshLatestMoments();
+      lastMediaRefreshAtRef.current = Date.now();
+      void refreshLatestMoments("media");
     };
 
-    if (mediaRefreshDelay <= 0) {
-      if (lastMediaRefreshKeyRef.current === mediaRefreshKey) return;
+    if (
+      mediaRefreshDelay <= 0 &&
+      lastMediaRefreshKeyRef.current === mediaRefreshKey
+    ) {
+      return;
+    }
+
+    // Never closer than the minimum interval, even if the backend returned
+    // URLs that are already expired (no tight API loop).
+    const delay = boundedMediaRefreshDelay(
+      mediaRefreshDelay,
+      lastMediaRefreshAtRef.current,
+    );
+    if (delay <= 0) {
       refreshMedia();
       return;
     }
 
-    const timer = window.setTimeout(refreshMedia, mediaRefreshDelay);
+    const timer = window.setTimeout(refreshMedia, delay);
     return () => window.clearTimeout(timer);
   }, [identifier, mediaRefreshDelay, mediaRefreshKey, refreshLatestMoments]);
 
@@ -684,7 +720,7 @@ export default function MomentsGallery({
     return (
       <MotionConfig reducedMotion="user">
         <div className="min-h-screen flex items-center justify-center bg-white">
-          <p className="text-gray-400 text-sm">Enlace invalido.</p>
+          <p className="text-gray-400 text-sm">Enlace inválido.</p>
         </div>
       </MotionConfig>
     );
@@ -694,8 +730,8 @@ export default function MomentsGallery({
     return (
       <MotionConfig reducedMotion="user">
         <PublicEventPasswordGate
-          title="Galeria privada"
-          description="Ingresa la contrasena del evento para ver los momentos."
+          title="Galería privada"
+          description="Ingresa la contraseña del evento para ver los momentos."
           onVerify={eventAccess.verifyPassword}
         />
       </MotionConfig>
@@ -782,7 +818,7 @@ export default function MomentsGallery({
               {eventName || "Momentos"}
             </div>
             <p className="text-gray-500 text-sm">
-              Aun no hay momentos publicados. Vuelve pronto!
+              Aún no hay momentos publicados. ¡Vuelve pronto!
             </p>
           </motion.div>
         </div>

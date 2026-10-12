@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  resolvePageOgImage,
   buildMomentsOgMeta,
   buildPublicEventOgMeta,
   buildRsvpOgMeta,
@@ -90,7 +91,7 @@ describe("public event OG helpers", () => {
     expect(buildMomentsOgMeta(event, "https://events.example.com")).toEqual({
       title: "Momentos - Graduacion Izapa",
       description:
-        "Galeria de fotos y videos de Graduacion Izapa. Revive los mejores momentos.",
+        "Galería de fotos y videos de Graduacion Izapa. Revive los mejores momentos.",
       image: "https://events.example.com/storage/events/grad/cover.webp",
     });
   });
@@ -133,7 +134,7 @@ describe("public event OG helpers", () => {
 
   it("uses route-specific fallback metadata when event data is unavailable", () => {
     expect(buildPublicEventOgMeta(null)).toMatchObject({
-      title: "Estas invitado",
+      title: "Estás invitado",
       image: "",
     });
     expect(buildRsvpOgMeta(null)).toMatchObject({
@@ -888,5 +889,31 @@ describe("fetchInvitationOgData", () => {
     await expect(
       fetchInvitationOgData("https://events.example.com", "BAD"),
     ).resolves.toBeNull();
+  });
+});
+
+describe("resolvePageOgImage", () => {
+  it("falls back to the branded default without leaking the page query", () => {
+    expect(
+      resolvePageOgImage(
+        "",
+        new URL("https://www.eventiapp.com.mx/e/boda?token=SECRET"),
+      ),
+    ).toEqual({
+      url: "https://www.eventiapp.com.mx/og-default.png",
+      isBrandedPng: true,
+    });
+  });
+
+  it("keeps the event image and flags the generated /api/og card", () => {
+    expect(
+      resolvePageOgImage("https://dashboard.example.com/api/og?title=Boda", "https://x.test/"),
+    ).toEqual({
+      url: "https://dashboard.example.com/api/og?title=Boda",
+      isBrandedPng: true,
+    });
+    expect(
+      resolvePageOgImage("https://cdn.example.com/cover.webp", "https://x.test/"),
+    ).toEqual({ url: "https://cdn.example.com/cover.webp", isBrandedPng: false });
   });
 });

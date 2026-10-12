@@ -4,18 +4,32 @@ import react from "@astrojs/react";
 import cloudflare from "@astrojs/cloudflare";
 import tailwindcss from "@tailwindcss/vite";
 import Beasties from "beasties";
+import { loadEnv } from "vite";
 import publicProduct from "./src/generated/public-product.json" with { type: "json" };
 import AstroPWA from "./scripts/vite-pwa-astro.mjs";
+import {
+  buildServiceWorkerCachePolicyScript,
+  SW_CACHE_POLICY_SCRIPT,
+} from "./scripts/sw-cache-policy.mjs";
 import {
   createApiRuntimeCacheMatcher,
   createFreshFirstApiMatcher,
   createPublicEventPageRuntimeCacheMatcher,
   createS3ImageRuntimeCacheMatcher,
+  createServerCachePolicyPlugin,
 } from "./src/lib/apiCachePolicy.mjs";
 
+// Same resolution as the client's import.meta.env (process.env first, then
+// .env.[mode].local, .env.[mode], .env.local, .env), so the service worker's
+// cache policy recognises the exact API origin the islands call.
+const ENV_MODE = process.env.NODE_ENV === "development" ? "development" : "production";
+const PUBLIC_ENV = loadEnv(ENV_MODE, process.cwd(), "PUBLIC_");
 const EVENTS_API_URL =
-  process.env.PUBLIC_EVENTS_URL ?? `https://${publicProduct.apiHostname}`;
+  PUBLIC_ENV.PUBLIC_EVENTS_URL || `https://${publicProduct.apiHostname}`;
 const PUBLIC_SITE_URL = `https://${publicProduct.canonicalHostname}`;
+// Revision for the precached /offline fallback: changes on every build.
+const OFFLINE_PAGE_REVISION = String(Date.now());
+const OFFLINE_FALLBACK_URL = "/offline/";
 const requestedPublicDevPort = Number.parseInt(
   process.env.EVENTIAPP_PUBLIC_PORT ?? "4321",
   10,
@@ -87,12 +101,21 @@ export default defineConfig({
           "**/fonts/Astralaga SemiBold.woff2",
         ],
 
-        // Offline fallback for navigations that fail (network down, no cache).
-        // /offline is statically prerendered (prerender = true in offline.astro).
-        navigateFallback: "/offline",
-
-        // Don't intercept: API routes — these must always go to network or SW cache.
-        navigateFallbackDenylist: [/^\/api\//, /^\/cdn-cgi\//],
+        // Offline fallback: /offline/ (prerendered in offline.astro) is served
+        // only when a navigation FAILS — never as an app shell. `navigateFallback`
+        // would answer every navigation with it, which is wrong for SSR pages.
+        // HTML is not in globPatterns, so precache it explicitly (new revision
+        // per build). Its canonical URL is "/offline/": "/offline" answers a 307,
+        // and a redirect during install fails the whole service worker.
+        additionalManifestEntries: [
+          { url: OFFLINE_FALLBACK_URL, revision: OFFLINE_PAGE_REVISION },
+        ],
+        // The runtimeCaching matchers below call helpers from apiCachePolicy.mjs;
+        // load them into the worker before its routes are registered.
+        importScripts: [`/${SW_CACHE_POLICY_SCRIPT}`],
+        // vite-plugin-pwa defaults this to "index.html" (an SPA shell); null
+        // turns that NavigationRoute off so SSR pages always reach the network.
+        navigateFallback: null,
 
         runtimeCaching: [
           // ── SSR event pages (NetworkFirst + cache) ──────────────────────────
@@ -110,6 +133,25 @@ export default defineConfig({
                 maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
               },
               cacheableResponse: { statuses: [0, 200] },
+              // Cache-Control no-store/private from the server is never cached.
+              plugins: [createServerCachePolicyPlugin()],
+              // Offline and never opened on this device: show /offline/.
+              precacheFallback: { fallbackURL: OFFLINE_FALLBACK_URL },
+            },
+          },
+
+          // ── Any other page navigation (network only) ───────────────────────
+          // Pages are SSR and are not cached; when the network fails, show the
+          // precached offline page instead of the browser's error.
+          {
+            urlPattern: (/** @type {{ request: Request, url: URL }} */ { request, url }) =>
+              request.mode === "navigate" &&
+              url.origin === self.location.origin &&
+              !url.pathname.startsWith("/api/") &&
+              !url.pathname.startsWith("/cdn-cgi/"),
+            handler: "NetworkOnly",
+            options: {
+              precacheFallback: { fallbackURL: OFFLINE_FALLBACK_URL },
             },
           },
 
@@ -145,6 +187,8 @@ export default defineConfig({
                 maxAgeSeconds: 60 * 60, // 1 hour offline fallback
               },
               cacheableResponse: { statuses: [0, 200] },
+              // Cache-Control no-store/private from the server is never cached.
+              plugins: [createServerCachePolicyPlugin()],
             },
           },
 
@@ -160,6 +204,8 @@ export default defineConfig({
                 maxAgeSeconds: 24 * 60 * 60, // 24 hours
               },
               cacheableResponse: { statuses: [0, 200] },
+              // Cache-Control no-store/private from the server is never cached.
+              plugins: [createServerCachePolicyPlugin()],
             },
           },
 
@@ -240,6 +286,22 @@ export default defineConfig({
     },
     plugins: [
       tailwindcss(),
+      {
+        // Emits the service worker's cache-policy helpers (see
+        // scripts/sw-cache-policy.mjs) next to sw.js in the client build.
+        name: "eventiapp:sw-cache-policy",
+        apply: "build",
+        applyToEnvironment(/** @type {{ name: string }} */ environment) {
+          return environment.name === "client";
+        },
+        generateBundle() {
+          this.emitFile({
+            type: "asset",
+            fileName: SW_CACHE_POLICY_SCRIPT,
+            source: buildServiceWorkerCachePolicyScript(EVENTS_API_URL),
+          });
+        },
+      },
       {
         name: "vite-plugin-beasties",
         enforce: "post",

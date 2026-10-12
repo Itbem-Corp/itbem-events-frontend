@@ -32,7 +32,7 @@ test.beforeEach(async ({ page }) => {
 // ---------------------------------------------------------------------------
 test.describe('Carga de invitación', () => {
 
-  test('muestra "Cargando..." mientras llegan los datos', async ({ page }) => {
+  test('reserva el espacio del formulario mientras llegan los datos', async ({ page }) => {
     let releaseInvitation: () => void = () => {};
     const invitationPending = new Promise<void>((resolve) => {
       releaseInvitation = resolve;
@@ -54,7 +54,7 @@ test.describe('Carga de invitación', () => {
     });
 
     await page.goto(PAGE_URL, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('Cargando...')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('rsvp-loading')).toBeVisible({ timeout: 5_000 });
     releaseInvitation();
     await expect(page.getByRole('heading', { name: 'Ana García' })).toBeVisible({ timeout: 10_000 });
   });

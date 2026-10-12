@@ -197,6 +197,20 @@ export function normalizeSectionResourcesPayload(
   };
 }
 
+/**
+ * What a section receives when its resources cannot be loaded. Sections render
+ * their config text only after `onLoaded`, so a failed first load must still
+ * hand them an (empty) payload: text with image placeholders beats a skeleton
+ * that never resolves. A failed background refresh keeps the current images.
+ */
+export function sectionResourcesLoadFailureFallback(
+  sectionId: string,
+  isBackgroundRefresh: boolean,
+): SectionResourcesPayload | null {
+  if (isBackgroundRefresh) return null;
+  return { sectionId, sectionResources: [] };
+}
+
 export function sortSectionResources(resources: SectionResource[]): SectionResource[] {
   return [...resources].sort((a, b) => {
     if (a.position !== b.position) return a.position - b.position;

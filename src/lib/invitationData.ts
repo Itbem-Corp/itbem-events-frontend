@@ -1,3 +1,10 @@
+import {
+  clampRsvpText,
+  readRsvpAvailability,
+  RSVP_DIETARY_MAX_LENGTH,
+  RSVP_NOTES_MAX_LENGTH,
+} from "./rsvpAvailability";
+
 export interface InvitationData {
   id: string;
   eventId: string;
@@ -14,6 +21,10 @@ export interface InvitationData {
   eventIdentifier?: string;
   eventDate: string;
   eventTimezone?: string;
+  /** False when the backend says RSVPs are closed (absent = open). */
+  rsvpOpen?: boolean;
+  /** RFC3339 RSVP deadline, when the backend sends one. */
+  rsvpDeadline?: string;
 }
 
 export interface RsvpConfirmationRequest {
@@ -290,6 +301,9 @@ export function normalizeInvitationPayload(
   if (rsvpNotes !== undefined) result.rsvpNotes = rsvpNotes;
   if (eventIdentifier) result.eventIdentifier = eventIdentifier;
   if (eventTimezone) result.eventTimezone = eventTimezone;
+  const availability = readRsvpAvailability(root);
+  if (availability.known) result.rsvpOpen = availability.open;
+  if (availability.deadline) result.rsvpDeadline = availability.deadline;
   return result;
 }
 
@@ -329,6 +343,8 @@ export function mergeInvitationPayload(
     eventIdentifier: next.eventIdentifier || current.eventIdentifier,
     eventDate: next.eventDate || current.eventDate,
     eventTimezone: next.eventTimezone || current.eventTimezone,
+    rsvpOpen: next.rsvpOpen ?? current.rsvpOpen,
+    rsvpDeadline: next.rsvpDeadline || current.rsvpDeadline,
   };
 }
 
@@ -358,11 +374,14 @@ export function buildRsvpConfirmationRequest(
   }
 
   if (dietaryRestrictions !== undefined) {
-    request.dietary_restrictions = dietaryRestrictions.trim();
+    request.dietary_restrictions = clampRsvpText(
+      dietaryRestrictions.trim(),
+      RSVP_DIETARY_MAX_LENGTH,
+    );
   }
 
   if (notes !== undefined) {
-    const cleanNotes = notes.trim();
+    const cleanNotes = clampRsvpText(notes.trim(), RSVP_NOTES_MAX_LENGTH);
     if (dietaryRestrictions !== undefined) {
       request.rsvp_notes = cleanNotes;
     } else if (cleanNotes) {

@@ -2,7 +2,8 @@
 
 import { motion } from 'framer-motion';
 import CountdownTimer from '../CountdownTimer';
-import type { SectionComponentProps, CountdownHeaderConfig } from '../engine/types';
+import type { SectionComponentProps } from '../engine/types';
+import { readConfigText } from "../../lib/sectionConfig";
 
 const headingStyle = {
   color: 'var(--eventi-color-accent, #8B5D3D)',
@@ -10,7 +11,7 @@ const headingStyle = {
 };
 
 export default function CountdownHeader({ config }: SectionComponentProps) {
-  const { heading, targetDate } = config as unknown as CountdownHeaderConfig;
+  const { heading, targetDate } = readConfigText(config, ["heading", "targetDate"]);
 
   return (
     <motion.header
@@ -21,7 +22,7 @@ export default function CountdownHeader({ config }: SectionComponentProps) {
     >
       <h1 className="text-3xl sm:text-4xl font-bold font-bigilla" style={headingStyle}>{heading}</h1>
       <div className="w-full flex flex-wrap justify-center gap-4">
-        <CountdownTimer targetDate={targetDate} />
+        <CountdownTimer targetDate={targetDate ?? ""} />
       </div>
     </motion.header>
   );

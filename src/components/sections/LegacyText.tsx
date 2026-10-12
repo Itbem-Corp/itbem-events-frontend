@@ -1,7 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { LegacyTextConfig, SectionComponentProps } from "../engine/types";
+import type { SectionComponentProps } from "../engine/types";
+import { readConfigText } from "../../lib/sectionConfig";
 
 const headingStyle = {
   color: "var(--eventi-color-heading, #07293a)",
@@ -13,7 +14,7 @@ const bodyStyle = {
 };
 
 export default function LegacyText({ config }: SectionComponentProps) {
-  const { title, content } = config as unknown as LegacyTextConfig;
+  const { title, content } = readConfigText(config, ["title", "content"]);
 
   if (!title && !content) return null;
 

@@ -6,10 +6,8 @@ import ResourcesBySectionSingle, {
   type Section,
 } from "../ResourcesBySectionSingle";
 import ImageWithLoader from "../ImageWithLoader";
-import type {
-  LegacyGalleryConfig,
-  SectionComponentProps,
-} from "../engine/types";
+import type { SectionComponentProps } from "../engine/types";
+import { readConfigText } from "../../lib/sectionConfig";
 import { resourceAtPosition } from "../../lib/publicResources";
 
 const headingStyle = {
@@ -27,11 +25,24 @@ export default function LegacyGallery({
   EVENTS_URL,
   publicAccess,
 }: SectionComponentProps) {
-  const { title, subtitle } = config as unknown as LegacyGalleryConfig;
+  const { title, subtitle } = readConfigText(config, ["title", "subtitle"]);
   const [section, setSection] = useState<Section | null>(null);
   const resources = [0, 1, 2, 3, 4, 5]
     .map((position) => resourceAtPosition(section?.sectionResources, position))
     .filter((resource): resource is NonNullable<typeof resource> => Boolean(resource));
+  // Loaded and still no photos: a lone title is an empty box (QA STU-25).
+  const isEmpty = section !== null && resources.length === 0;
+
+  if (isEmpty) {
+    return (
+      <ResourcesBySectionSingle
+        sectionId={sectionId}
+        EVENTS_URL={EVENTS_URL}
+        publicAccess={publicAccess}
+        onLoaded={setSection}
+      />
+    );
+  }
 
   return (
     <section className="relative z-10 space-y-6 py-8">
@@ -78,7 +89,7 @@ export default function LegacyGallery({
               >
                 <ImageWithLoader
                   src={resource.view_url}
-                  alt={resource.title || title || "Galeria"}
+                  alt={resource.title || title || "Galería"}
                 />
               </div>
             ))}

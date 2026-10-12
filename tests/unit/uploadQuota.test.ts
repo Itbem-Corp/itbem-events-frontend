@@ -208,3 +208,22 @@ describe("uploadQuota", () => {
     expect(getUploadDisplayLimit(10, 0)).toBe(0);
   });
 });
+
+describe("upload limit copy", async () => {
+  const { sharedUploadLimitPhrase, uploadFileCountPhrase, UPLOADS_CLOSED_COPY } =
+    await import("../../src/lib/uploadQuota");
+
+  // STU-66: "Sube hasta 1 fotos o videos".
+  it("pluralises the limit", () => {
+    expect(sharedUploadLimitPhrase(1)).toBe("Sube 1 foto o video");
+    expect(sharedUploadLimitPhrase(5)).toBe("Sube hasta 5 fotos o videos");
+    expect(uploadFileCountPhrase(1)).toBe("1 archivo");
+    expect(uploadFileCountPhrase(30)).toBe("30 archivos");
+  });
+
+  // PUB-91, EVT-67: uploads off said "Pronto podrás…" as if they would open.
+  it("states that uploads are closed without promising they will open", () => {
+    expect(UPLOADS_CLOSED_COPY.title).toBe("Por ahora no se pueden compartir momentos");
+    expect(`${UPLOADS_CLOSED_COPY.title} ${UPLOADS_CLOSED_COPY.description}`).not.toMatch(/pronto|vuelve en un momento/i);
+  });
+});

@@ -3,6 +3,7 @@ import {
   normalizeSectionResource,
   normalizeSectionResourcesPayload,
   resourceAtPosition,
+  sectionResourcesLoadFailureFallback,
   sortSectionResources,
   type SectionResource,
 } from "../../src/lib/publicResources";
@@ -475,5 +476,18 @@ describe("publicResources", () => {
         view_url: "https://api.example.com/storage/events/base/logo.webp",
       }),
     ]);
+  });
+});
+
+describe("sectionResourcesLoadFailureFallback", () => {
+  it("hands an empty payload to the section on a failed first load", () => {
+    expect(sectionResourcesLoadFailureFallback("sec-1", false)).toEqual({
+      sectionId: "sec-1",
+      sectionResources: [],
+    });
+  });
+
+  it("keeps current images when a background refresh fails", () => {
+    expect(sectionResourcesLoadFailureFallback("sec-1", true)).toBeNull();
   });
 });

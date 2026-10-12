@@ -73,7 +73,7 @@ const headingStyle: CSSProperties = {
 
 const mutedStyle: CSSProperties = {
   color: "var(--eventi-color-muted, #8B5D3D)",
-  fontFamily: "var(--eventi-font-body-effective, Aloevera Display, sans-serif)",
+  fontFamily: "var(--eventi-font-body-effective, Aloevera, sans-serif)",
 };
 
 const dividerLineStyle: CSSProperties = {
@@ -182,7 +182,7 @@ export default function RSVPConfirmationCard({ invData, token }: Props) {
               className="text-xs uppercase tracking-[0.15em] font-aloevera"
               style={mutedStyle}
             >
-              Confirmacion de asistencia
+              Confirmación de asistencia
             </p>
             {eventName && (
               <h3
@@ -206,7 +206,7 @@ export default function RSVPConfirmationCard({ invData, token }: Props) {
 
           {/* Guest name */}
           <p
-            className="text-2xl font-astralaga leading-tight"
+            className="text-2xl font-astralaga leading-tight break-words [overflow-wrap:anywhere]"
             style={headingStyle}
           >
             {invData.guestName}
@@ -214,7 +214,7 @@ export default function RSVPConfirmationCard({ invData, token }: Props) {
 
           {/* Date */}
           {formattedDate && (
-            <p className="text-sm font-aloevera capitalize" style={mutedStyle}>
+            <p className="text-sm font-aloevera" style={mutedStyle}>
               {formattedDate}
             </p>
           )}
@@ -248,7 +248,7 @@ export default function RSVPConfirmationCard({ invData, token }: Props) {
 
           {/* Hint */}
           <p className="text-[11px] font-aloevera" style={hintStyle}>
-            Presenta este codigo QR en la entrada
+            Presenta este código QR en la entrada
           </p>
         </div>
 

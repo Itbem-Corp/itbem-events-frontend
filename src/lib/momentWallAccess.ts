@@ -1,3 +1,5 @@
+import { configText } from "./sectionConfig";
+
 interface PersonalUploadAccessInput {
   prettyToken?: string | null;
   identifier?: string | null;
@@ -54,4 +56,22 @@ export function canShowPersonalUpload({
     return false;
   }
   return true;
+}
+
+/**
+ * The wall heading texts saved by the studio: `subtitle` sits under the title
+ * and `moment_request_message` asks guests for photos. When both carry the
+ * same text it is shown once.
+ */
+export function momentWallHeadingText(config: {
+  subtitle?: unknown;
+  moment_request_message?: unknown;
+}): { subtitle?: string; requestMessage?: string } {
+  const subtitle = configText(config.subtitle);
+  const requestMessage = configText(config.moment_request_message);
+  return {
+    subtitle,
+    requestMessage:
+      requestMessage && requestMessage !== subtitle ? requestMessage : undefined,
+  };
 }
