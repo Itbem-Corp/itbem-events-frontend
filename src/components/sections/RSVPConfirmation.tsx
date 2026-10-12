@@ -459,6 +459,8 @@ export default function RSVPConfirmation({
         />
       )}
 
+      {/* A visitor without a personal link is not an error: neutral guidance
+          in the section body color (QA PUB-19..22). */}
       {!passwordRequired && token === "" && !invError && (
         <p
           className="font-aloevera mx-auto mt-6 max-w-md text-pretty text-lg sm:text-xl"
@@ -479,8 +481,9 @@ export default function RSVPConfirmation({
       )}
 
       {/* Reserve the form's height while the invitation loads so the
-          sections below do not jump when it arrives (QA PUB-109). */}
-      {!passwordRequired && !invError && !invData && (
+          sections below do not jump when it arrives (QA PUB-109). Not shown
+          without a personal link: that visitor sees the hint above. */}
+      {!passwordRequired && token !== "" && !invError && !invData && (
         <div
           role="status"
           className="mx-auto flex min-h-[25.25rem] max-w-md flex-col items-center gap-5 px-2 sm:min-h-[23.5rem]"
