@@ -30,6 +30,7 @@ import {
 } from "../../lib/eventTrackingUrl";
 import { fetchApiResult } from "../../lib/apiFetch";
 import { readApiErrorCode } from "../../lib/apiError";
+import { postPreviewReady } from "../../lib/previewReadySignal";
 import { passwordVerifyFailure } from "../../lib/passwordVerify";
 import { resolvePublicWindowGate } from "../../lib/publicWindowGate";
 import { fetchApiResultWithRetry as fetchPageSpecWithRetry } from "../../lib/apiRetry";
@@ -576,6 +577,20 @@ export default function EventPage({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [spec]);
+
+  // Studio waits for this before showing its preview frame. Sent once per
+  // load, also for a final error state, so Studio never waits forever.
+  const previewReadySentRef = useRef(false);
+  useEffect(() => {
+    if ((!spec && !error) || typeof window === "undefined") return;
+    if (previewReadySentRef.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (postPreviewReady(window, isPreview)) {
+        previewReadySentRef.current = true;
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [spec, error, isPreview]);
 
   const retryLoadSpec = useCallback(() => {
     if (!token) return;
