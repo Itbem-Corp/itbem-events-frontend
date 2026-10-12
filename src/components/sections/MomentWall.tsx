@@ -10,6 +10,7 @@ import {
   memo,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
+  type RefObject,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -277,6 +278,56 @@ function VideoMomentCard({
         </div>
       </div>
     </button>
+  );
+}
+
+/**
+ * File input with Spanish copy: the native control shows the browser's own
+ * language ("Choose File"), so it stays in the DOM visually hidden and a
+ * styled label opens it (QA PUB-94).
+ */
+export function UploadFilePicker({
+  inputRef,
+  inputId,
+  disabled,
+}: {
+  inputRef?: RefObject<HTMLInputElement | null>;
+  inputId: string;
+  disabled: boolean;
+}) {
+  const [fileName, setFileName] = useState("");
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <input
+        ref={inputRef}
+        id={inputId}
+        name="file"
+        type="file"
+        accept={UPLOAD_FILE_ACCEPT}
+        disabled={disabled}
+        required
+        className="peer sr-only"
+        onChange={(event) =>
+          setFileName(event.currentTarget.files?.[0]?.name ?? "")
+        }
+      />
+      <label
+        htmlFor={inputId}
+        aria-hidden="true"
+        className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg bg-gray-100 px-4 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-200 peer-focus-visible:ring-2 peer-focus-visible:ring-black peer-disabled:cursor-default peer-disabled:opacity-60"
+      >
+        <Upload aria-hidden="true" className="size-4" />
+        {fileName ? "Cambiar archivo" : "Elegir archivo"}
+      </label>
+      <span
+        className="min-w-0 flex-1 truncate text-sm"
+        style={themedMutedStyle}
+        aria-live="polite"
+      >
+        {fileName || "Ningún archivo seleccionado"}
+      </span>
+    </div>
   );
 }
 
@@ -1374,16 +1425,10 @@ export default function MomentWall({
                       *
                     </span>
                   </label>
-                  <input
-                    ref={fileInputRef}
-                    id={uploadFileId}
-                    name="file"
-                    type="file"
-                    accept={UPLOAD_FILE_ACCEPT}
+                  <UploadFilePicker
+                    inputRef={fileInputRef}
+                    inputId={uploadFileId}
                     disabled={uploading}
-                    required
-                    className="w-full text-sm text-gray-500 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-gray-200"
-                    style={themedMutedStyle}
                   />
                   {maxUploadsPerGuest && (
                     <p className="mt-2 text-xs" style={themedMutedStyle}>

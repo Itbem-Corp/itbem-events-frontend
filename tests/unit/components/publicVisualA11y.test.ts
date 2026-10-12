@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { UploadMediaPreviewCard } from "../../../src/components/UploadMediaPreviewCard";
 import {
   PhotoMomentCard,
+  UploadFilePicker,
   momentCardLabel,
 } from "../../../src/components/sections/MomentWall";
 
@@ -47,5 +48,16 @@ describe("public visual a11y regressions", () => {
     expect(momentCardLabel("Ver foto 1", "  Brindis  ")).toBe(
       "Ver foto 1: Brindis",
     );
+  });
+
+  it("renders the personal upload file picker in Spanish", () => {
+    const markup = renderToStaticMarkup(
+      createElement(UploadFilePicker, { inputId: "file-1", disabled: false }),
+    );
+
+    expect(markup).toContain("Elegir archivo");
+    expect(markup).toContain("Ningún archivo seleccionado");
+    expect(markup).toContain("sr-only");
+    expect(markup).toContain("required");
   });
 });
