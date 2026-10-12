@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -5,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { UploadMediaPreviewCard } from "../../../src/components/UploadMediaPreviewCard";
 import {
   PhotoMomentCard,
+  UPLOAD_FILE_REQUIRED_MESSAGE,
   UploadFilePicker,
   momentCardLabel,
 } from "../../../src/components/sections/MomentWall";
@@ -63,6 +66,34 @@ describe("public visual a11y regressions", () => {
     expect(markup).toContain("Elegir archivo");
     expect(markup).toContain("Ningún archivo seleccionado");
     expect(markup).toContain("sr-only");
-    expect(markup).toContain("required");
+    expect(markup).toContain('aria-required="true"');
+    // Review F9: no native `required`, whose bubble points at the hidden
+    // input in the browser's language.
+    expect(markup).not.toMatch(/\srequired(?:=""|\s|>)/);
+    expect(markup).not.toContain("aria-invalid");
+  });
+
+  it("marks the hidden file input invalid and links the inline Spanish message", () => {
+    const markup = renderToStaticMarkup(
+      createElement(UploadFilePicker, {
+        inputId: "file-1",
+        disabled: false,
+        invalid: true,
+        describedBy: "file-error",
+      }),
+    );
+
+    expect(markup).toContain('aria-invalid="true"');
+    expect(markup).toContain('aria-describedby="file-error"');
+    expect(UPLOAD_FILE_REQUIRED_MESSAGE).toBe("Elige una foto o un video para subir.");
+  });
+
+  it("checks for a file in JS and shows the message inline", () => {
+    const source = readFileSync(
+      fileURLToPath(new URL("../../../src/components/sections/MomentWall.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(source).toMatch(/if \(!file\) \{\s+setUploadError\(UPLOAD_FILE_REQUIRED_MESSAGE\);\s+fileInput\.focus\(\);/);
+    expect(source).toMatch(/<p id=\{uploadErrorId\} role="alert"/);
   });
 });

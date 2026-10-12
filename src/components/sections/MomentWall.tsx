@@ -283,10 +283,15 @@ function VideoMomentCard({
   );
 }
 
+/** Shown when the upload form is sent without a file. */
+export const UPLOAD_FILE_REQUIRED_MESSAGE = "Elige una foto o un video para subir.";
+
 /**
  * File input with Spanish copy: the native control shows the browser's own
  * language ("Choose File"), so it stays in the DOM visually hidden and a
- * styled label opens it (QA PUB-94).
+ * styled label opens it (QA PUB-94). It is not natively `required`: the
+ * browser's bubble would point at the hidden input and speak its own
+ * language, so the wall checks for a file and shows the message inline.
  */
 export function UploadFilePicker({
   inputRef,
@@ -294,6 +299,8 @@ export function UploadFilePicker({
   disabled,
   fileName: controlledFileName,
   onFileNameChange,
+  invalid = false,
+  describedBy,
 }: {
   inputRef?: RefObject<HTMLInputElement | null>;
   inputId: string;
@@ -301,6 +308,9 @@ export function UploadFilePicker({
   /** Controlled name, so the wall can clear it after an upload or on close. */
   fileName?: string;
   onFileNameChange?: (name: string) => void;
+  /** The form was sent without a valid file; the message is `describedBy`. */
+  invalid?: boolean;
+  describedBy?: string;
 }) {
   const [ownFileName, setOwnFileName] = useState("");
   const fileName = controlledFileName ?? ownFileName;
@@ -318,7 +328,9 @@ export function UploadFilePicker({
         type="file"
         accept={UPLOAD_FILE_ACCEPT}
         disabled={disabled}
-        required
+        aria-required="true"
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
         className="peer sr-only"
         onChange={(event) =>
           setFileName(event.currentTarget.files?.[0]?.name ?? "")
@@ -463,6 +475,7 @@ export default function MomentWall({
   const uploadTitleId = useId();
   const uploadFileId = useId();
   const uploadNoteId = useId();
+  const uploadErrorId = useId();
   const lightboxTitleId = useId();
 
   const [invData, setInvData] = useState<InvitationData | null>(null);
@@ -973,7 +986,11 @@ export default function MomentWall({
       "description",
     ) as HTMLTextAreaElement | null;
     const file = fileInput.files?.[0];
-    if (!file) return;
+    if (!file) {
+      setUploadError(UPLOAD_FILE_REQUIRED_MESSAGE);
+      fileInput.focus();
+      return;
+    }
     const fileError = validateUploadFile(file);
     if (fileError) {
       setUploadError(fileError);
@@ -1451,7 +1468,12 @@ export default function MomentWall({
                     inputId={uploadFileId}
                     disabled={uploading}
                     fileName={selectedUploadName}
-                    onFileNameChange={setSelectedUploadName}
+                    onFileNameChange={(name) => {
+                      setSelectedUploadName(name);
+                      if (name) setUploadError("");
+                    }}
+                    invalid={uploadError === UPLOAD_FILE_REQUIRED_MESSAGE}
+                    describedBy={uploadError ? uploadErrorId : undefined}
                   />
                   {maxUploadsPerGuest && (
                     <p className="mt-2 text-xs" style={themedMutedStyle}>
@@ -1483,7 +1505,7 @@ export default function MomentWall({
                   </div>
                 )}
                 {uploadError && (
-                  <p role="alert" className="text-sm text-red-600">
+                  <p id={uploadErrorId} role="alert" className="text-sm text-red-600">
                     {uploadError}
                   </p>
                 )}
