@@ -2,6 +2,14 @@ import { defineMiddleware } from "astro:middleware";
 
 import { applyPublicResponseHeaders } from "./lib/publicResponseHeaders";
 import { hasCredentialQuery, isPublicEventRoute } from "./lib/publicRouteCredentials";
+import { buildContentSecurityPolicy } from "./lib/contentSecurityPolicy";
+
+// Production builds always get the HTTPS-only policy; only `astro dev` with a
+// loopback HTTP API (the local stack) allows that origin.
+const CONTENT_SECURITY_POLICY = buildContentSecurityPolicy({
+  dev: import.meta.env.DEV === true,
+  eventsUrl: import.meta.env.PUBLIC_EVENTS_URL as string | undefined,
+});
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const response = await next();
@@ -11,10 +19,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   response.headers.set("Permissions-Policy", "camera=(self), microphone=(), geolocation=()");
   response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
   response.headers.set("X-Permitted-Cross-Domain-Policies", "none");
-  response.headers.set(
-    "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; media-src 'self' blob: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-src https:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests",
-  );
+  response.headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
   if (!isPublicEventRoute(context.url.pathname)) return response;
 
   const hasCredential = hasCredentialQuery(context.url.searchParams);
