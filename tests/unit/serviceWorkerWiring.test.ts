@@ -131,5 +131,8 @@ describe("PWA wiring", () => {
     expect(page).toContain("import TemplateLayout from '../layouts/template.astro';");
     expect(page).toContain("No encontramos esta página");
     expect(read("../../src/layouts/template.astro")).toContain('name="viewport"');
+    // Review F7: the product name comes from the contract, not a literal.
+    expect(page).toContain("const productName = PUBLIC_PRODUCT.branding.name;");
+    expect(page).not.toMatch(/EventiApp/);
   });
 });

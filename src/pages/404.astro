@@ -6,9 +6,12 @@
 export const prerender = true;
 
 import TemplateLayout from '../layouts/template.astro';
+import { PUBLIC_PRODUCT } from '../config/public-product';
+
+const productName = PUBLIC_PRODUCT.branding.name;
 ---
 
-<TemplateLayout title="Página no encontrada — EventiApp">
+<TemplateLayout title={`Página no encontrada — ${productName}`}>
   <main
     class="eventi-public-state flex min-h-[100svh] items-center justify-center px-4 py-10"
     data-not-found
@@ -26,7 +29,7 @@ import TemplateLayout from '../layouts/template.astro';
       <div class="mx-auto flex w-fit items-center gap-2 rounded-full border border-[#dd2284]/10 bg-[#fff0f7]/80 px-3 py-1.5">
         <img src="/favicon.svg" alt="" width="16" height="16" class="size-4" />
         <span class="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-[#b91468]">
-          EventiApp
+          {productName}
         </span>
       </div>
 
