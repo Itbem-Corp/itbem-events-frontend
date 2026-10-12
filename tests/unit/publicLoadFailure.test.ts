@@ -94,3 +94,52 @@ describe("PublicEventLoadError", () => {
     expect(markup).toContain("focus-visible:ring-2");
   });
 });
+
+describe("resolvePublicLoadFailure: invalid links and deleted events", () => {
+  it.each([
+    [401, "invitation_token_expired"],
+    [401, "invitation_token_invalid"],
+  ])("explains an expired or invalid link (%s %s) on /e/ and /rsvp/", (status, code) => {
+    for (const resource of ["event", "invitation"] as const) {
+      const failure = resolvePublicLoadFailure({ status, code, resource });
+      expect(failure).toMatchObject({
+        retryable: false,
+        title: "Este enlace ya no es válido o expiró",
+      });
+      expect(failure.message).not.toMatch(/publicado/);
+    }
+  });
+
+  it("maps the token route's bare 401 'token expired' to the invalid link copy", () => {
+    const failure = resolvePublicLoadFailure({
+      status: 401,
+      resource: "invitation",
+      backendMessage: "token expired",
+    });
+    expect(failure.title).toBe("Este enlace ya no es válido o expiró");
+  });
+
+  it("keeps the 'requires access' copy for a password 401", () => {
+    const failure = resolvePublicLoadFailure({
+      status: 401,
+      code: "event_password_required",
+      resource: "event",
+    });
+    expect(failure.title).toBe("Este evento requiere acceso");
+  });
+
+  it("keeps 'not published yet' for a real 403 without a token code", () => {
+    const failure = resolvePublicLoadFailure({ status: 403, resource: "event" });
+    expect(failure.title).toBe("Este evento aún no está disponible");
+  });
+
+  it("says a deleted event is no longer available (410 event_gone)", () => {
+    for (const failure of [
+      resolvePublicLoadFailure({ status: 410, resource: "event" }),
+      resolvePublicLoadFailure({ status: 404, code: "event_gone", resource: "invitation" }),
+    ]) {
+      expect(failure.title).toBe("Este evento ya no está disponible");
+      expect(failure.retryable).toBe(false);
+    }
+  });
+});

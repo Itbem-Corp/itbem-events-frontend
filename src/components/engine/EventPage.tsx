@@ -25,6 +25,7 @@ import {
   viewTrackingSessionKey,
 } from "../../lib/eventTrackingUrl";
 import { fetchApiResult } from "../../lib/apiFetch";
+import { readApiErrorCode } from "../../lib/apiError";
 import { passwordVerifyFailure } from "../../lib/passwordVerify";
 import { resolvePublicWindowGate } from "../../lib/publicWindowGate";
 import { fetchApiResultWithRetry as fetchPageSpecWithRetry } from "../../lib/apiRetry";
@@ -420,36 +421,20 @@ export default function EventPage({
         const clearStalePageSpecCache = () => {
           removePageSpecCache(scopedCacheId, cacheMode, undefined, EVENTS_URL);
         };
-        if (result.status === 404) {
+        // Access decisions (401/403/404) and a deleted event (410) are final:
+        // show the matching Spanish state, never a retry loop.
+        if (
+          result.status === 401 ||
+          result.status === 403 ||
+          result.status === 404 ||
+          result.status === 410
+        ) {
           clearStalePageSpecCache();
           setSpec(null);
           setError(
             resolvePublicLoadFailure({
               status: result.status,
-              resource: byIdentifier ? "event" : "invitation",
-              backendMessage: result.message,
-            }),
-          );
-          return;
-        }
-        if (result.status === 401) {
-          clearStalePageSpecCache();
-          setSpec(null);
-          setError(
-            resolvePublicLoadFailure({
-              status: result.status,
-              resource: byIdentifier ? "event" : "invitation",
-              backendMessage: result.message,
-            }),
-          );
-          return;
-        }
-        if (result.status === 403) {
-          clearStalePageSpecCache();
-          setSpec(null);
-          setError(
-            resolvePublicLoadFailure({
-              status: result.status,
+              code: readApiErrorCode(result.payload),
               resource: byIdentifier ? "event" : "invitation",
               backendMessage: result.message,
             }),

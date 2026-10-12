@@ -50,12 +50,14 @@ export async function fetchApiResultWithRetry<T>(
       const result = await fetchApiResult<T>(url, init, fallbackMessage);
       lastResult = result;
 
-      // 401/403/404 are access/token decisions; do not retry them.
+      // 401/403/404 are access/token decisions and 410 a deleted event;
+      // do not retry them.
       if (
         result.ok ||
         result.status === 401 ||
         result.status === 403 ||
-        result.status === 404
+        result.status === 404 ||
+        result.status === 410
       ) {
         return result;
       }
