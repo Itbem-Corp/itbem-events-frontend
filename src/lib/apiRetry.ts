@@ -80,6 +80,6 @@ export async function fetchApiResultWithRetry<T>(
     fallbackMessage ??
       (lastError instanceof Error && lastError.message.trim()
         ? lastError.message
-        : "No se pudo conectar. Verifica tu conexion e intenta de nuevo."),
+        : "No se pudo conectar. Verifica tu conexión e intenta de nuevo."),
   );
 }

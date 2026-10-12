@@ -899,7 +899,7 @@ export default function SharedUploadPage({
         <UploadThemeToggle theme={theme} onToggle={toggleTheme} />
         <PublicEventPasswordGate
           title="Uploads privados"
-          description="Ingresa la contrasena del evento para compartir tus momentos."
+          description="Ingresa la contraseña del evento para compartir tus momentos."
           className={theme === "dark" ? "bg-gray-950" : "bg-gray-50"}
           onVerify={eventAccess.verifyPassword}
         />
@@ -1719,9 +1719,9 @@ function UploadLimitReachedScreen() {
 }
 
 function ComingSoonScreen({
-  title = "Pronto podras compartir tus mejores momentos",
-  description = "El organizador esta preparando todo para que puedas subir tus fotos y videos del evento. Vuelve en un momento.",
-  statusLabel = "Preparando el evento",
+  title = "Por ahora no se pueden compartir momentos",
+  description = "El organizador no ha abierto la subida de fotos y videos para este evento. Si se habilita, podrás usar este mismo enlace.",
+  statusLabel = "Subidas cerradas",
 }: {
   title?: string;
   description?: string;

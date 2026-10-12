@@ -465,7 +465,10 @@ export default function RSVPConfirmation({
       )}
 
       {!passwordRequired && invError && (
-        <p className="font-aloevera text-red-600 text-lg sm:text-2xl mt-6">
+        <p
+          role="alert"
+          className="font-aloevera text-red-600 text-lg sm:text-2xl mt-6"
+        >
           {invError}
         </p>
       )}

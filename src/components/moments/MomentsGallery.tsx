@@ -684,7 +684,7 @@ export default function MomentsGallery({
     return (
       <MotionConfig reducedMotion="user">
         <div className="min-h-screen flex items-center justify-center bg-white">
-          <p className="text-gray-400 text-sm">Enlace invalido.</p>
+          <p className="text-gray-400 text-sm">Enlace inválido.</p>
         </div>
       </MotionConfig>
     );
@@ -694,8 +694,8 @@ export default function MomentsGallery({
     return (
       <MotionConfig reducedMotion="user">
         <PublicEventPasswordGate
-          title="Galeria privada"
-          description="Ingresa la contrasena del evento para ver los momentos."
+          title="Galería privada"
+          description="Ingresa la contraseña del evento para ver los momentos."
           onVerify={eventAccess.verifyPassword}
         />
       </MotionConfig>
@@ -782,7 +782,7 @@ export default function MomentsGallery({
               {eventName || "Momentos"}
             </div>
             <p className="text-gray-500 text-sm">
-              Aun no hay momentos publicados. Vuelve pronto!
+              Aún no hay momentos publicados. ¡Vuelve pronto!
             </p>
           </motion.div>
         </div>

@@ -89,7 +89,7 @@ export default function LegacyGallery({
               >
                 <ImageWithLoader
                   src={resource.view_url}
-                  alt={resource.title || title || "Galeria"}
+                  alt={resource.title || title || "Galería"}
                 />
               </div>
             ))}

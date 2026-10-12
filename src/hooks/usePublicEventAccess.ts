@@ -230,7 +230,7 @@ export function usePublicEventAccess({
       const id = clean(identifier);
       const value = clean(password);
       if (!id || !value) {
-        return { ok: false, message: "Ingresa la contrasena." };
+        return { ok: false, message: "Ingresa la contraseña." };
       }
 
       try {
@@ -246,7 +246,7 @@ export function usePublicEventAccess({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ password: value }),
           },
-          "Contrasena incorrecta. Intenta de nuevo.",
+          "Contraseña incorrecta. Intenta de nuevo.",
         );
         if (!result.ok) {
           return passwordVerifyFailure(result);
@@ -256,7 +256,7 @@ export function usePublicEventAccess({
         if (!access.accessToken && access.passwordProtected) {
           return {
             ok: false,
-            message: "No pudimos abrir esta pagina. Intenta de nuevo.",
+            message: "No pudimos abrir esta página. Intenta de nuevo.",
           };
         }
 
@@ -329,7 +329,7 @@ export function usePublicEventAccess({
               setPasswordVerified(false);
               return {
                 ok: false,
-                message: "No pudimos abrir esta pagina. Intenta de nuevo.",
+                message: "No pudimos abrir esta página. Intenta de nuevo.",
               };
             }
           } catch {
