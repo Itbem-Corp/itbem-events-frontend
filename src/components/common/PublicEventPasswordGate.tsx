@@ -9,8 +9,10 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { SubmitEvent } from "react";
-import { formatRetryWait } from "../../lib/apiError";
-import { remainingLockSeconds } from "../../lib/passwordVerify";
+import {
+  formatLockCountdown,
+  remainingLockSeconds,
+} from "../../lib/passwordVerify";
 import { cn } from "../../lib/utils";
 
 interface PublicEventPasswordGateProps {
@@ -211,12 +213,17 @@ export default function PublicEventPasswordGate({
                 {error}
               </p>
             )}
+            {/* The alert above already says how long to wait; this is only
+                the live clock, not a second copy of the message (QA PUB-N2).
+                role="timer" keeps screen readers from announcing every tick. */}
             {locked && (
               <p
-                aria-live="polite"
-                className="mt-1 text-xs leading-5 text-[#607783]"
+                role="timer"
+                aria-label="Tiempo restante para volver a intentarlo"
+                className="mt-1 text-xs leading-5 text-[#607783] tabular-nums"
+                data-testid="password-lock-countdown"
               >
-                Podrás intentarlo de nuevo en {formatRetryWait(lockSeconds)}.
+                Tiempo restante: {formatLockCountdown(lockSeconds)}
               </p>
             )}
           </div>

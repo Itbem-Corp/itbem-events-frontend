@@ -57,3 +57,11 @@ export function remainingLockSeconds(
   if (lockedUntil === null) return 0;
   return Math.max(0, Math.ceil((lockedUntil - now) / 1000));
 }
+
+/** Remaining lock as a clock ("9:58"), for the countdown under the message. */
+export function formatLockCountdown(seconds: number): string {
+  const safe = Math.max(0, Math.ceil(seconds));
+  const minutes = Math.floor(safe / 60);
+  const rest = safe % 60;
+  return `${minutes}:${String(rest).padStart(2, "0")}`;
+}

@@ -17,7 +17,7 @@ import {
 } from "../../src/lib/apiFetch";
 import { normalizeInvitationPayload } from "../../src/lib/invitationData";
 import { readPageSpecPayload } from "../../src/lib/pageSpecCache";
-import { passwordVerifyFailure, remainingLockSeconds } from "../../src/lib/passwordVerify";
+import { formatLockCountdown, passwordVerifyFailure, remainingLockSeconds } from "../../src/lib/passwordVerify";
 import { publicAccessFetchInit } from "../../src/lib/publicPreview";
 import { shouldTrackPublicView } from "../../src/lib/publicViewTracking";
 import { resolvePublicWindowGate } from "../../src/lib/publicWindowGate";
@@ -254,6 +254,11 @@ describe("4. 429 too_many_attempts with Retry-After", () => {
     expect(remainingLockSeconds(10_500, 1_000)).toBe(10);
     expect(remainingLockSeconds(500, 1_000)).toBe(0);
     expect(remainingLockSeconds(null)).toBe(0);
+    // QA PUB-N2: the second line is a clock, not the message again.
+    expect(formatLockCountdown(600)).toBe("10:00");
+    expect(formatLockCountdown(598)).toBe("9:58");
+    expect(formatLockCountdown(5)).toBe("0:05");
+    expect(formatLockCountdown(-3)).toBe("0:00");
   });
 });
 
