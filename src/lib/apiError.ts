@@ -226,6 +226,8 @@ export function isRsvpClosedError(error: unknown): boolean {
 }
 
 export const EVENT_GONE_MESSAGE = "Este evento ya no está disponible";
+export const INVALID_INVITATION_LINK_MESSAGE =
+  "Este enlace ya no es válido o expiró. Pide al organizador que te comparta uno nuevo.";
 export const EVENT_PASSWORD_REQUIRED_MESSAGE =
   "Esta invitación está protegida con contraseña. Ingrésala para continuar.";
 
@@ -276,6 +278,17 @@ export function getPublicApiErrorMessage(
   if (isEventGoneError(error)) return EVENT_GONE_MESSAGE;
   if (code === "event_password_required") return EVENT_PASSWORD_REQUIRED_MESSAGE;
 
+  // Final backend contract (wave 2): link and availability codes.
+  if (code === "invitation_token_expired" || code === "invitation_token_invalid") {
+    return INVALID_INVITATION_LINK_MESSAGE;
+  }
+  if (code === "event_unavailable") {
+    return "Esta invitación no está disponible en este momento.";
+  }
+  if (code === "event_not_public") {
+    return "Esta invitación aún no está disponible o ya cerró.";
+  }
+
   if (status === 429 || code === "too_many_attempts") {
     const retryAfter =
       isRecord(error) && typeof error.retryAfterSeconds === "number"
@@ -318,7 +331,7 @@ export function getPublicApiErrorMessage(
     ) ||
     status === 401
   ) {
-    return "Este enlace ya no es válido o expiró. Pide al organizador que te comparta uno nuevo.";
+    return INVALID_INVITATION_LINK_MESSAGE;
   }
 
   if (/not public|not_public/.test(text) || status === 403) {
