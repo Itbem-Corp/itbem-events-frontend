@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ComponentType } from 'react';
-import { resolveSectionRegistryEntry } from './registry';
+import { resolveSectionRegistryEntry, sectionPlaceholderClassName } from './registry';
 import SectionErrorBoundary from './SectionErrorBoundary';
 import type { SectionSpec, SectionComponentProps } from './types';
 import type { PublicAccessFetchParams } from '../../lib/publicPreview';
@@ -100,7 +100,7 @@ export default function SectionRenderer({ spec, EVENTS_URL, publicAccess }: Prop
     return (
       <div
         ref={sentinelRef}
-        className="eventi-skeleton h-64 w-full rounded-[2rem]"
+        className={`eventi-skeleton w-full rounded-[2rem] ${sectionPlaceholderClassName(entry, Boolean(publicAccess?.invitationToken?.trim()))}`}
         data-section-type={spec.type}
         aria-hidden="true"
       />

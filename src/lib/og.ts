@@ -83,6 +83,12 @@ export interface EventOgData {
   organizer_name?: string;
   event_type?: string;
   content_version?: string;
+  /**
+   * Stable cover for share cards: the API's /api/events/:identifier/cover-image
+   * route (302 to a fresh view URL), already resolved against the API origin.
+   * Absent when the event has no public cover.
+   */
+  og_image_url?: string;
 }
 
 export interface PublicOgMeta {
@@ -92,6 +98,69 @@ export interface PublicOgMeta {
 }
 
 export type SharedUploadOgMeta = PublicOgMeta;
+
+const PRESIGNED_QUERY_KEYS = [
+  "x-amz-signature",
+  "x-amz-expires",
+  "x-amz-credential",
+  "x-goog-signature",
+  "signature",
+];
+
+/** True for a time-limited signed URL (S3/GCS presigned, CloudFront signed). */
+export function isPresignedMediaUrl(value: string | null | undefined): boolean {
+  const raw = value?.trim() ?? "";
+  if (!raw) return false;
+  try {
+    const keys = [...new URL(raw).searchParams.keys()].map((key) =>
+      key.toLowerCase(),
+    );
+    return keys.some((key) => PRESIGNED_QUERY_KEYS.includes(key));
+  } catch {
+    return false;
+  }
+}
+
+function isResolvedStorageKey(value: string, eventsUrl?: string): boolean {
+  if (!eventsUrl) return false;
+  try {
+    return new URL(value).href.startsWith(
+      new URL("storage/", normalizeEventsUrl(eventsUrl)).href,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Cover for og:image that keeps working after the page is shared. Social
+ * networks fetch the card hours or days later, so a presigned view URL (12 h)
+ * is never used (QA STU-49). When the event only has signed URLs, the stored
+ * key is private too, so no cover is used: the card is drawn without it, or
+ * the page falls back to the branded /og-default.png.
+ */
+export function stableOgCoverUrl(
+  event: Pick<
+    EventOgData,
+    "cover_view_url" | "view_url" | "cover_image_url" | "og_image_url"
+  >,
+  eventsUrl?: string,
+): string {
+  // The API's stable cover route wins whenever /meta sends it.
+  const ogImageUrl = event.og_image_url?.trim();
+  if (ogImageUrl) return ogImageUrl;
+  const candidates = [event.cover_view_url, event.view_url, event.cover_image_url]
+    .map((value) => value?.trim() ?? "")
+    .filter(Boolean);
+  const unsigned = candidates.filter((value) => !isPresignedMediaUrl(value));
+  if (unsigned.length === candidates.length) return unsigned[0] ?? "";
+  return (
+    unsigned.find(
+      (value) =>
+        /^https?:\/\//i.test(value) && !isResolvedStorageKey(value, eventsUrl),
+    ) ?? ""
+  );
+}
 
 function buildEventOgImage(
   event: EventOgData,
@@ -104,7 +173,7 @@ function buildEventOgImage(
     timezone: event.timezone,
     language: event.language,
     address: firstString(event.address, event.second_address),
-    cover: event.cover_view_url || event.view_url || event.cover_image_url,
+    cover: stableOgCoverUrl(event, eventsUrl),
     type: event.event_type,
     eventsUrl,
   });
@@ -115,8 +184,8 @@ export function buildPublicEventOgMeta(
   eventsUrl?: string,
 ): PublicOgMeta {
   const fallback: PublicOgMeta = {
-    title: "Estas invitado",
-    description: "Abre tu invitacion y descubre todos los detalles del evento.",
+    title: "Estás invitado",
+    description: "Abre tu invitación y descubre todos los detalles del evento.",
     image: "",
   };
 
@@ -144,7 +213,7 @@ export function buildRsvpOgMeta(
   const fallback: PublicOgMeta = {
     title: "Confirma tu asistencia",
     description:
-      "Te esperamos. Confirma en un tap y no te pierdas ningun detalle.",
+      "Te esperamos. Confirma en un tap y no te pierdas ningún detalle.",
     image: "",
   };
 
@@ -176,7 +245,7 @@ export function buildMomentsOgMeta(
   const title = `Momentos - ${eventName}`;
   return {
     title,
-    description: `Galeria de fotos y videos de ${eventName}. Revive los mejores momentos.`,
+    description: `Galería de fotos y videos de ${eventName}. Revive los mejores momentos.`,
     image: buildEventOgImage(event, title, eventsUrl),
   };
 }
@@ -446,7 +515,44 @@ function readEventOgRecord(
       data.contentVersion,
       data.ContentVersion,
     ),
+    og_image_url: resolveApiOgImageUrl(
+      firstString(
+        event.og_image_url,
+        event.ogImageUrl,
+        event.ogImageURL,
+        event.OgImageURL,
+        event.OGImageURL,
+        data.og_image_url,
+        data.ogImageUrl,
+        data.ogImageURL,
+        data.OgImageURL,
+        data.OGImageURL,
+      ),
+      eventsUrl,
+    ),
   };
+}
+
+/**
+ * `og_image_url` from /meta is a path relative to the API origin
+ * (`/api/events/:identifier/cover-image`). Only http(s) results are kept.
+ */
+export function resolveApiOgImageUrl(
+  value: string | undefined,
+  eventsUrl?: string,
+): string | undefined {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  try {
+    const url = eventsUrl
+      ? new URL(raw, normalizeEventsUrl(eventsUrl))
+      : new URL(raw);
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function hasEventOgData(event: EventOgData): boolean {
@@ -611,4 +717,37 @@ export async function fetchEventOgData(
   } catch {
     return null;
   }
+}
+
+/** Branded 1200x630 image served from `public/` for pages without a cover. */
+export const DEFAULT_OG_IMAGE_PATH = "/og-default.png";
+
+export interface ResolvedOgImage {
+  url: string;
+  /** True when the image is a 1200x630 PNG we generate (default or /api/og). */
+  isBrandedPng: boolean;
+}
+
+/**
+ * Every shareable page gets an og:image: the event image when the page built
+ * one, otherwise the branded default resolved against the request origin.
+ */
+export function resolvePageOgImage(
+  ogImage: string | null | undefined,
+  pageUrl: URL | string,
+): ResolvedOgImage {
+  const explicit = ogImage?.trim() ?? "";
+  if (explicit) {
+    let isBrandedPng = false;
+    try {
+      isBrandedPng = new URL(explicit).pathname === "/api/og";
+    } catch {
+      isBrandedPng = false;
+    }
+    return { url: explicit, isBrandedPng };
+  }
+  return {
+    url: new URL(DEFAULT_OG_IMAGE_PATH, pageUrl).toString(),
+    isBrandedPng: true,
+  };
 }

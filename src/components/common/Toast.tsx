@@ -7,7 +7,18 @@ import type { ToastItem } from "../../hooks/useToast";
 interface ToastListProps {
   toasts: ToastItem[];
   onRemove: (id: string) => void;
+  /**
+   * "top" (default) or "bottom-mobile": on phones the stack sits at the bottom
+   * so it never covers content that just appeared at the top (QA PUB-53).
+   */
+  placement?: "top" | "bottom-mobile";
 }
+
+const placementClass: Record<NonNullable<ToastListProps["placement"]>, string> = {
+  top: "top-4",
+  "bottom-mobile":
+    "bottom-[calc(1rem+env(safe-area-inset-bottom))] sm:bottom-auto sm:top-4",
+};
 
 const colorMap: Record<ToastItem["type"], string> = {
   success: "border-emerald-200 text-emerald-900",
@@ -27,12 +38,16 @@ const iconColorMap: Record<ToastItem["type"], string> = {
   info: "text-amber-600",
 };
 
-export default function ToastList({ toasts, onRemove }: ToastListProps) {
+export default function ToastList({
+  toasts,
+  onRemove,
+  placement = "top",
+}: ToastListProps) {
   const reduceMotion = useReducedMotion();
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-4 top-4 z-[70] flex flex-col items-end gap-2 sm:left-auto sm:w-full sm:max-w-sm"
+      className={`pointer-events-none fixed inset-x-4 ${placementClass[placement]} z-[70] flex flex-col items-end gap-2 sm:left-auto sm:w-full sm:max-w-sm`}
       aria-label="Notificaciones"
     >
       <AnimatePresence initial={false}>

@@ -14,6 +14,9 @@ import {
   createFreshFirstApiMatcher,
   createPublicEventPageRuntimeCacheMatcher,
   createS3ImageRuntimeCacheMatcher,
+  createServerCachePolicyPlugin,
+  SENSITIVE_PUBLIC_ACCESS_QUERY_KEYS,
+  serverAllowsWorkerCache,
   shouldBypassApiRuntimeCache,
   shouldUseApiRuntimeCache,
   shouldUseFreshFirstApiCache,
@@ -24,6 +27,7 @@ import {
   buildIdentifierPageSpecUrl,
   buildTokenPageSpecUrl,
 } from "../../src/lib/pageSpecUrl";
+import { CREDENTIAL_QUERY_KEYS } from "../../src/lib/publicRouteCredentials";
 
 describe("apiCachePolicy", () => {
   it("does not runtime-cache access-controlled public GET URL builders", () => {
@@ -177,6 +181,45 @@ describe("apiCachePolicy", () => {
         false,
       );
       expect(matcher({ request, url: new URL(url) }), url).toBe(false);
+    }
+  });
+
+  // Review F1: the worker's key list drifted from the middleware's and cached
+  // /momentos and /tv pages opened with access_token, accessToken, access or t.
+  it("keeps the worker key list equal to the middleware credential keys", () => {
+    expect([...SENSITIVE_PUBLIC_ACCESS_QUERY_KEYS].sort()).toEqual(
+      [...CREDENTIAL_QUERY_KEYS].sort(),
+    );
+  });
+
+  it("never runtime-caches a page navigation carrying any middleware credential key", () => {
+    const request = { mode: "navigate" };
+    const matcher = createPublicEventPageRuntimeCacheMatcher();
+    for (const key of CREDENTIAL_QUERY_KEYS) {
+      for (const path of ["/e/boda/momentos", "/e/boda/tv", "/rsvp/boda"]) {
+        for (const value of ["SECRET", ""]) {
+          const url = `https://www.eventiapp.com.mx${path}?${key}=${value}`;
+          expect(shouldUsePublicEventPageRuntimeCache(url, request), url).toBe(false);
+          expect(matcher({ request, url: new URL(url) }), url).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("refuses to cache responses the server marked no-store or private", async () => {
+    const plugin = createServerCachePolicyPlugin();
+    const withCacheControl = (value?: string) =>
+      new Response("ok", { headers: value ? { "Cache-Control": value } : {} });
+
+    for (const value of ["private, no-store", "no-store", "private", "Private, max-age=0", "public, no-store"]) {
+      const response = withCacheControl(value);
+      expect(serverAllowsWorkerCache(response), value).toBe(false);
+      expect(await plugin.cacheWillUpdate({ response }), value).toBeNull();
+    }
+    for (const value of [undefined, "public, max-age=60, s-maxage=120", "no-cache", "max-age=0, must-revalidate"]) {
+      const response = withCacheControl(value);
+      expect(serverAllowsWorkerCache(response), String(value)).toBe(true);
+      expect(await plugin.cacheWillUpdate({ response }), String(value)).toBe(response);
     }
   });
 
