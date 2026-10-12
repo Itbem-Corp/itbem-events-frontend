@@ -93,6 +93,63 @@ export interface PublicOgMeta {
 
 export type SharedUploadOgMeta = PublicOgMeta;
 
+const PRESIGNED_QUERY_KEYS = [
+  "x-amz-signature",
+  "x-amz-expires",
+  "x-amz-credential",
+  "x-goog-signature",
+  "signature",
+];
+
+/** True for a time-limited signed URL (S3/GCS presigned, CloudFront signed). */
+export function isPresignedMediaUrl(value: string | null | undefined): boolean {
+  const raw = value?.trim() ?? "";
+  if (!raw) return false;
+  try {
+    const keys = [...new URL(raw).searchParams.keys()].map((key) =>
+      key.toLowerCase(),
+    );
+    return keys.some((key) => PRESIGNED_QUERY_KEYS.includes(key));
+  } catch {
+    return false;
+  }
+}
+
+function isResolvedStorageKey(value: string, eventsUrl?: string): boolean {
+  if (!eventsUrl) return false;
+  try {
+    return new URL(value).href.startsWith(
+      new URL("storage/", normalizeEventsUrl(eventsUrl)).href,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Cover for og:image that keeps working after the page is shared. Social
+ * networks fetch the card hours or days later, so a presigned view URL (12 h)
+ * is never used (QA STU-49). When the event only has signed URLs, the stored
+ * key is private too, so no cover is used: the card is drawn without it, or
+ * the page falls back to the branded /og-default.png.
+ */
+export function stableOgCoverUrl(
+  event: Pick<EventOgData, "cover_view_url" | "view_url" | "cover_image_url">,
+  eventsUrl?: string,
+): string {
+  const candidates = [event.cover_view_url, event.view_url, event.cover_image_url]
+    .map((value) => value?.trim() ?? "")
+    .filter(Boolean);
+  const unsigned = candidates.filter((value) => !isPresignedMediaUrl(value));
+  if (unsigned.length === candidates.length) return unsigned[0] ?? "";
+  return (
+    unsigned.find(
+      (value) =>
+        /^https?:\/\//i.test(value) && !isResolvedStorageKey(value, eventsUrl),
+    ) ?? ""
+  );
+}
+
 function buildEventOgImage(
   event: EventOgData,
   title: string,
@@ -104,7 +161,7 @@ function buildEventOgImage(
     timezone: event.timezone,
     language: event.language,
     address: firstString(event.address, event.second_address),
-    cover: event.cover_view_url || event.view_url || event.cover_image_url,
+    cover: stableOgCoverUrl(event, eventsUrl),
     type: event.event_type,
     eventsUrl,
   });
