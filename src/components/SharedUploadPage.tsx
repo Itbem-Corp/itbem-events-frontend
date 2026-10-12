@@ -42,6 +42,7 @@ import {
 } from "../lib/sharedUploadAccess";
 import { buildEventMomentsUrl } from "../lib/apiUrls";
 import { fetchApiData, isApiFetchError } from "../lib/apiFetch";
+import { withUploadDeviceHeader } from "../lib/uploadDeviceId";
 import {
   mergeUploadPublicationHint,
   sharedUploadSuccessCopy,
@@ -354,7 +355,9 @@ export default function SharedUploadPage({
         typeof window === "undefined"
           ? { previewToken: "", invitationToken: "", accessToken: "" }
           : resolvePublicAccessParams({ accessToken }, window.location.search);
-      return publicAccessFetchInit(accessParams, init);
+      // Every call made through here is a moment upload API call (status,
+      // presign, confirm, multipart): it carries the anonymous device id.
+      return withUploadDeviceHeader(publicAccessFetchInit(accessParams, init));
     },
     [accessToken],
   );

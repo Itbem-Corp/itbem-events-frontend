@@ -36,6 +36,7 @@ import {
   buildPersonalMomentUploadUrl,
 } from "../../lib/apiUrls";
 import { fetchApiData, isApiFetchError } from "../../lib/apiFetch";
+import { withUploadDeviceHeader } from "../../lib/uploadDeviceId";
 import {
   canShowPersonalUpload,
   momentWallHeadingText,
@@ -600,7 +601,13 @@ export default function MomentWall({
               ...publicAccessQueryParams(publicAccessForRequests),
               pretty_token: prettyToken,
             }),
-            publicAccessFetchInit(publicAccessForRequests),
+            // With a personal token this response is also the upload quota
+            // check, so it carries the device id (header only).
+            prettyToken
+              ? withUploadDeviceHeader(
+                  publicAccessFetchInit(publicAccessForRequests),
+                )
+              : publicAccessFetchInit(publicAccessForRequests),
             "No se pudieron cargar los momentos",
           ),
         );
@@ -1016,7 +1023,7 @@ export default function MomentWall({
         () =>
           fetchApiData<MomentUploadUrl>(
             buildPersonalMomentUploadUrl(EVENTS_URL, identifier),
-            publicAccessFetchInit(publicAccessForRequests, {
+            withUploadDeviceHeader(publicAccessFetchInit(publicAccessForRequests, {
               method: "POST",
               signal: uploadController.signal,
               headers: { "Content-Type": "application/json" },
@@ -1026,7 +1033,7 @@ export default function MomentWall({
                 filename: fileToUpload.name,
                 file_size: fileToUpload.size,
               }),
-            }),
+            })),
             "Error al preparar la subida",
           ),
         800,
@@ -1052,7 +1059,7 @@ export default function MomentWall({
         () =>
           fetchApiData<unknown>(
             buildPersonalMomentConfirmUrl(EVENTS_URL, identifier),
-            publicAccessFetchInit(publicAccessForRequests, {
+            withUploadDeviceHeader(publicAccessFetchInit(publicAccessForRequests, {
               method: "POST",
               signal: uploadController.signal,
               headers: { "Content-Type": "application/json" },
@@ -1064,7 +1071,7 @@ export default function MomentWall({
                 file_size: fileToUpload.size,
                 description: allowMessages ? (descInput?.value ?? "") : "",
               }),
-            }),
+            })),
             "Error al confirmar la subida",
           ),
         800,
