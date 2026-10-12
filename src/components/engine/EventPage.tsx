@@ -25,6 +25,8 @@ import {
   viewTrackingSessionKey,
 } from "../../lib/eventTrackingUrl";
 import { fetchApiResult } from "../../lib/apiFetch";
+import { passwordVerifyFailure } from "../../lib/passwordVerify";
+import { resolvePublicWindowGate } from "../../lib/publicWindowGate";
 import { fetchApiResultWithRetry as fetchPageSpecWithRetry } from "../../lib/apiRetry";
 import {
   buildIdentifierPageSpecUrl,
@@ -233,22 +235,26 @@ function ComingSoonGate({
   activeFrom,
   timeZone,
 }: {
-  activeFrom: string;
+  activeFrom?: string;
   timeZone?: string | null;
 }) {
-  const formatted = formatPublicAccessDateTime(activeFrom, timeZone, {
-    weekday: true,
-  });
+  const formatted = activeFrom
+    ? formatPublicAccessDateTime(activeFrom, timeZone, { weekday: true })
+    : "";
   return (
     <PublicEventLifecycleGate
       eyebrow="Próximamente"
       title="Esta invitación aún no está disponible"
       description={
-        <>
-          Podrás abrirla el{" "}
-          <strong className="font-semibold text-gray-900">{formatted}</strong>.
-          Guarda este enlace para volver cuando llegue el momento.
-        </>
+        formatted ? (
+          <>
+            Podrás abrirla el{" "}
+            <strong className="font-semibold text-gray-900">{formatted}</strong>.
+            Guarda este enlace para volver cuando llegue el momento.
+          </>
+        ) : (
+          "Guarda este enlace para volver cuando llegue el momento."
+        )
       }
       Icon={CalendarClock}
     />
@@ -259,20 +265,26 @@ function EventEndedGate({
   activeUntil,
   timeZone,
 }: {
-  activeUntil: string;
+  activeUntil?: string;
   timeZone?: string | null;
 }) {
-  const formatted = formatPublicAccessDateTime(activeUntil, timeZone);
+  const formatted = activeUntil
+    ? formatPublicAccessDateTime(activeUntil, timeZone)
+    : "";
   return (
     <PublicEventLifecycleGate
       eyebrow="Gracias por acompañarnos"
       title="El evento ya concluyó"
       description={
-        <>
-          Esta invitación estuvo disponible hasta el{" "}
-          <strong className="font-semibold text-gray-900">{formatted}</strong>.
-          Gracias por haber sido parte de este momento especial.
-        </>
+        formatted ? (
+          <>
+            Esta invitación estuvo disponible hasta el{" "}
+            <strong className="font-semibold text-gray-900">{formatted}</strong>.
+            Gracias por haber sido parte de este momento especial.
+          </>
+        ) : (
+          "Gracias por haber sido parte de este momento especial."
+        )
       }
       Icon={PartyPopper}
     />
@@ -616,10 +628,7 @@ export default function EventPage({
       );
 
       if (!result.ok) {
-        return {
-          ok: false,
-          message: result.message || "Contraseña incorrecta. Intenta de nuevo.",
-        };
+        return passwordVerifyFailure(result);
       }
 
       const access = normalizeEventAccessVerification(result.data);
@@ -780,31 +789,24 @@ export default function EventPage({
   // Dashboard Studio preview bypasses gates only when the backend validated the signed token.
   if (!previewAuthorized) {
     const access = spec.meta.access;
-    const now = new Date();
 
-    // Date gate: coming soon
-    if (access?.activeFrom) {
-      const from = new Date(access.activeFrom);
-      if (now < from)
-        return (
-          <ComingSoonGate
-            activeFrom={access.activeFrom}
-            timeZone={spec.meta.timezone}
-          />
-        );
-    }
-
-    // Date gate: event ended
-    if (access?.activeUntil) {
-      const until = new Date(access.activeUntil);
-      if (now > until)
-        return (
-          <EventEndedGate
-            activeUntil={access.activeUntil}
-            timeZone={spec.meta.timezone}
-          />
-        );
-    }
+    // Window gate: the backend's windowStatus decides; the device clock is
+    // only a fallback for payloads without it.
+    const windowGate = resolvePublicWindowGate(access);
+    if (windowGate === "coming_soon")
+      return (
+        <ComingSoonGate
+          activeFrom={access?.activeFrom}
+          timeZone={spec.meta.timezone}
+        />
+      );
+    if (windowGate === "ended")
+      return (
+        <EventEndedGate
+          activeUntil={access?.activeUntil}
+          timeZone={spec.meta.timezone}
+        />
+      );
 
     // Password gate
     if (
@@ -833,6 +835,20 @@ export default function EventPage({
   }
 
   const sorted = sortPageSpecSections(spec.sections);
+
+  // A spec with no visible sections (e.g. a locked spec the gates above did
+  // not claim, or an invitation still being built) gets a calm state instead
+  // of a blank page.
+  if (sorted.length === 0) {
+    return (
+      <PublicEventLifecycleGate
+        eyebrow="Invitación"
+        title="Esta invitación se está preparando"
+        description="Los detalles aún no están disponibles. Vuelve a abrir este enlace más tarde."
+        Icon={CalendarClock}
+      />
+    );
+  }
   const themeStyle = buildPageThemeStyle(spec.meta.theme);
   const themeFontFaces = buildPageThemeFontFaces(spec.meta.theme, EVENTS_URL);
   const accessParams = readPublicAccessParams();
