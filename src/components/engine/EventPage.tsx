@@ -872,7 +872,7 @@ export default function EventPage({
         </Suspense>
       )}
 
-      <main className="eventi-event-page mx-auto max-w-screen-md space-y-10 overflow-x-hidden px-3 py-4 sm:space-y-16 sm:px-4 lg:max-w-[1024px]">
+      <main className="eventi-event-page mx-auto max-w-screen-md space-y-10 overflow-x-hidden break-words [overflow-wrap:anywhere] px-3 py-4 sm:space-y-16 sm:px-4 lg:max-w-[1024px]">
         {sorted.map((section) => (
           <SectionRenderer
             key={section.sectionId || `${section.type}-${section.order}`}

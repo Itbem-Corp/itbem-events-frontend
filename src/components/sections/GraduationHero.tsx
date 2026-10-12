@@ -115,7 +115,7 @@ export default function GraduationHero({
                   )}
                 </div>
                 <h3
-                  className="text-xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold font-bigilla text-center md:text-start mt-4 md:mt-0"
+                  className="min-w-0 break-words [overflow-wrap:anywhere] text-xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold font-bigilla text-center md:text-start mt-4 md:mt-0"
                   style={accentStyle}
                 >
                   {school}

@@ -107,7 +107,7 @@ function AgendaItemRow({ item, index, isLast }: AgendaItemRowProps) {
       className="flex gap-0 relative"
     >
       {/* Time column */}
-      <div className="w-12 sm:w-16 flex-shrink-0 pt-1 text-right pr-2 sm:pr-4">
+      <div className="w-14 sm:w-16 flex-shrink-0 pt-1 text-right pr-2 sm:pr-4 break-words [overflow-wrap:anywhere]">
         <span
           className="text-sm font-aloevera font-semibold"
           style={accentStyle}
@@ -128,7 +128,7 @@ function AgendaItemRow({ item, index, isLast }: AgendaItemRowProps) {
       </div>
 
       {/* Content column */}
-      <div className="flex-1 pl-4 pb-8">
+      <div className="flex-1 min-w-0 pl-4 pb-8">
         <p
           className="text-base sm:text-lg font-astralaga leading-tight"
           style={headingStyle}
