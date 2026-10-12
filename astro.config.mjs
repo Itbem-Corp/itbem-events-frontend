@@ -4,6 +4,7 @@ import react from "@astrojs/react";
 import cloudflare from "@astrojs/cloudflare";
 import tailwindcss from "@tailwindcss/vite";
 import Beasties from "beasties";
+import { loadEnv } from "vite";
 import publicProduct from "./src/generated/public-product.json" with { type: "json" };
 import AstroPWA from "./scripts/vite-pwa-astro.mjs";
 import {
@@ -15,10 +16,16 @@ import {
   createFreshFirstApiMatcher,
   createPublicEventPageRuntimeCacheMatcher,
   createS3ImageRuntimeCacheMatcher,
+  createServerCachePolicyPlugin,
 } from "./src/lib/apiCachePolicy.mjs";
 
+// Same resolution as the client's import.meta.env (process.env first, then
+// .env.[mode].local, .env.[mode], .env.local, .env), so the service worker's
+// cache policy recognises the exact API origin the islands call.
+const ENV_MODE = process.env.NODE_ENV === "development" ? "development" : "production";
+const PUBLIC_ENV = loadEnv(ENV_MODE, process.cwd(), "PUBLIC_");
 const EVENTS_API_URL =
-  process.env.PUBLIC_EVENTS_URL ?? `https://${publicProduct.apiHostname}`;
+  PUBLIC_ENV.PUBLIC_EVENTS_URL || `https://${publicProduct.apiHostname}`;
 const PUBLIC_SITE_URL = `https://${publicProduct.canonicalHostname}`;
 // Revision for the precached /offline fallback: changes on every build.
 const OFFLINE_PAGE_REVISION = String(Date.now());
@@ -126,6 +133,8 @@ export default defineConfig({
                 maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
               },
               cacheableResponse: { statuses: [0, 200] },
+              // Cache-Control no-store/private from the server is never cached.
+              plugins: [createServerCachePolicyPlugin()],
               // Offline and never opened on this device: show /offline/.
               precacheFallback: { fallbackURL: OFFLINE_FALLBACK_URL },
             },
@@ -178,6 +187,8 @@ export default defineConfig({
                 maxAgeSeconds: 60 * 60, // 1 hour offline fallback
               },
               cacheableResponse: { statuses: [0, 200] },
+              // Cache-Control no-store/private from the server is never cached.
+              plugins: [createServerCachePolicyPlugin()],
             },
           },
 
@@ -193,6 +204,8 @@ export default defineConfig({
                 maxAgeSeconds: 24 * 60 * 60, // 24 hours
               },
               cacheableResponse: { statuses: [0, 200] },
+              // Cache-Control no-store/private from the server is never cached.
+              plugins: [createServerCachePolicyPlugin()],
             },
           },
 

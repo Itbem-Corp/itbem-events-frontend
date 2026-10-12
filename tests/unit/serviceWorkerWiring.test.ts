@@ -8,6 +8,7 @@ import {
   createFreshFirstApiMatcher,
   createPublicEventPageRuntimeCacheMatcher,
   createS3ImageRuntimeCacheMatcher,
+  createServerCachePolicyPlugin,
 } from "../../src/lib/apiCachePolicy.mjs";
 import { buildServiceWorkerCachePolicyScript } from "../../scripts/sw-cache-policy.mjs";
 
@@ -60,6 +61,37 @@ describe("service worker cache-policy helpers", () => {
         request: { method: "GET" },
       }),
     ).toBe(false);
+  });
+});
+
+describe("service worker server cache policy plugin", () => {
+  const script = buildServiceWorkerCachePolicyScript("https://api.eventiapp.com.mx");
+
+  it("runs its stringified cacheWillUpdate inside the worker", async () => {
+    const context = vm.createContext({ URL, Response, self: {} });
+    vm.runInContext(script, context);
+    const source = createServerCachePolicyPlugin().cacheWillUpdate.toString();
+    context.__fn = vm.runInContext(`(${source})`, context);
+    const privateResponse = new Response("x", { headers: { "Cache-Control": "private, no-store" } });
+    const publicResponse = new Response("x", { headers: { "Cache-Control": "public, max-age=60" } });
+    expect(await context.__fn({ response: privateResponse })).toBeNull();
+    expect(await context.__fn({ response: publicResponse })).toBe(publicResponse);
+  });
+
+  it("is attached to every runtime cache that stores pages or API data", () => {
+    const config = read("../../astro.config.mjs");
+    for (const cacheName of ["event-pages", "api-fresh", "api-cache"]) {
+      const block = config.slice(config.indexOf(`cacheName: "${cacheName}"`));
+      const end = block.indexOf("urlPattern:");
+      expect(block.slice(0, end), cacheName).toContain("plugins: [createServerCachePolicyPlugin()]");
+    }
+  });
+
+  it("reads the API URL with Vite's loadEnv, like the client", () => {
+    const config = read("../../astro.config.mjs");
+    expect(config).toContain('import { loadEnv } from "vite";');
+    expect(config).toMatch(/PUBLIC_ENV\.PUBLIC_EVENTS_URL \|\|/);
+    expect(config).not.toContain("process.env.PUBLIC_EVENTS_URL");
   });
 });
 
