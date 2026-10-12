@@ -1,0 +1,3 @@
+# Generated from the product contract by scripts/sync-public-product.mjs;
+# contract:check compares bytes, so keep LF on every checkout (Windows too).
+src/generated/** text eol=lf
