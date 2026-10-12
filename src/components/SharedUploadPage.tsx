@@ -39,13 +39,19 @@ import {
 import { buildEventMomentsUrl } from "../lib/apiUrls";
 import { fetchApiData, isApiFetchError } from "../lib/apiFetch";
 import {
+  mergeUploadPublicationHint,
+  sharedUploadSuccessCopy,
+  shouldShowOptimizingTransition,
+  uploadHintForMoment,
+  type SharedUploadPublicationHint,
+} from "../lib/uploadPublicationHint";
+import {
   classifyUploadStatusError,
   type UploadStatusError,
 } from "../lib/uploadStatusError";
 import {
   normalizePublicMomentsPage,
   normalizePublicMomentUploadResponse,
-  type PublicMoment,
 } from "../lib/publicMoments";
 import {
   getSelectableUploadSlots,
@@ -130,34 +136,7 @@ function getPublicUploadBaseUrl(): string {
 const MAX_FILES = 10;
 
 // ── Upload state ───────────────────────────────────────────────────────────────
-type SharedUploadPublicationHint =
-  "published" | "processing" | "pending_review";
-
-function uploadHintForMoment(
-  moment: PublicMoment | null,
-): SharedUploadPublicationHint {
-  if (moment?.publication_status === "published") return "published";
-  if (
-    moment?.publication_status === "processing" ||
-    moment?.approval_status === "approved"
-  ) {
-    return "processing";
-  }
-  return "pending_review";
-}
-
-function mergeUploadPublicationHint(
-  current: SharedUploadPublicationHint,
-  next: SharedUploadPublicationHint,
-): SharedUploadPublicationHint {
-  if (current === "pending_review" || next === "pending_review") {
-    return "pending_review";
-  }
-  if (current === "processing" || next === "processing") {
-    return "processing";
-  }
-  return "published";
-}
+// Publication hints live in ../lib/uploadPublicationHint (PUB-1).
 
 type FileEntry = SharedUploadFileEntry;
 
@@ -200,6 +179,22 @@ function IconCheck({ className = "w-5 h-5" }: { className?: string }) {
         strokeLinejoin="round"
         d="M4.5 12.75l6 6 9-13.5"
       />
+    </svg>
+  );
+}
+
+function IconNotice({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden="true"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
+      <circle cx="12" cy="12" r="9" />
     </svg>
   );
 }
@@ -834,7 +829,7 @@ export default function SharedUploadPage({
         (entry) => entry.status === "done",
       );
       if (allUploadsSucceeded && previous.length > 0) {
-        if (uploadPublicationHintRef.current === "processing") {
+        if (shouldShowOptimizingTransition(uploadPublicationHintRef.current)) {
           setOptimizing(true);
           window.setTimeout(() => {
             setOptimizing(false);
@@ -1567,25 +1562,15 @@ function SuccessScreen({
   onUploadMore?: () => void;
 }) {
   const { theme } = useContext(ThemeCtx);
-  const successMessage =
-    publicationHint === "published"
-      ? count === 1
-        ? "Tu archivo ya está disponible en la galería del evento."
-        : `Tus ${count} archivos ya están disponibles en la galería del evento.`
-      : publicationHint === "processing"
-        ? count === 1
-          ? "Tu archivo ya fue aprobado y aparecerá en cuanto termine de procesarse."
-          : `Tus ${count} archivos ya fueron aprobados y aparecerán en cuanto terminen de procesarse.`
-        : count === 1
-          ? "Tu foto aparecerá en la galería del evento una vez que el organizador la apruebe."
-          : `Tus ${count} archivos aparecerán en la galería del evento una vez que el organizador los apruebe.`;
+  const copy = sharedUploadSuccessCopy(publicationHint, count);
+  const isWarning = copy.tone === "warning";
   return (
     <div
       className={`relative isolate flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 text-center${theme === "light" ? " bg-white" : ""}`}
     >
       <DarkBackground />
-      {/* Confetti dots */}
-      {Array.from({ length: 16 }).map((_, i) => (
+      {/* Confetti dots: only when the files will really reach the wall */}
+      {!isWarning && Array.from({ length: 16 }).map((_, i) => (
         <motion.div
           key={i}
           initial={{ opacity: 0, y: -20, x: 0 }}
@@ -1620,12 +1605,23 @@ function SuccessScreen({
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
         className={`w-24 h-24 rounded-full flex items-center justify-center mb-8 ${
-          theme === "dark"
-            ? "bg-gradient-to-br from-violet-500 to-indigo-500 shadow-[0_0_60px_rgba(139,92,246,0.55)]"
-            : "bg-gradient-to-br from-green-400 to-emerald-500 shadow-lg shadow-green-500/30"
+          isWarning
+            ? theme === "dark"
+              ? "bg-amber-500/20 ring-1 ring-amber-400/50"
+              : "bg-amber-100 ring-1 ring-amber-300"
+            : theme === "dark"
+              ? "bg-gradient-to-br from-violet-500 to-indigo-500 shadow-[0_0_60px_rgba(139,92,246,0.55)]"
+              : "bg-gradient-to-br from-green-400 to-emerald-500 shadow-lg shadow-green-500/30"
         }`}
+        aria-hidden="true"
       >
-        <IconCheck className="w-12 h-12 text-white" />
+        {isWarning ? (
+          <IconNotice
+            className={`w-12 h-12 ${theme === "dark" ? "text-amber-300" : "text-amber-600"}`}
+          />
+        ) : (
+          <IconCheck className="w-12 h-12 text-white" />
+        )}
       </motion.div>
 
       <motion.div
@@ -1637,14 +1633,13 @@ function SuccessScreen({
         <h2
           className={`text-2xl font-bold tracking-tight ${theme === "dark" ? "text-white" : "text-gray-900"}`}
         >
-          {count === 1
-            ? "¡Momento compartido!"
-            : `¡${count} momentos compartidos!`}
+          {copy.title}
         </h2>
         <p
+          role={isWarning ? "status" : undefined}
           className={`text-sm max-w-[280px] mx-auto leading-relaxed ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}
         >
-          {successMessage}
+          {copy.message}
         </p>
 
         <motion.p

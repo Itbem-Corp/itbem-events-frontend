@@ -75,7 +75,7 @@ import {
   publicMomentsMediaRefreshKey,
   publicMomentPreviewUrl,
   publicMomentThumbnailUrl,
-  publicMomentUploadSuccessMessage,
+  publicMomentUploadOutcome,
   shouldReplacePublicMomentsOnLiveRefresh,
   shouldShowProcessingStub,
   type PublicMoment as Moment,
@@ -313,6 +313,9 @@ export default function MomentWall({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadSuccessMessage, setUploadSuccessMessage] = useState("");
+  const [uploadSuccessTone, setUploadSuccessTone] = useState<
+    "success" | "warning"
+  >("success");
   const uploadDialogRef = useRef<HTMLDivElement>(null);
   const uploadCloseRef = useRef<HTMLButtonElement>(null);
   const uploadOpenerRef = useRef<HTMLElement | null>(null);
@@ -900,7 +903,9 @@ export default function MomentWall({
       applyPersonalUploadQuota(uploadResponse);
 
       setUploadProgress(100);
-      setUploadSuccessMessage(publicMomentUploadSuccessMessage(uploadedMoment));
+      const uploadOutcome = publicMomentUploadOutcome(uploadedMoment);
+      setUploadSuccessTone(uploadOutcome.tone);
+      setUploadSuccessMessage(uploadOutcome.message);
       setShowUpload(false);
       form.reset();
       // Store a local stub only when the backend says the moment is approved
@@ -910,7 +915,10 @@ export default function MomentWall({
         addPendingMoment(identifier, isVideoUpload ? "video" : "image");
       }
       fetchMoments(1, false);
-      setTimeout(() => setUploadSuccessMessage(""), 5000);
+      setTimeout(
+        () => setUploadSuccessMessage(""),
+        uploadOutcome.tone === "warning" ? 10000 : 5000,
+      );
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
         setUploadError("La subida fue cancelada. Puedes intentarlo de nuevo.");
@@ -986,7 +994,11 @@ export default function MomentWall({
               initial={{ opacity: 0, y: -12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
-              className="mb-6 rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700 text-center"
+              className={
+                uploadSuccessTone === "warning"
+                  ? "mb-6 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800 text-center"
+                  : "mb-6 rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700 text-center"
+              }
             >
               {uploadSuccessMessage}
             </motion.div>

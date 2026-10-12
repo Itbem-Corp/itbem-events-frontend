@@ -418,6 +418,7 @@ export function shouldShowProcessingStub(
   moment: PublicMoment | null | undefined,
 ): boolean {
   if (!moment) return false;
+  if (moment.publication_status === "failed") return false;
   return (
     moment.publication_status === "processing" ||
     moment.processing_status === "pending" ||
@@ -425,19 +426,50 @@ export function shouldShowProcessingStub(
   );
 }
 
-export function publicMomentUploadSuccessMessage(
+export const PUBLIC_MOMENT_PROCESSING_FAILED_MESSAGE =
+  "Recibimos tu archivo, pero no pudimos procesarlo, así que no aparecerá en el muro. Puedes intentar subirlo de nuevo.";
+
+export interface PublicMomentUploadOutcome {
+  message: string;
+  /** "warning" when the file arrived but can never reach the wall. */
+  tone: "success" | "warning";
+}
+
+export function publicMomentUploadOutcome(
   moment: PublicMoment | null | undefined,
-): string {
+): PublicMomentUploadOutcome {
+  if (
+    moment?.publication_status === "failed" ||
+    moment?.processing_status === "failed"
+  ) {
+    return { message: PUBLIC_MOMENT_PROCESSING_FAILED_MESSAGE, tone: "warning" };
+  }
   if (moment?.publication_status === "published") {
-    return "¡Archivo enviado! Ya está disponible en el muro.";
+    return {
+      message: "¡Archivo enviado! Ya está disponible en el muro.",
+      tone: "success",
+    };
   }
   if (
     moment?.approval_status === "approved" ||
     moment?.publication_status === "processing"
   ) {
-    return "¡Archivo enviado! Aparecerá aquí en cuanto termine de procesarse.";
+    return {
+      message:
+        "¡Archivo enviado! Aparecerá aquí en cuanto termine de procesarse.",
+      tone: "success",
+    };
   }
-  return "¡Archivo enviado! Aparecerá aquí cuando sea aprobado.";
+  return {
+    message: "¡Archivo enviado! Aparecerá aquí cuando sea aprobado.",
+    tone: "success",
+  };
+}
+
+export function publicMomentUploadSuccessMessage(
+  moment: PublicMoment | null | undefined,
+): string {
+  return publicMomentUploadOutcome(moment).message;
 }
 
 export function normalizePublicMomentsPage(value: unknown): PublicMomentsPage {
