@@ -36,6 +36,7 @@ import {
 import { fetchApiData, isApiFetchError } from "../../lib/apiFetch";
 import {
   canShowPersonalUpload,
+  momentWallHeadingText,
   resolveMomentWallPublished,
 } from "../../lib/momentWallAccess";
 import {
@@ -285,8 +286,9 @@ export default function MomentWall({
   const EVENTS_URL = normalizeEventsUrl(rawEventsUrl);
   const cfg = config as unknown as MomentWallConfig;
   const title = configTextOr(cfg.title, "Momentos");
-  const subtitle =
-    configText(cfg.moment_request_message) ?? configText(cfg.subtitle);
+  // The studio saves both: a subtitle under the title and a separate message
+  // asking guests for photos. Show each one; never let one hide the other.
+  const { subtitle, requestMessage } = momentWallHeadingText(cfg);
   const identifier = configText(cfg.identifier);
   const allowUploads = cfg.allow_uploads ?? false;
   const allowMessages = cfg.allow_messages ?? false;
@@ -998,6 +1000,14 @@ export default function MomentWall({
           {subtitle && (
             <p className="mt-2" style={themedMutedStyle}>
               {subtitle}
+            </p>
+          )}
+          {requestMessage && (
+            <p
+              className="mx-auto mt-2 max-w-xl text-pretty text-sm"
+              style={themedMutedStyle}
+            >
+              {requestMessage}
             </p>
           )}
         </div>
