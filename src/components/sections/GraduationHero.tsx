@@ -88,7 +88,7 @@ export default function GraduationHero({
                 {heroImage?.view_url && (
                   <ImageWithLoader
                     src={heroImage.view_url}
-                    alt={heroImage.title || title}
+                    alt={heroImage.title || title || ""}
                     className="w-full h-full object-cover"
                     priority
                   />
@@ -109,7 +109,7 @@ export default function GraduationHero({
                   {schoolLogo?.view_url && (
                     <ImageWithLoader
                       src={schoolLogo.view_url}
-                      alt={schoolLogo.title || title}
+                      alt={schoolLogo.title || title || ""}
                       className="w-full h-full object-cover"
                     />
                   )}
