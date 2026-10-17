@@ -217,3 +217,16 @@ Use `cn()` from `src/lib/utils.ts` for all conditional class merging:
 import { cn } from "@/lib/utils";
 cn("base-class", condition && "conditional-class", className)
 ```
+
+## Visual base (EV-31): color, motion, modern CSS
+
+Source: `src/styles/visual-base.css` (imported by `global.css`) and `src/lib/visual/*`; components in `src/components/visual/`. Design: motion-system #32.
+
+- **Theme**: `resolveVisualTheme(pageTheme.colors, { eventType })` returns seeds (`--v-seed-base|ink|accent`) from the event palette, or Velada (dark) / Sobremesa (warm) when there is none. Ink is corrected to keep AA (4.5:1). Other colors derive in CSS with `color-mix(in oklch, ...)` inside `@supports`. Wrap content in `<VisualRoot colors eventType>`.
+- **Event kinds** (`eventKinds.ts`): boda, quince, cumpleanos, otro define background recipe (`.v-bg`), typography and motion character (`--v-kind-tempo`, `--v-kind-ease`). They never fix colors.
+- **Cover**: `<FullBleedCover src focalPoint>` fills the screen with a legibility scrim; no image (or a load error) renders the generated `.v-bg`.
+- **Ambient color**: `<AmbientBackdrop dominantColor>` cross-fades two layers by opacity (360 ms).
+- **Motion tokens**: `--v-dur-*` and `--v-ease-*`, mirrored in `motion.ts` (a test keeps them identical). Only transform, opacity, filter and clip-path may animate (a unit test fails otherwise).
+- **Techniques**: every entry in `MOTION_TECHNIQUES` has `fallback`, `still` and `reduced` (90 ms fade or cut). The reduced-motion block is last in `visual-base.css`; conserve mode (`html[data-eventi-performance="conserve"]`, set in `template.astro`) removes drift, Ken Burns, 3D and blur.
+- **Masonry**: `<Masonry>` uses `display: grid-lanes` when supported, else flex columns assigned shortest-column in arrival order from `intrinsic_width/height`; tiles reserve their aspect ratio.
+- **View transitions**: `runViewTransition(el, update)` sets the name on tap and removes it after. **Scroll-driven**: `.v-scroll-in` / `.v-scroll-line` under `@supports (animation-timeline: view())`; `observeScrollReveal()` is the IntersectionObserver fallback.
