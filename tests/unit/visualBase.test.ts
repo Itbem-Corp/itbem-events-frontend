@@ -317,6 +317,10 @@ describe("masonry fallback", () => {
     );
   });
 
+  it("has no fixed-position layer, so the budget page's absolute background matches the product", () => {
+    expect(css).not.toMatch(/position:\s*fixed/);
+  });
+
   it("puts the container-query breakpoints exactly where columnCountFor changes", () => {
     for (let n = 2; n <= 6; n += 1) {
       const width = minWidthForColumns(n, 150, 8);

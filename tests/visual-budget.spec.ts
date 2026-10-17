@@ -90,14 +90,19 @@ function budgetPage({ reserveSpace }: { reserveSpace: boolean }): string {
 <style>${VISUAL_CSS}</style>
 <style>
   body { margin: 0; background: var(--v-seed-base); }
-  .v-bg { position: fixed; inset: 0; z-index: -1; }
+  .page { position: relative; isolation: isolate; }
+  /* Positioned like the shipped backgrounds (.v-ambient, .v-cover layers):
+     absolute in the page, never fixed — visual-base.css has no fixed layer. */
+  .page > .v-bg { position: absolute; inset: 0; z-index: -1; }
   header { height: 60vh; }
 </style>
 </head>
 <body>
-  <div class="v-bg v-bg-drift"></div>
-  <header class="v-scroll-in"></header>
-  <main>${masonry}</main>
+  <div class="page">
+    <div class="v-bg v-bg-drift"></div>
+    <header class="v-scroll-in"></header>
+    <main>${masonry}</main>
+  </div>
 </body>
 </html>`;
 }
