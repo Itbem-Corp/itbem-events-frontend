@@ -9,7 +9,7 @@ const namedBudgets = {
   "signedMedia.*.js": 60 * kib,
   // Tailwind v4's modern CSS foundation adds a small fixed cost. Keep an
   // explicit per-template cap so future styling changes cannot grow freely.
-  "template.*.css": 19 * kib,
+  "template.*.css": 21 * kib, // EV-31 visual base (colour tokens, motion, masonry) measured 20.5 KiB gzip
   "SharedUploadPage.*.js": 16 * kib,
 };
 const aggregateBudgets = {
