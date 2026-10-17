@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
@@ -318,7 +318,12 @@ describe("masonry fallback", () => {
   });
 
   it("has no fixed-position layer, so the budget page's absolute background matches the product", () => {
-    expect(css).not.toMatch(/position:\s*fixed/);
+    expect(css).not.toMatch(/position\s*:\s*fixed/i);
+    const dir = join(process.cwd(), "src/components/visual");
+    for (const file of readdirSync(dir)) {
+      const source = readFileSync(join(dir, file), "utf8");
+      expect(source, file).not.toMatch(/position\s*:\s*["']?fixed|className=[^>]*\bfixed\b/i);
+    }
   });
 
   it("puts the container-query breakpoints exactly where columnCountFor changes", () => {
