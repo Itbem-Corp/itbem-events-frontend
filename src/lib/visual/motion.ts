@@ -66,7 +66,7 @@ export const MOTION_TECHNIQUES = {
   gridLanes: {
     id: "grid-lanes",
     supports: ["display", "grid-lanes"],
-    fallback: "computed flex columns, shortest-column, arrival order kept",
+    fallback: "shortest-column slots precomputed per column count, absolutely positioned (left/top from CSS variables, picked by container queries), DOM in arrival order",
     still: "same layout, new items appear without fade",
     reduced: "cut",
     reducedMs: 0,
