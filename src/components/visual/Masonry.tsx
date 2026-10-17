@@ -1,107 +1,69 @@
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 
 import {
-  columnCountFor,
-  distributeIntoColumns,
   aspectRatioOf,
+  masonryPlacement,
   type MasonryItem,
 } from "../../lib/visual/masonry";
-import { MOTION_TECHNIQUES, isTechniqueSupported } from "../../lib/visual/motion";
 
 interface MasonryProps<T extends MasonryItem> {
   items: readonly T[];
   renderItem: (item: T) => ReactNode;
   minColumnWidth?: number;
   gap?: number;
+  /** Upper bound of precomputed column counts; wider containers widen columns. */
+  maxColumns?: number;
   className?: string;
 }
 
-const useIsomorphicLayoutEffect =
-  typeof window === "undefined" ? useEffect : useLayoutEffect;
-
-const itemStyle =(item: MasonryItem) =>
-  ({ "--v-ratio": String(aspectRatioOf(item)) }) as CSSProperties;
-
 /**
- * `display: grid-lanes` where the browser has it; otherwise flex columns whose
- * assignment is computed from intrinsic sizes in arrival order. Each tile
- * reserves its aspect ratio, so nothing jumps when images load.
+ * `display: grid-lanes` where the browser has it; otherwise the columns are
+ * computed shortest-column in arrival order for every column count and a
+ * container query picks one. No state and no measuring: the server HTML is
+ * the final layout, in DOM (and tab) order of arrival.
  */
 export function Masonry<T extends MasonryItem>({
   items,
   renderItem,
   minColumnWidth = 150,
   gap = 8,
+  maxColumns = 6,
   className,
 }: MasonryProps<T>) {
-  const ref = useRef<HTMLDivElement>(null);
-  // Mode and column count are resolved in layout effects, which re-render
-  // before the browser paints the first client frame (same initial state on
-  // server and client, so hydration matches).
-  const [lanes, setLanes] = useState(false);
-  const [columnCount, setColumnCount] = useState<number | null>(null);
-
-  useIsomorphicLayoutEffect(() => {
-    setLanes(isTechniqueSupported(MOTION_TECHNIQUES.gridLanes));
-  }, []);
-
-  useIsomorphicLayoutEffect(() => {
-    const el = ref.current;
-    if (!el || lanes) return;
-    const update = () =>
-      setColumnCount(columnCountFor(el.clientWidth, minColumnWidth, gap));
-    // Measured synchronously before the first paint: no 2-column frame.
-    update();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [lanes, minColumnWidth, gap]);
-
-  // Until measured, no columns are emitted, so a wrong count (the old fixed
-  // 2) is never painted and then reflowed.
-  const columns = useMemo(
-    () =>
-      lanes || columnCount === null
-        ? []
-        : distributeIntoColumns(items, columnCount),
-    [lanes, items, columnCount],
+  const placement = useMemo(
+    () => masonryPlacement(items, { minColumnWidth, gap, maxColumns }),
+    [items, minColumnWidth, gap, maxColumns],
   );
 
   const rootStyle = {
     "--v-masonry-gap": `${gap}px`,
-    gridTemplateColumns: lanes
-      ? `repeat(auto-fill, minmax(${minColumnWidth}px, 1fr))`
-      : undefined,
+    "--v-masonry-min": `${minColumnWidth}px`,
   } as CSSProperties;
 
   return (
     <div
-      ref={ref}
       className={`v-masonry ${className ?? ""}`.trim()}
-      data-lanes={lanes}
+      data-v-masonry={placement.scope}
       style={rootStyle}
     >
-      {lanes
-        ? items.map((item) => (
-            <div key={item.id} className="v-masonry__item" style={itemStyle(item)}>
-              {renderItem(item)}
-            </div>
-          ))
-        : columns.map((column, index) => (
-            <div key={index} className="v-masonry__col">
-              {column.map((item) => (
-                <div
-                  key={item.id}
-                  className="v-masonry__item"
-                  style={itemStyle(item)}
-                >
-                  {renderItem(item)}
-                </div>
-              ))}
-            </div>
-          ))}
+      <style>{placement.css}</style>
+      <div className="v-masonry__stage">
+        {items.map((item, index) => (
+          <div
+            key={item.id}
+            className="v-masonry__item"
+            style={
+              {
+                "--v-ratio": String(aspectRatioOf(item)),
+                ...placement.itemVars[index],
+              } as CSSProperties
+            }
+          >
+            {renderItem(item)}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { Masonry } from "../../src/components/visual/Masonry";
 import {
   contrastRatio,
   hexToRgb,
@@ -12,6 +15,8 @@ import {
   aspectRatioOf,
   columnCountFor,
   distributeIntoColumns,
+  masonryPlacement,
+  minWidthForColumns,
 } from "../../src/lib/visual/masonry";
 import {
   ANIMATED_PROPERTIES,
@@ -305,9 +310,77 @@ describe("masonry fallback", () => {
     expect(columnCountFor(1200)).toBe(7);
   });
 
-  it("uses display: grid-lanes where supported and flex columns otherwise", () => {
-    expect(css).toMatch(/@supports \(display: grid-lanes\)/);
-    expect(css).toMatch(/\.v-masonry\s*\{[^}]*display:\s*flex/);
+  it("uses display: grid-lanes where supported and computed columns otherwise", () => {
+    expect(css).toMatch(/@supports \(display: grid-lanes\)\s*\{\s*\.v-masonry__stage\s*\{[^}]*display:\s*grid-lanes/);
+    expect(css).toMatch(
+      /@supports \(container-type: inline-size\) and \(not \(display: grid-lanes\)\)\s*\{[^@]*\.v-masonry__item\s*\{[^}]*position:\s*absolute/,
+    );
+  });
+
+  it("puts the container-query breakpoints exactly where columnCountFor changes", () => {
+    for (let n = 2; n <= 6; n += 1) {
+      const width = minWidthForColumns(n, 150, 8);
+      expect(columnCountFor(width, 150, 8)).toBe(n);
+      expect(columnCountFor(width - 1, 150, 8)).toBe(n - 1);
+    }
+    expect(columnCountFor(5000, 150, 8, 6)).toBe(6);
+  });
+
+  it("precomputes each column count's slots from the same shortest-column placement", () => {
+    const { itemVars, css: placementCss } = masonryPlacement(items, {
+      minColumnWidth: 150,
+      gap: 8,
+      maxColumns: 4,
+    });
+    for (let n = 1; n <= 4; n += 1) {
+      const columns = distributeIntoColumns(items, n);
+      columns.forEach((column, c) => {
+        let y = 0;
+        column.forEach((item, k) => {
+          const vars = itemVars[items.indexOf(item)];
+          expect(vars[`--v-c${n}`]).toBe(String(c));
+          expect(vars[`--v-k${n}`]).toBe(String(k));
+          expect(Number(vars[`--v-y${n}`])).toBeCloseTo(y, 3);
+          y += 1 / aspectRatioOf(item);
+        });
+      });
+      if (n > 1) expect(placementCss).toContain(`@container (min-width: ${minWidthForColumns(n, 150, 8)}px)`);
+    }
+    expect(placementCss.startsWith("@supports (container-type: inline-size) and (not (display: grid-lanes))")).toBe(true);
+  });
+});
+
+describe("masonry server render", () => {
+  const items = Array.from({ length: 12 }, (_, i) => ({
+    id: `m${i}`,
+    width: [1000, 1500, 800][i % 3],
+    height: [1500, 1000, 800][i % 3],
+  }));
+  const render = (list = items) =>
+    renderToString(
+      createElement(Masonry, {
+        items: list,
+        renderItem: (item: { id: string }) => createElement("img", { alt: "", "data-id": item.id }),
+      }),
+    );
+
+  it("ships every item, in arrival order, with its placement in the server HTML", () => {
+    const html = render();
+    const ids = [...html.matchAll(/data-id="(m\d+)"/g)].map((m) => m[1]);
+    expect(ids).toEqual(items.map((i) => i.id));
+    expect(html).toContain("<style>@supports (container-type: inline-size)");
+    expect(html).toMatch(/class="v-masonry__item" style="--v-ratio:[^"]*--v-c1:0;--v-y1:0;--v-k1:0/);
+    expect(html).not.toContain("v-masonry__col");
+  });
+
+  it("renders the same markup every time, so hydration has nothing to change", () => {
+    expect(render()).toBe(render());
+    expect(render(items.slice(0, 11))).not.toBe(render());
+  });
+
+  it("has no client-only layout state or measuring", () => {
+    const source = readFileSync(join(process.cwd(), "src/components/visual/Masonry.tsx"), "utf8");
+    expect(source).not.toMatch(/useState|useEffect|useLayoutEffect|ResizeObserver|clientWidth/);
   });
 });
 

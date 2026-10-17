@@ -287,16 +287,14 @@
 }
 
 /* ── Masonry ──────────────────────────────────────────────────────────────── */
+/* Without container queries: one column. With them (and no grid-lanes): the
+   shortest-column slots precomputed by <Masonry> for each column count. */
 .v-masonry {
   --v-masonry-gap: 8px;
-  display: flex;
-  gap: var(--v-masonry-gap);
-  align-items: flex-start;
+  container-type: inline-size;
 }
-.v-masonry__col {
+.v-masonry__stage {
   display: flex;
-  flex: 1 1 0;
-  min-width: 0;
   flex-direction: column;
   gap: var(--v-masonry-gap);
 }
@@ -318,10 +316,25 @@
   animation: v-fade-in var(--v-dur-base) var(--v-ease-estandar) both;
 }
 
+@supports (container-type: inline-size) and (not (display: grid-lanes)) {
+  .v-masonry__stage {
+    --v-n: 1;
+    --v-cw: calc((100cqw - (var(--v-n) - 1) * var(--v-masonry-gap)) / var(--v-n));
+    display: block;
+    position: relative;
+  }
+  .v-masonry__item {
+    position: absolute;
+    width: var(--v-cw);
+    left: calc(var(--v-c, 0) * (var(--v-cw) + var(--v-masonry-gap)));
+    top: calc(var(--v-y, 0) * var(--v-cw) + var(--v-k, 0) * var(--v-masonry-gap));
+  }
+}
+
 @supports (display: grid-lanes) {
-  .v-masonry[data-lanes="true"] {
+  .v-masonry__stage {
     display: grid-lanes;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--v-masonry-min, 150px), 1fr));
     gap: var(--v-masonry-gap);
   }
 }
