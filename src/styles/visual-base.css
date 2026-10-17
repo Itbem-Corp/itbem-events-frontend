@@ -1,0 +1,421 @@
+/* Visual base (EV-31): color tokens, motion tokens and modern-CSS techniques.
+ * Every technique has a fallback and a still version (motion-system #32). */
+
+:root {
+  /* Durations (ms) */
+  --v-dur-instante: 90ms;
+  --v-dur-rapida: 160ms;
+  --v-dur-base: 240ms;
+  --v-dur-suave: 360ms;
+  --v-dur-lenta: 560ms;
+  --v-dur-caida: 900ms;
+  --v-dur-revelado: 1200ms;
+  --v-dur-historia: 5000ms;
+  --v-dur-escena-tv: 8000ms;
+
+  /* Curves */
+  --v-ease-estandar: cubic-bezier(0.2, 0, 0, 1);
+  --v-ease-entrada: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --v-ease-salida: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --v-ease-rebote: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --v-ease-lineal: linear;
+
+  --v-kind-tempo: 1;
+  --v-kind-ease: var(--v-ease-estandar);
+  --v-tint-mix: 30%;
+
+  /* Fallback seeds = Velada */
+  --v-seed-base: #0e0b10;
+  --v-seed-ink: #f5eee6;
+  --v-seed-accent: #e8c987;
+}
+
+[data-eventi-theme="velada"] {
+  --v-seed-base: #0e0b10;
+  --v-seed-ink: #f5eee6;
+  --v-seed-accent: #e8c987;
+  --v-tint-mix: 30%;
+}
+
+[data-eventi-theme="sobremesa"] {
+  --v-seed-base: #f6eadb;
+  --v-seed-ink: #2a1e17;
+  --v-seed-accent: #8f4f1d;
+  --v-tint-mix: 20%;
+}
+
+/* Derived tokens: plain seeds first, oklch + color-mix where supported. */
+[data-eventi-theme],
+.eventi-visual {
+  --v-surface: var(--v-seed-base);
+  --v-surface-raised: var(--v-seed-base);
+  --v-surface-solid: var(--v-seed-base);
+  --v-ink: var(--v-seed-ink);
+  --v-ink-2: var(--v-seed-ink);
+  --v-line: var(--v-seed-ink);
+  --v-accent: var(--v-seed-accent);
+  --v-accent-ink: var(--v-seed-base);
+  --v-scrim: var(--v-seed-base);
+}
+
+@supports (color: color-mix(in oklch, red, blue)) {
+  [data-eventi-theme],
+  .eventi-visual {
+    --v-surface: color-mix(in oklch, var(--v-seed-base) 94%, var(--v-seed-ink));
+    --v-surface-raised: color-mix(in oklch, var(--v-seed-base) 88%, var(--v-seed-ink));
+    --v-surface-solid: color-mix(in oklch, var(--v-seed-base) 94%, var(--v-seed-ink));
+    --v-ink-2: color-mix(in oklch, var(--v-seed-ink) 82%, var(--v-seed-base));
+    --v-line: color-mix(in oklch, var(--v-seed-ink) 16%, var(--v-seed-base));
+    --v-scrim: color-mix(in oklch, var(--v-seed-base) 92%, transparent);
+  }
+}
+
+/* ── Event kinds: background, typography, motion character. No colors fixed. ── */
+/* Mirrors EVENT_KINDS in eventKinds.ts (a unit test keeps them identical);
+ * VisualRoot also sets tempo and ease inline from the same source. */
+[data-eventi-kind="boda"] {
+  --v-font-display: "DM Serif Display", Georgia, "Times New Roman", serif;
+  --v-font-body: Inter, system-ui, sans-serif;
+  --v-kind-tempo: 1.15;
+  --v-kind-ease: var(--v-ease-estandar);
+}
+[data-eventi-kind="quince"] {
+  --v-font-display: "Bebas Neue", "DM Serif Display", Impact, sans-serif;
+  --v-font-body: Inter, system-ui, sans-serif;
+  --v-kind-tempo: 1;
+  --v-kind-ease: var(--v-ease-rebote);
+}
+[data-eventi-kind="cumpleanos"] {
+  --v-font-display: Quicksand, "Trebuchet MS", system-ui, sans-serif;
+  --v-font-body: Quicksand, system-ui, sans-serif;
+  --v-kind-tempo: 0.9;
+  --v-kind-ease: var(--v-ease-rebote);
+}
+[data-eventi-kind="otro"] {
+  --v-font-display: Inter, system-ui, sans-serif;
+  --v-font-body: Inter, system-ui, sans-serif;
+  --v-kind-tempo: 1;
+  --v-kind-ease: var(--v-ease-estandar);
+}
+
+/* Typography per event kind: body text and titles of the public screens. */
+[data-eventi-kind] {
+  font-family: var(--v-font-body);
+}
+[data-eventi-kind] :is(h1, h2, h3, .v-display) {
+  font-family: var(--v-font-display);
+}
+
+.v-bg {
+  background-color: var(--v-seed-base);
+}
+
+@supports (color: color-mix(in oklch, red, blue)) {
+  [data-eventi-kind="boda"] .v-bg {
+    background-image:
+      radial-gradient(ellipse 40% 30% at 20% 15%, color-mix(in oklch, var(--v-seed-accent) 26%, transparent), transparent 70%),
+      radial-gradient(ellipse 36% 28% at 82% 78%, color-mix(in oklch, var(--v-seed-accent) 18%, transparent), transparent 70%),
+      linear-gradient(170deg, color-mix(in oklch, var(--v-seed-base) 92%, var(--v-seed-accent)), var(--v-seed-base));
+  }
+  [data-eventi-kind="quince"] .v-bg {
+    background-image:
+      radial-gradient(circle at 24% 20%, color-mix(in oklch, var(--v-seed-accent) 40%, transparent) 0 2%, transparent 3%),
+      radial-gradient(circle at 78% 14%, color-mix(in oklch, var(--v-seed-accent) 34%, transparent) 0 2.4%, transparent 4%),
+      radial-gradient(circle at 50% 18%, color-mix(in oklch, var(--v-seed-accent) 32%, transparent), transparent 46%),
+      linear-gradient(180deg, color-mix(in oklch, var(--v-seed-base) 86%, var(--v-seed-accent)), var(--v-seed-base));
+  }
+  [data-eventi-kind="cumpleanos"] .v-bg {
+    background-image:
+      radial-gradient(circle at 15% 25%, color-mix(in oklch, var(--v-seed-accent) 30%, transparent) 0 6%, transparent 7%),
+      radial-gradient(circle at 70% 18%, color-mix(in oklch, var(--v-seed-accent) 22%, transparent) 0 9%, transparent 10%),
+      radial-gradient(circle at 85% 72%, color-mix(in oklch, var(--v-seed-accent) 26%, transparent) 0 5%, transparent 6%),
+      linear-gradient(160deg, color-mix(in oklch, var(--v-seed-base) 90%, var(--v-seed-accent)), var(--v-seed-base));
+  }
+  [data-eventi-kind="otro"] .v-bg {
+    background-image: linear-gradient(
+      165deg,
+      color-mix(in oklch, var(--v-seed-base) 90%, var(--v-seed-accent)),
+      var(--v-seed-base)
+    );
+  }
+}
+
+/* Decorative drift: transform only; absent in conserve and reduced motion. */
+.v-bg-drift {
+  animation: v-drift calc(var(--v-dur-escena-tv) * 2 * var(--v-kind-tempo)) var(--v-ease-lineal) infinite alternate;
+}
+@keyframes v-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(0, -1.5%, 0) scale(1.03); }
+}
+
+/* ── Full-bleed cover ─────────────────────────────────────────────────────── */
+.v-cover {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow: hidden;
+  color: var(--v-ink);
+  background-color: var(--v-seed-base);
+}
+.v-cover__media {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--v-focal-x, 50%) var(--v-focal-y, 50%);
+}
+.v-cover__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(to top, var(--v-scrim) 0%, transparent 62%);
+}
+@supports (color: color-mix(in oklch, red, blue)) {
+  .v-cover__scrim {
+    background:
+      linear-gradient(to top, color-mix(in oklch, var(--v-seed-base) 88%, transparent) 0%, color-mix(in oklch, var(--v-seed-base) 40%, transparent) 38%, transparent 70%),
+      linear-gradient(to bottom, color-mix(in oklch, var(--v-seed-base) 45%, transparent) 0%, transparent 28%);
+  }
+}
+.v-cover__content {
+  position: relative;
+  display: flex;
+  min-height: inherit;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 24px 16px calc(32px + env(safe-area-inset-bottom, 0px));
+}
+.v-cover__media--in {
+  animation: v-fade-in calc(var(--v-dur-suave) * var(--v-kind-tempo)) var(--v-kind-ease) both;
+}
+
+/* ── Ambient color: two stacked layers crossfaded by opacity only ─────────── */
+.v-ambient {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background-color: var(--v-seed-base);
+}
+.v-ambient__layer {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity var(--v-dur-suave) var(--v-ease-estandar);
+}
+.v-ambient__layer[data-active="true"] {
+  opacity: 1;
+}
+/* --v-ambient-mixed is mixed in JS from the active theme (fallback); with
+ * support, the mix happens here against the theme seeds and --v-tint-mix. */
+.v-ambient__layer {
+  background-color: var(--v-ambient-mixed, transparent);
+}
+@supports (color: color-mix(in oklch, red, blue)) {
+  .v-ambient__layer[style] {
+    background-color: color-mix(in oklch, var(--v-ambient-seed) var(--v-tint-mix), var(--v-seed-base));
+  }
+}
+
+/* ── Glass surfaces: blur is an enhancement over a solid surface ──────────── */
+.v-glass {
+  background-color: var(--v-surface-solid);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  @media (prefers-reduced-transparency: no-preference) {
+    html:not([data-eventi-performance="conserve"]) .v-glass {
+      background-color: var(--v-seed-base);
+      -webkit-backdrop-filter: blur(16px) saturate(140%);
+      backdrop-filter: blur(16px) saturate(140%);
+    }
+    @supports (color: color-mix(in oklch, red, blue)) {
+      html:not([data-eventi-performance="conserve"]) .v-glass {
+        background-color: color-mix(in oklch, var(--v-seed-base) 72%, transparent);
+      }
+    }
+  }
+}
+
+/* ── Scroll-driven entrance ───────────────────────────────────────────────── */
+@keyframes v-scroll-in {
+  from { opacity: 0; transform: translate3d(0, 16px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes v-line-fill {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+@keyframes v-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    html:not([data-eventi-performance="conserve"]) .v-scroll-in {
+      animation: v-scroll-in var(--v-kind-ease) both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 30%;
+    }
+    html:not([data-eventi-performance="conserve"]) .v-scroll-line {
+      transform-origin: 50% 0;
+      animation: v-line-fill var(--v-ease-lineal) both;
+      animation-timeline: scroll();
+    }
+  }
+}
+
+/* No support: content is visible unless JS marked it for the observer. */
+@supports not (animation-timeline: view()) {
+  .v-scroll-in[data-v-io]:not(.is-visible) {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0);
+  }
+  .v-scroll-in[data-v-io] {
+    transition:
+      opacity calc(var(--v-dur-suave) * var(--v-kind-tempo)) var(--v-kind-ease),
+      transform calc(var(--v-dur-suave) * var(--v-kind-tempo)) var(--v-kind-ease);
+  }
+  .v-scroll-in[data-v-io].is-visible {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Masonry ──────────────────────────────────────────────────────────────── */
+/* Without container queries: one column. With them (and no grid-lanes): the
+   shortest-column slots precomputed by <Masonry> for each column count. */
+.v-masonry {
+  --v-masonry-gap: 8px;
+  container-type: inline-size;
+}
+.v-masonry__stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v-masonry-gap);
+}
+.v-masonry__item {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  aspect-ratio: var(--v-ratio, 1);
+  background-color: var(--v-surface-raised, var(--v-seed-base));
+}
+.v-masonry__item > img,
+.v-masonry__item > video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.v-masonry__item--new {
+  animation: v-fade-in var(--v-dur-base) var(--v-ease-estandar) both;
+}
+
+@supports (container-type: inline-size) and (not (display: grid-lanes)) {
+  .v-masonry__stage {
+    --v-n: 1;
+    --v-cw: calc((100cqw - (var(--v-n) - 1) * var(--v-masonry-gap)) / var(--v-n));
+    display: block;
+    position: relative;
+  }
+  .v-masonry__item {
+    position: absolute;
+    width: var(--v-cw);
+    left: calc(var(--v-c, 0) * (var(--v-cw) + var(--v-masonry-gap)));
+    top: calc(var(--v-y, 0) * var(--v-cw) + var(--v-k, 0) * var(--v-masonry-gap));
+  }
+}
+
+@supports (display: grid-lanes) {
+  .v-masonry__stage {
+    display: grid-lanes;
+    grid-template-columns: repeat(auto-fill, minmax(var(--v-masonry-min, 150px), 1fr));
+    gap: var(--v-masonry-gap);
+  }
+}
+
+/* ── Depth 3D table: visible items only; flat plane otherwise ─────────────── */
+.v-table {
+  perspective: 1200px;
+}
+.v-table__plane {
+  transform: rotateX(28deg);
+  transform-style: preserve-3d;
+}
+.v-table__card {
+  transform: rotateZ(var(--v-giro, 0deg));
+  transition: transform var(--v-dur-base) var(--v-ease-rebote);
+  content-visibility: auto;
+}
+html[data-eventi-performance="conserve"] .v-table,
+.v-table[data-flat="true"] {
+  perspective: none;
+}
+html[data-eventi-performance="conserve"] .v-table__plane,
+.v-table[data-flat="true"] .v-table__plane {
+  transform: none;
+}
+
+/* ── View transitions ─────────────────────────────────────────────────────── */
+::view-transition-group(foto) {
+  animation-duration: var(--v-dur-suave);
+  animation-timing-function: var(--v-ease-entrada);
+}
+
+/* ── Conserve mode: no decorative compositor work ─────────────────────────── */
+html[data-eventi-performance="conserve"] .v-bg-drift,
+html[data-eventi-performance="conserve"] .v-cover__media--in,
+html[data-eventi-performance="conserve"] .v-ken-burns {
+  animation: none !important;
+  will-change: auto;
+}
+html[data-eventi-performance="conserve"] .v-table__card {
+  transition: opacity var(--v-dur-base) var(--v-ease-estandar);
+}
+
+/* ── Reduced motion: fade (90 ms) or cut. Must come last. ─────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .v-bg-drift,
+  .v-ken-burns,
+  .v-scroll-line {
+    animation: none !important;
+    transform: none !important;
+  }
+  .v-scroll-in {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .v-cover__media--in,
+  .v-masonry__item--new {
+    animation: v-fade-in var(--v-dur-instante) var(--v-ease-lineal) both !important;
+  }
+  .v-ambient__layer {
+    transition: none !important;
+  }
+  .v-table {
+    perspective: none;
+  }
+  .v-table__plane {
+    transform: none;
+  }
+  .v-table__card {
+    transform: none;
+    transition: none !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: var(--v-dur-instante) !important;
+    animation-timing-function: var(--v-ease-lineal) !important;
+  }
+  ::view-transition-group(*) {
+    animation-name: none !important;
+  }
+}
