@@ -235,7 +235,7 @@
     }
     html:not([data-eventi-performance="conserve"]) .v-scroll-line {
       transform-origin: 50% 0;
-      animation: v-line-fill linear both;
+      animation: v-line-fill var(--v-ease-lineal) both;
       animation-timeline: scroll();
     }
   }
@@ -353,7 +353,7 @@ html[data-eventi-performance="conserve"] .v-table__card {
   }
   .v-cover__media--in,
   .v-masonry__item--new {
-    animation: v-fade-in var(--v-dur-instante) linear both !important;
+    animation: v-fade-in var(--v-dur-instante) var(--v-ease-lineal) both !important;
   }
   .v-ambient__layer {
     transition: none !important;
@@ -372,7 +372,7 @@ html[data-eventi-performance="conserve"] .v-table__card {
   ::view-transition-old(*),
   ::view-transition-new(*) {
     animation-duration: var(--v-dur-instante) !important;
-    animation-timing-function: linear !important;
+    animation-timing-function: var(--v-ease-lineal) !important;
   }
   ::view-transition-group(*) {
     animation-name: none !important;

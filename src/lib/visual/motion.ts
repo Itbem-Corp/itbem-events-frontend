@@ -22,13 +22,12 @@ export const CURVES = {
 } as const;
 export type CurveToken = keyof typeof CURVES;
 
-/** The only properties any animation or transition may touch. */
-export const ANIMATED_PROPERTIES = [
-  "transform",
-  "opacity",
-  "filter",
-  "clip-path",
-] as const;
+/**
+ * The only properties any animation or transition may touch (EV-31 acceptance
+ * criterion: "solo transform y opacity"). filter and clip-path may be set as
+ * static values but never animated.
+ */
+export const ANIMATED_PROPERTIES = ["transform", "opacity"] as const;
 
 export type ReducedBehavior = "fade" | "cut";
 export type MotionMode = "full" | "fallback" | "still";

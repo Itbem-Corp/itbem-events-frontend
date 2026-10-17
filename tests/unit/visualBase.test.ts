@@ -77,7 +77,24 @@ describe("motion tokens", () => {
 describe("animation budget (compositor-only properties)", () => {
   const allowed = new Set<string>(ANIMATED_PROPERTIES);
 
-  it("animates only transform, opacity, filter and clip-path in @keyframes", () => {
+  it("allows animating only transform and opacity", () => {
+    expect([...ANIMATED_PROPERTIES]).toEqual(["transform", "opacity"]);
+  });
+
+  it("uses a --v-ease-* token for every animation and transition timing", () => {
+    const declarations = [
+      ...css.matchAll(/(?:^|[\s;{])(animation|animation-timing-function|transition)\s*:\s*([^;]+);/g),
+    ];
+    expect(declarations.length).toBeGreaterThan(0);
+    for (const [, property, value] of declarations) {
+      if (/^none\b/.test(value.trim())) continue;
+      expect(value.replace(/var\([^)]*\)/g, ""), `${property}: ${value}`).not.toMatch(
+        /\b(linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)\b|cubic-bezier\(|steps\(/,
+      );
+    }
+  });
+
+  it("animates only transform and opacity in @keyframes", () => {
     const blocks = [...css.matchAll(/@keyframes\s+[\w-]+\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g)];
     expect(blocks.length).toBeGreaterThan(0);
     for (const [, body] of blocks) {
@@ -88,7 +105,7 @@ describe("animation budget (compositor-only properties)", () => {
     }
   });
 
-  it("transitions only transform, opacity, filter and clip-path", () => {
+  it("transitions only transform and opacity", () => {
     const transitions = [...css.matchAll(/transition\s*:\s*([^;]+);/g)];
     expect(transitions.length).toBeGreaterThan(0);
     for (const [, value] of transitions) {
