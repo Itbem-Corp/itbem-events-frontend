@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
   columnCountFor,
@@ -17,7 +17,10 @@ interface MasonryProps<T extends MasonryItem> {
   className?: string;
 }
 
-const itemStyle = (item: MasonryItem) =>
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+const itemStyle =(item: MasonryItem) =>
   ({ "--v-ratio": String(aspectRatioOf(item)) }) as CSSProperties;
 
 /**
@@ -33,26 +36,36 @@ export function Masonry<T extends MasonryItem>({
   className,
 }: MasonryProps<T>) {
   const ref = useRef<HTMLDivElement>(null);
+  // Mode and column count are resolved in layout effects, which re-render
+  // before the browser paints the first client frame (same initial state on
+  // server and client, so hydration matches).
   const [lanes, setLanes] = useState(false);
-  const [columnCount, setColumnCount] = useState(2);
+  const [columnCount, setColumnCount] = useState<number | null>(null);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     setLanes(isTechniqueSupported(MOTION_TECHNIQUES.gridLanes));
   }, []);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const el = ref.current;
-    if (!el || lanes || typeof ResizeObserver === "undefined") return;
+    if (!el || lanes) return;
     const update = () =>
       setColumnCount(columnCountFor(el.clientWidth, minColumnWidth, gap));
+    // Measured synchronously before the first paint: no 2-column frame.
     update();
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(update);
     observer.observe(el);
     return () => observer.disconnect();
   }, [lanes, minColumnWidth, gap]);
 
+  // Until measured, no columns are emitted, so a wrong count (the old fixed
+  // 2) is never painted and then reflowed.
   const columns = useMemo(
-    () => (lanes ? [] : distributeIntoColumns(items, columnCount)),
+    () =>
+      lanes || columnCount === null
+        ? []
+        : distributeIntoColumns(items, columnCount),
     [lanes, items, columnCount],
   );
 

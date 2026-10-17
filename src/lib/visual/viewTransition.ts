@@ -22,7 +22,8 @@ export async function runViewTransition(
     element !== null &&
     typeof doc.startViewTransition === "function" &&
     isTechniqueSupported(MOTION_TECHNIQUES.viewTransitions) &&
-    !env.conserve;
+    !env.conserve &&
+    !env.reducedMotion;
 
   if (!canAnimate) {
     await update();

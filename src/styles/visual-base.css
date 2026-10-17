@@ -71,21 +71,39 @@
 }
 
 /* ── Event kinds: background, typography, motion character. No colors fixed. ── */
+/* Mirrors EVENT_KINDS in eventKinds.ts (a unit test keeps them identical);
+ * VisualRoot also sets tempo and ease inline from the same source. */
 [data-eventi-kind="boda"] {
   --v-font-display: "DM Serif Display", Georgia, "Times New Roman", serif;
   --v-font-body: Inter, system-ui, sans-serif;
+  --v-kind-tempo: 1.15;
+  --v-kind-ease: var(--v-ease-estandar);
 }
 [data-eventi-kind="quince"] {
   --v-font-display: "Bebas Neue", "DM Serif Display", Impact, sans-serif;
   --v-font-body: Inter, system-ui, sans-serif;
+  --v-kind-tempo: 1;
+  --v-kind-ease: var(--v-ease-rebote);
 }
 [data-eventi-kind="cumpleanos"] {
   --v-font-display: Quicksand, "Trebuchet MS", system-ui, sans-serif;
   --v-font-body: Quicksand, system-ui, sans-serif;
+  --v-kind-tempo: 0.9;
+  --v-kind-ease: var(--v-ease-rebote);
 }
 [data-eventi-kind="otro"] {
   --v-font-display: Inter, system-ui, sans-serif;
   --v-font-body: Inter, system-ui, sans-serif;
+  --v-kind-tempo: 1;
+  --v-kind-ease: var(--v-ease-estandar);
+}
+
+/* Typography per event kind: body text and titles of the public screens. */
+[data-eventi-kind] {
+  font-family: var(--v-font-body);
+}
+[data-eventi-kind] :is(h1, h2, h3, .v-display) {
+  font-family: var(--v-font-display);
 }
 
 .v-bg {
@@ -124,7 +142,7 @@
 
 /* Decorative drift: transform only; absent in conserve and reduced motion. */
 .v-bg-drift {
-  animation: v-drift calc(var(--v-dur-escena-tv) * 2) var(--v-ease-lineal) infinite alternate;
+  animation: v-drift calc(var(--v-dur-escena-tv) * 2 * var(--v-kind-tempo)) var(--v-ease-lineal) infinite alternate;
 }
 @keyframes v-drift {
   from { transform: translate3d(0, 0, 0) scale(1); }
@@ -172,7 +190,7 @@
   padding: 24px 16px calc(32px + env(safe-area-inset-bottom, 0px));
 }
 .v-cover__media--in {
-  animation: v-fade-in var(--v-dur-suave) var(--v-ease-estandar) both;
+  animation: v-fade-in calc(var(--v-dur-suave) * var(--v-kind-tempo)) var(--v-kind-ease) both;
 }
 
 /* ── Ambient color: two stacked layers crossfaded by opacity only ─────────── */
@@ -191,6 +209,16 @@
 }
 .v-ambient__layer[data-active="true"] {
   opacity: 1;
+}
+/* --v-ambient-mixed is mixed in JS from the active theme (fallback); with
+ * support, the mix happens here against the theme seeds and --v-tint-mix. */
+.v-ambient__layer {
+  background-color: var(--v-ambient-mixed, transparent);
+}
+@supports (color: color-mix(in oklch, red, blue)) {
+  .v-ambient__layer[style] {
+    background-color: color-mix(in oklch, var(--v-ambient-seed) var(--v-tint-mix), var(--v-seed-base));
+  }
 }
 
 /* ── Glass surfaces: blur is an enhancement over a solid surface ──────────── */
@@ -229,7 +257,7 @@
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
     html:not([data-eventi-performance="conserve"]) .v-scroll-in {
-      animation: v-scroll-in var(--v-ease-estandar) both;
+      animation: v-scroll-in var(--v-kind-ease) both;
       animation-timeline: view();
       animation-range: entry 0% cover 30%;
     }
@@ -249,8 +277,8 @@
   }
   .v-scroll-in[data-v-io] {
     transition:
-      opacity var(--v-dur-suave) var(--v-ease-estandar),
-      transform var(--v-dur-suave) var(--v-ease-estandar);
+      opacity calc(var(--v-dur-suave) * var(--v-kind-tempo)) var(--v-kind-ease),
+      transform calc(var(--v-dur-suave) * var(--v-kind-tempo)) var(--v-kind-ease);
   }
   .v-scroll-in[data-v-io].is-visible {
     opacity: 1;

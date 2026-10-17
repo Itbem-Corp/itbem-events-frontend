@@ -1,9 +1,13 @@
 export type EventKind = "boda" | "quince" | "cumpleanos" | "otro";
 
 export interface EventKindSpec {
-  /** Generated background recipe (CSS class in visual-base.css); never fixes colors. */
+  /**
+   * Name of the generated background recipe, for docs and callers. It is not a
+   * CSS class: the CSS applies it as `[data-eventi-kind="…"] .v-bg` in
+   * visual-base.css, from the seeds only (never fixed colors).
+   */
   background: "petalos" | "destellos" | "confeti" | "bruma";
-  /** Typography stack role; resolved to font stacks in visual-base.css. */
+  /** Typography role; visual-base.css maps it to --v-font-display/--v-font-body per [data-eventi-kind]. */
   typography: "serif-editorial" | "display-festivo" | "redondeada" | "neutra";
   /** Motion character: which curve leads and how fast decorative motion runs. */
   motion: { curve: "estandar" | "entrada" | "rebote"; tempo: number };

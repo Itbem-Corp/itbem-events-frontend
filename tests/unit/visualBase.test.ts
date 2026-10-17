@@ -25,6 +25,7 @@ import {
   AA_TEXT,
   FALLBACK_THEMES,
   resolveVisualTheme,
+  TINT_STRENGTH,
 } from "../../src/lib/visual/themeTokens";
 
 const css = readFileSync(
@@ -175,6 +176,17 @@ describe("theme tokens", () => {
     expect(contrastRatio(sobremesa.ink, tintedLight)).toBeGreaterThanOrEqual(AA_TEXT);
   });
 
+  it("gives each theme family its ambient tint strength, mirrored in --v-tint-mix", () => {
+    expect(resolveVisualTheme(undefined).tintStrength).toBe(TINT_STRENGTH.velada);
+    expect(resolveVisualTheme(undefined, { preferred: "sobremesa" }).tintStrength).toBe(TINT_STRENGTH.sobremesa);
+    expect(resolveVisualTheme({ background: "#fff8ec" }).tintStrength).toBe(TINT_STRENGTH.sobremesa);
+    for (const [id, strength] of Object.entries(TINT_STRENGTH)) {
+      const block = css.match(new RegExp(`\\[data-eventi-theme="${id}"\\]\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+      expect(block).toContain(`--v-tint-mix: ${strength}%;`);
+    }
+    expect(css).toMatch(/color-mix\(in oklch, var\(--v-ambient-seed\) var\(--v-tint-mix\), var\(--v-seed-base\)\)/);
+  });
+
   it("defines both fallback themes in CSS with the same seeds", () => {
     for (const [id, seeds] of Object.entries(FALLBACK_THEMES)) {
       const block = css.match(new RegExp(`\\[data-eventi-theme="${id}"\\]\\s*\\{([^}]*)\\}`))?.[1] ?? "";
@@ -207,6 +219,41 @@ describe("event kinds", () => {
     expect(normalizeEventKind("Cumpleaños")).toBe("cumpleanos");
     expect(normalizeEventKind("graduation")).toBe("otro");
     expect(normalizeEventKind(undefined)).toBe("otro");
+  });
+
+  it("mirrors each kind's tempo and curve in CSS", () => {
+    for (const [kind, spec] of Object.entries(EVENT_KINDS)) {
+      const block = css.match(new RegExp(`\\[data-eventi-kind="${kind}"\\]\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+      expect(block).toContain(`--v-kind-tempo: ${spec.motion.tempo};`);
+      expect(block).toContain(`--v-kind-ease: var(--v-ease-${spec.motion.curve});`);
+    }
+  });
+
+  it("applies the kind's fonts to body text and titles", () => {
+    expect(css).toMatch(/\[data-eventi-kind\]\s*\{\s*font-family:\s*var\(--v-font-body\)/);
+    expect(css).toMatch(/\[data-eventi-kind\] :is\(h1, h2, h3, \.v-display\)\s*\{\s*font-family:\s*var\(--v-font-display\)/);
+  });
+
+  it("drives drift, scroll entrance and cover timing with the kind's tempo and curve", () => {
+    expect(css).toMatch(/\.v-bg-drift\s*\{[^}]*var\(--v-kind-tempo\)/);
+    expect(css).toMatch(/\.v-cover__media--in\s*\{[^}]*var\(--v-kind-tempo\)[^}]*var\(--v-kind-ease\)/);
+    expect(css).toMatch(/animation: v-scroll-in var\(--v-kind-ease\)/);
+    expect(css).toMatch(/\.v-scroll-in\[data-v-io\]\s*\{[^}]*var\(--v-kind-tempo\)\) var\(--v-kind-ease\)/);
+  });
+
+  it("consumes every declared token with var(), except the design scale kept for later screens", () => {
+    // Design #32 scale published for EV-32+ screens; listed explicitly so any
+    // other unused token fails here.
+    const designScale = new Set([
+      "--v-dur-rapida", "--v-dur-lenta", "--v-dur-caida", "--v-dur-revelado", "--v-dur-historia",
+      "--v-ease-salida", "--v-surface", "--v-ink-2", "--v-line", "--v-accent", "--v-accent-ink",
+    ]);
+    const declared = new Set([...css.matchAll(/(--v-[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
+    for (const token of designScale) expect(declared.has(token), token).toBe(true);
+    for (const token of declared) {
+      if (designScale.has(token)) continue;
+      expect(css.includes(`var(${token}`), `${token} declared but never used`).toBe(true);
+    }
   });
 
   it("defines background, typography and motion per kind without fixing colors", () => {

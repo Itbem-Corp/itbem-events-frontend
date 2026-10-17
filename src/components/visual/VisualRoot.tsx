@@ -5,6 +5,7 @@ import {
   resolveVisualTheme,
   type FallbackThemeId,
 } from "../../lib/visual/themeTokens";
+import { VisualThemeContext } from "./visualThemeContext";
 
 interface VisualRootProps {
   /** `PageTheme.colors` from the event palette; absent = Velada/Sobremesa. */
@@ -28,12 +29,14 @@ export function VisualRoot({
     [colors, eventType, preferredFallback],
   );
   return (
-    <div
-      className={`eventi-visual ${className ?? ""}`.trim()}
-      style={theme.vars as CSSProperties}
-      {...theme.attrs}
-    >
-      {children}
-    </div>
+    <VisualThemeContext.Provider value={theme}>
+      <div
+        className={`eventi-visual ${className ?? ""}`.trim()}
+        style={theme.vars as CSSProperties}
+        {...theme.attrs}
+      >
+        {children}
+      </div>
+    </VisualThemeContext.Provider>
   );
 }

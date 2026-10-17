@@ -16,6 +16,12 @@ export const FALLBACK_THEMES: Record<FallbackThemeId, ThemeSeeds> = {
   sobremesa: { base: "#F6EADB", ink: "#2A1E17", accent: "#8F4F1D" },
 };
 
+/** Ambient tint strength (percent of the photo color), per theme family; mirrors --v-tint-mix. */
+export const TINT_STRENGTH: Record<FallbackThemeId, number> = {
+  velada: 30,
+  sobremesa: 20,
+};
+
 export const AA_TEXT = 4.5;
 export const AA_LARGE = 3;
 
@@ -24,6 +30,8 @@ export interface VisualTheme {
   family: FallbackThemeId;
   kind: EventKind;
   seeds: ThemeSeeds;
+  /** Ambient tint strength for this theme's family (TINT_STRENGTH). */
+  tintStrength: number;
   /** Inline custom properties: only seeds; derivations happen in CSS (oklch + color-mix). */
   vars: Record<string, string>;
   attrs: {
@@ -117,6 +125,7 @@ export function resolveVisualTheme(
     family,
     kind,
     seeds,
+    tintStrength: TINT_STRENGTH[family],
     vars: {
       "--v-seed-base": seeds.base,
       "--v-seed-ink": seeds.ink,
