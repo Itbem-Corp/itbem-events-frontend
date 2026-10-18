@@ -682,8 +682,10 @@ export default function SharedUploadPage({
                   return previous.map((candidate) =>
                     candidate.id === entry.id
                       ? {
+                          // The converted JPEG is preview-only: it has no
+                          // EXIF, so uploading it loses the photo's rotation.
+                          // The original HEIC goes up and the server rotates it.
                           ...candidate,
-                          file: converted,
                           previewUrl: newPreview,
                           isHeic: false,
                         }
