@@ -1,4 +1,3 @@
-import { readJpegOrientation } from "./jpegOrientation";
 import { isVideoUploadFile, uploadFileExtension } from "./uploadFilePolicy";
 
 export interface MomentImageOptimizationOptions {
@@ -78,13 +77,6 @@ export async function optimizeMomentUploadImage(
   if (!shouldOptimizeMomentImage(file) || file.size < MIN_OPTIMIZATION_BYTES) {
     return file;
   }
-  throwIfAborted(signal);
-
-  // Safari on iPhone does not reliably apply the EXIF orientation when it
-  // redraws on a canvas, and the re-encoded WebP carries no EXIF to fix it
-  // later. Photos with a rotation tag go up untouched: the image Lambda bakes
-  // the rotation into the pixels.
-  if ((await readJpegOrientation(file)) > 1) return file;
   throwIfAborted(signal);
 
   let source: CanvasImageSource;
