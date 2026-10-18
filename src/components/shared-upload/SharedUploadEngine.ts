@@ -322,12 +322,14 @@ export async function prepareSharedUploadEntries(
   }
 }
 
-/** Best-effort HEIC/HEIF conversion for preview and later upload. */
+/** Best-effort HEIC/HEIF conversion for the on-screen preview only. */
 export async function convertSharedUploadHeic(
   file: File,
 ): Promise<File | null> {
   try {
-    const bitmap = await createImageBitmap(file);
+    const bitmap = await createImageBitmap(file, {
+      imageOrientation: "from-image",
+    });
     const scale = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(bitmap.width * scale);
