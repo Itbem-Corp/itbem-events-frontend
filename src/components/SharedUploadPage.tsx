@@ -22,6 +22,7 @@ import { UploadStatusLoadingState } from "./shared-upload/UploadStatusLoadingSta
 import { UploadThemeToggle } from "./shared-upload/UploadThemeToggle";
 import { usePublicEventAccess } from "../hooks/usePublicEventAccess";
 import { normalizeEventsUrl } from "../lib/eventsUrl";
+import { discardUploadTiming, uploadTimingFor } from "../lib/uploadTiming";
 import {
   publicAccessFetchInit,
   publicAccessQueryParams,
@@ -646,12 +647,19 @@ export default function SharedUploadPage({
       if (validEntries.length > 0) {
         commitFiles((previous) => [...previous, ...validEntries]);
 
+        // Photos show their object URL as soon as they are committed; videos
+        // and HEIC end the phase when their thumbnail/conversion settles.
+        validEntries
+          .filter((entry) => !entry.isVideo && !entry.isHeic)
+          .forEach((entry) => uploadTimingFor(entry.id).end("preview"));
+
         validEntries
           .filter((entry) => entry.isVideo)
           .forEach((entry) => {
             void engine
               .extractSharedUploadVideoThumbnail(entry.previewUrl)
               .then((thumbnail) => {
+                uploadTimingFor(entry.id).end("preview");
                 if (!thumbnail || !mountedRef.current) return;
                 setVideoThumbs((previous) => {
                   if (
@@ -672,6 +680,7 @@ export default function SharedUploadPage({
             void engine
               .convertSharedUploadHeic(entry.file)
               .then((converted) => {
+                uploadTimingFor(entry.id).end("preview");
                 if (!converted || !mountedRef.current) return;
                 commitFiles((previous) => {
                   const match = previous.find(
@@ -729,6 +738,7 @@ export default function SharedUploadPage({
 
   const removeFile = (id: string) => {
     if (uploading || selectionPreparationCountRef.current > 0) return;
+    discardUploadTiming(id);
     commitFiles((prev) => {
       const entry = prev.find((e) => e.id === id);
       if (entry?.previewUrl && entry.previewUrl !== "heic") {

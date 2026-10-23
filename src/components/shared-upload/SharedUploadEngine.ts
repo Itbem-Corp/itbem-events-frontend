@@ -34,6 +34,11 @@ import {
 } from "../../lib/uploadFilePolicy";
 import { createKeyedAnimationFrameBatcher } from "../../lib/animationFrameBatcher";
 import { sharedUploadRequestScheduler } from "../../lib/uploadRequestScheduler";
+import {
+  beginUploadTiming,
+  finishUploadTiming,
+  uploadTimingFor,
+} from "../../lib/uploadTiming";
 
 export const MAX_SHARED_UPLOAD_VIDEO_DURATION_S = 300;
 
@@ -158,8 +163,12 @@ function buildEntry(file: File): SharedUploadFileEntry {
   const isHeic = extension === "heic" || extension === "heif";
   const previewUrl = isHeic ? "heic" : URL.createObjectURL(file);
 
+  const id = crypto.randomUUID();
+  // Selection -> visible thumbnail; the page ends this phase (EV-46).
+  beginUploadTiming(id, file).start("preview");
+
   return {
-    id: crypto.randomUUID(),
+    id,
     file,
     previewUrl,
     isVideo,
@@ -602,8 +611,11 @@ export async function uploadSharedFiles({
     );
     const { file } = entry;
     const contentType = resolveMomentUploadContentType(file);
+    const timer = uploadTimingFor(entry.id);
+    timer.setMultipart();
 
     let startData: SharedMultipartUploadStart;
+    timer.start("presign");
     try {
       startData = await withRetry(() =>
         fetchUploadApiData<SharedMultipartUploadStart>(
@@ -630,6 +642,7 @@ export async function uploadSharedFiles({
       throw error;
     }
 
+    timer.end("presign");
     const multipart = requireSharedMultipartUploadStart(startData, contentType);
     const uploadId = multipart.uploadId;
     const objectKey = multipart.objectKey;
@@ -774,10 +787,12 @@ export async function uploadSharedFiles({
         };
       };
 
+      timer.start("put");
       await runPool(
         parts.map((part) => () => uploadPart(part)),
         PART_CONCURRENCY,
       );
+      timer.end("put");
       const completedParts = normalizeCompletedUploadParts(etags);
       if (completedParts.length !== parts.length) {
         throw new Error(
@@ -815,6 +830,7 @@ export async function uploadSharedFiles({
               : "",
         }),
       };
+      timer.start("confirm");
       const completeResponse = await retryUploadApiOnce(
         () =>
           fetchUploadApiData<unknown>(
@@ -825,6 +841,8 @@ export async function uploadSharedFiles({
         2000,
         signal,
       );
+      timer.end("confirm");
+      finishUploadTiming(entry.id, "done");
       onPublicationResponse(completeResponse);
       updateFiles((previous) =>
         previous.map((candidate) =>
@@ -840,6 +858,9 @@ export async function uploadSharedFiles({
       );
     } catch (error) {
       progressBatcher.delete(entry.id);
+      if (!(error as { silent?: boolean }).silent) {
+        finishUploadTiming(entry.id, "error");
+      }
       void abortMultipart();
       throw error;
     }
@@ -864,6 +885,7 @@ export async function uploadSharedFiles({
     );
     const fileToUpload = compressedFiles.get(entry.id) ?? entry.file;
     const effectiveContentType = resolveMomentUploadContentType(fileToUpload);
+    const timer = uploadTimingFor(entry.id);
 
     try {
       let uploadUrl: string;
@@ -878,6 +900,7 @@ export async function uploadSharedFiles({
         uploadHeaders = cachedPresign.uploadHeaders ?? {};
       } else {
         let data: MomentUploadUrl;
+        timer.start("presign");
         try {
           data = await withRetry(() =>
             fetchUploadApiData<MomentUploadUrl>(
@@ -906,6 +929,7 @@ export async function uploadSharedFiles({
           }
           throw error;
         }
+        timer.end("presign");
         const presign = requireMomentUploadPresign(data, effectiveContentType);
         uploadUrl = presign.uploadUrl;
         objectKey = presign.objectKey;
@@ -913,6 +937,7 @@ export async function uploadSharedFiles({
         uploadHeaders = presign.uploadHeaders ?? {};
       }
 
+      timer.start("put");
       await withRetry(
         () =>
           runScheduledPut(entry.id, async () => {
@@ -969,6 +994,7 @@ export async function uploadSharedFiles({
         3,
         800,
       );
+      timer.end("put");
 
       progressBatcher.delete(entry.id);
       updateFiles((previous) =>
@@ -978,6 +1004,7 @@ export async function uploadSharedFiles({
             : candidate,
         ),
       );
+      timer.start("confirm");
       const confirmResponse = await withRetry(
         () =>
         fetchUploadApiData<unknown>(
@@ -1020,6 +1047,8 @@ export async function uploadSharedFiles({
             ),
         },
       );
+      timer.end("confirm");
+      finishUploadTiming(entry.id, "done");
       onPublicationResponse(confirmResponse);
       updateFiles((previous) =>
         previous.map((candidate) =>
@@ -1033,6 +1062,7 @@ export async function uploadSharedFiles({
     } catch (error) {
       progressBatcher.delete(entry.id);
       if ((error as { silent?: boolean }).silent) return;
+      finishUploadTiming(entry.id, "error");
       let message: string;
       if (error instanceof TypeError) {
         message = SHARED_UPLOAD_CONNECTION_ERROR_MESSAGE;
@@ -1065,6 +1095,8 @@ export async function uploadSharedFiles({
   const pendingEntries = files.filter((entry) => entry.status !== "done");
   for (const entry of pendingEntries) {
     throwIfAborted();
+    const optimizeTimer = uploadTimingFor(entry.id);
+    optimizeTimer.start("optimize");
     compressedFiles.set(
       entry.id,
       await optimizeMomentUploadImage(entry.file, {
@@ -1073,6 +1105,7 @@ export async function uploadSharedFiles({
         signal,
       }),
     );
+    optimizeTimer.end("optimize");
     throwIfAborted();
     await yieldToBrowser();
   }
@@ -1087,6 +1120,7 @@ export async function uploadSharedFiles({
   let presignCache = new Map<string, CachedMomentPresign>();
 
   if (singleEntries.length > 0 && identifier && !connectionError) {
+    singleEntries.forEach((entry) => uploadTimingFor(entry.id).start("presign"));
     try {
       const batchData = await withRetry(async () => {
         try {
@@ -1121,6 +1155,7 @@ export async function uploadSharedFiles({
           throw error;
         }
       });
+      singleEntries.forEach((entry) => uploadTimingFor(entry.id).end("presign"));
       presignCache =
         mapBatchMomentPresigns(
           singleEntries,
