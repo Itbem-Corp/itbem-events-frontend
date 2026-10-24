@@ -21,9 +21,41 @@ env:
   PUBLIC_DASHBOARD_URL: ${{ vars.PUBLIC_DASHBOARD_URL || 'https://dashboard.eventiapp.com.mx' }}
 
 jobs:
-  candidate:
+  supersede-queued:
     if: github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, Linux, X64, itbem-org-ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Release older deployments that have not started
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const {data: current} = await github.rest.actions.getWorkflowRun({
+              owner, repo, run_id: context.runId
+            });
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner, repo, workflow_id: 'deploy-worker.yml', branch: 'main', per_page: 100
+            });
+            for (const run of runs) {
+              if (run.id === context.runId || run.created_at >= current.created_at ||
+                  !['queued', 'pending'].includes(run.status)) continue;
+              try {
+                await github.rest.actions.cancelWorkflowRun({owner, repo, run_id: run.id});
+                core.info('Cancelled superseded queued deployment ' + run.id);
+              } catch (error) {
+                if (error.status !== 409) throw error;
+                core.info('Deployment ' + run.id + ' changed state; leaving it alone.');
+              }
+            }
+
+  candidate:
+    needs: supersede-queued
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
     concurrency:
