@@ -1,0 +1,83 @@
+name: Auto merge internal PRs
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review, edited]
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: frontend-auto-merge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Never check out or execute code from a pull request in this workflow.
+      - name: Merge ready internal PRs and deploy
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const internal = pr =>
+              pr.state === 'open' && !pr.draft && pr.base.ref === 'main' &&
+              pr.head.repo?.full_name === context.payload.repository.full_name;
+            const candidates = context.payload.pull_request
+              ? [context.payload.pull_request]
+              : await github.paginate(github.rest.pulls.list, {
+                  owner, repo, state: 'open', base: 'main', per_page: 100,
+                  sort: 'created', direction: 'asc'
+                });
+            let mergedAny = false;
+            try {
+              for (const candidate of candidates) {
+                let {data: pr} = await github.rest.pulls.get({
+                  owner, repo, pull_number: candidate.number
+                });
+                if (!internal(pr)) continue;
+                for (let retry = 0; pr.mergeable === null && retry < 5; retry++) {
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  ({data: pr} = await github.rest.pulls.get({
+                    owner, repo, pull_number: candidate.number
+                  }));
+                }
+                if (!internal(pr) || pr.mergeable !== true) {
+                  core.info('PR #' + candidate.number + ' is not ready; retry later.');
+                  continue;
+                }
+                try {
+                  const {data: result} = await github.rest.pulls.merge({
+                    owner, repo, pull_number: pr.number,
+                    sha: pr.head.sha, merge_method: 'squash'
+                  });
+                  if (result.merged) {
+                    mergedAny = true;
+                    core.info('Merged PR #' + pr.number + ' at ' + result.sha);
+                  }
+                } catch (error) {
+                  if ([405, 409].includes(error.status)) {
+                    core.info('PR #' + pr.number + ' is blocked or changed; retry later.');
+                  } else {
+                    throw error;
+                  }
+                }
+              }
+            } finally {
+              if (mergedAny) {
+                // GITHUB_TOKEN merges do not trigger push workflows; dispatch explicitly.
+                await github.rest.actions.createWorkflowDispatch({
+                  owner, repo, workflow_id: 'deploy-worker.yml',
+                  ref: 'main', inputs: {promote: 'true'}
+                });
+                core.info('Production deployment dispatched on main.');
+              }
+            }
