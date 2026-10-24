@@ -21,6 +21,10 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, Linux, X64, itbem-org-ci]
     timeout-minutes: 45
+    env:
+      # astro check (TypeScript language server) outgrew Node's default heap on the 2 GB Lightsail runners
+      # (itbem-lightsail-1gb-*): it died at ~512 MB there and passed on the WSL runners. 1536 MB still fits the box.
+      NODE_OPTIONS: --max-old-space-size=1536
 
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
