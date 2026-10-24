@@ -35,6 +35,7 @@ import {
 import { createKeyedAnimationFrameBatcher } from "../../lib/animationFrameBatcher";
 import { sharedUploadRequestScheduler } from "../../lib/uploadRequestScheduler";
 import {
+  beginUploadAttempt,
   beginUploadTiming,
   finishUploadTiming,
   uploadTimingFor,
@@ -1095,7 +1096,8 @@ export async function uploadSharedFiles({
   const pendingEntries = files.filter((entry) => entry.status !== "done");
   for (const entry of pendingEntries) {
     throwIfAborted();
-    const optimizeTimer = uploadTimingFor(entry.id);
+    // A retried entry gets a fresh timer instead of the half-run previous one.
+    const optimizeTimer = beginUploadAttempt(entry.id, entry.file);
     optimizeTimer.start("optimize");
     compressedFiles.set(
       entry.id,

@@ -119,6 +119,8 @@ export interface UploadTimer {
   setMultipart(): void;
   /** Reports the record once; later calls are ignored. */
   finish(outcome: UploadTimingOutcome): void;
+  /** Stops without reporting and clears its marks. */
+  discard(): void;
 }
 
 const NOOP_TIMER: UploadTimer = {
@@ -127,6 +129,7 @@ const NOOP_TIMER: UploadTimer = {
   reset() {},
   setMultipart() {},
   finish() {},
+  discard() {},
 };
 
 let timerSequence = 0;
@@ -165,6 +168,15 @@ export function createUploadTimer(
         fn();
       } catch {
         /* measuring must never affect the upload */
+      }
+    };
+    const clearAll = () => {
+      for (const phase of UPLOAD_TIMING_PHASES) {
+        safe(() => {
+          perf.clearMarks?.(markName(phase, "start"));
+          perf.clearMarks?.(markName(phase, "end"));
+          perf.clearMeasures?.(`upload:${id}:${phase}`);
+        });
       }
     };
 
@@ -218,13 +230,14 @@ export function createUploadTimer(
             phasesMs,
             totalMs: Math.max(0, Math.round(perf.now() - createdAt)),
           };
+          // Clear first so a failing sink cannot leave marks behind.
+          clearAll();
           sink(record);
-          for (const phase of UPLOAD_TIMING_PHASES) {
-            perf.clearMarks?.(markName(phase, "start"));
-            perf.clearMarks?.(markName(phase, "end"));
-            perf.clearMeasures?.(`upload:${id}:${phase}`);
-          }
         });
+      },
+      discard() {
+        finished = true;
+        clearAll();
       },
     };
   } catch {
@@ -233,14 +246,37 @@ export function createUploadTimer(
 }
 
 const timersByEntry = new Map<string, UploadTimer>();
+/** Entries whose timer already went through an upload attempt. */
+const attemptedEntries = new Set<string>();
 
 /** Begins timing a selected file; call at selection time. */
 export function beginUploadTiming(
   entryId: string,
   file: UploadTimingFileInfo,
 ): UploadTimer {
+  timersByEntry.get(entryId)?.discard();
+  attemptedEntries.delete(entryId);
   const timer = createUploadTimer(file);
   timersByEntry.set(entryId, timer);
+  return timer;
+}
+
+/**
+ * Timer for one upload attempt of an entry. The first attempt keeps the
+ * selection timer (and its preview); a retry after an error, a cancel or a
+ * dropped connection gets a fresh timer so old starts never inflate it.
+ */
+export function beginUploadAttempt(
+  entryId: string,
+  file: UploadTimingFileInfo,
+): UploadTimer {
+  const existing = timersByEntry.get(entryId);
+  if (existing && !attemptedEntries.has(entryId)) {
+    attemptedEntries.add(entryId);
+    return existing;
+  }
+  const timer = beginUploadTiming(entryId, file);
+  attemptedEntries.add(entryId);
   return timer;
 }
 
@@ -255,10 +291,13 @@ export function finishUploadTiming(
   const timer = timersByEntry.get(entryId);
   if (!timer) return;
   timersByEntry.delete(entryId);
+  attemptedEntries.delete(entryId);
   timer.finish(outcome);
 }
 
 /** Drops a timer without reporting (entry removed before it uploaded). */
 export function discardUploadTiming(entryId: string): void {
+  timersByEntry.get(entryId)?.discard();
   timersByEntry.delete(entryId);
+  attemptedEntries.delete(entryId);
 }

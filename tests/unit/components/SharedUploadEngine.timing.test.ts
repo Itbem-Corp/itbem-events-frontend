@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiFetchError } from "../../../src/lib/apiFetch";
+import type { ApiFetchError as ApiFetchErrorClass } from "../../../src/lib/apiFetch";
 import type { SharedUploadFileEntry } from "../../../src/components/shared-upload/SharedUploadEngine";
 import type { UploadTimingRecord } from "../../../src/lib/uploadTiming";
 
@@ -12,7 +12,17 @@ import type { UploadTimingRecord } from "../../../src/lib/uploadTiming";
 
 const TIMING_MODULE = "../../../src/lib/uploadTiming";
 const ENGINE_MODULE = "../../../src/components/shared-upload/SharedUploadEngine";
+const API_FETCH_MODULE = "../../../src/lib/apiFetch";
 const MB = 1024 * 1024;
+
+/**
+ * The ApiFetchError of the module graph the engine was loaded with: after
+ * vi.resetModules a statically imported class would fail its instanceof.
+ */
+let ApiFetchError: typeof ApiFetchErrorClass;
+async function loadApiFetchError() {
+  ({ ApiFetchError } = await import(API_FETCH_MODULE));
+}
 
 interface Scenario {
   files: Array<{ id: string; file: File; isVideo: boolean }>;
@@ -33,8 +43,10 @@ interface Outcome {
 
 class FakeXhr {
   static putStatus: (url: string, attempt: number) => number = () => 200;
+  static putDelayMs = 0;
   static attempts = new Map<string, number>();
   static log: string[] = [];
+  aborted = false;
   upload: { onprogress: ((event: ProgressEvent) => void) | null } = { onprogress: null };
   status = 0;
   timeout = 0;
@@ -51,6 +63,7 @@ class FakeXhr {
     return name.toLowerCase() === "etag" ? `"etag-${this.url}"` : null;
   }
   abort() {
+    this.aborted = true;
     this.onabort?.();
   }
   send(body: Blob) {
@@ -58,6 +71,7 @@ class FakeXhr {
     FakeXhr.attempts.set(this.url, attempt);
     FakeXhr.log.push(`PUT ${this.url} #${attempt}`);
     setTimeout(() => {
+      if (this.aborted) return;
       this.status = FakeXhr.putStatus(this.url, attempt);
       this.upload.onprogress?.({
         lengthComputable: true,
@@ -65,7 +79,7 @@ class FakeXhr {
         total: body.size,
       } as ProgressEvent);
       this.onload?.();
-    }, 0);
+    }, FakeXhr.putDelayMs);
   }
 }
 
@@ -90,6 +104,7 @@ async function runScenario(scenario: Scenario, withTiming: boolean): Promise<Out
     const noopTimer = { start() {}, end() {}, reset() {}, setMultipart() {}, finish() {} };
     vi.doMock(TIMING_MODULE, () => ({
       beginUploadTiming: () => noopTimer,
+      beginUploadAttempt: () => noopTimer,
       uploadTimingFor: () => noopTimer,
       finishUploadTiming: () => {},
       discardUploadTiming: () => {},
@@ -97,6 +112,7 @@ async function runScenario(scenario: Scenario, withTiming: boolean): Promise<Out
   }
   const timing = await import(TIMING_MODULE);
   const engine = await import(ENGINE_MODULE);
+  await loadApiFetchError();
 
   const records: UploadTimingRecord[] = [];
   const window = globalThis.window as unknown as EventTarget;
@@ -173,6 +189,7 @@ function presign(id: string) {
 }
 
 beforeEach(() => {
+  FakeXhr.putDelayMs = 0;
   const target = new EventTarget();
   vi.stubGlobal(
     "window",
@@ -288,10 +305,117 @@ describe("upload timing does not change the guest upload (EV-46)", () => {
     });
 
     expect(seen.files[0].status).toBe("error");
+    // A 4xx is not retried: proves the engine saw a real ApiFetchError.
+    expect(seen.requests.filter((request) => request.startsWith("POST /confirm"))).toEqual([
+      "POST /confirm #1",
+    ]);
     expect(seen.errors).toHaveLength(1);
     expect(seen.files[0].errorMsg).toBe(seen.errors[0]);
     expect(records).toHaveLength(1);
     expect(records[0]).toMatchObject({ outcome: "error" });
     expect(records[0].phasesMs.confirm).toBeUndefined();
+  }, 20_000);
+});
+
+describe("a retried upload reports its own attempt (EV-46)", () => {
+  async function setup(api: (path: string, attempt: number) => unknown) {
+    vi.resetModules();
+    vi.doUnmock(TIMING_MODULE);
+    const timing = await import(TIMING_MODULE);
+    const engine = await import(ENGINE_MODULE);
+    await loadApiFetchError();
+    const records: UploadTimingRecord[] = [];
+    (globalThis.window as unknown as EventTarget).addEventListener(
+      "itbem:upload-timing",
+      (event) => records.push((event as CustomEvent<UploadTimingRecord>).detail),
+    );
+    FakeXhr.putStatus = () => 200;
+    FakeXhr.attempts = new Map();
+    FakeXhr.log = [];
+    const { file } = photo("a");
+    timing.beginUploadTiming("a", file).start("preview");
+    timing.uploadTimingFor("a").end("preview");
+    let files: SharedUploadFileEntry[] = [
+      { id: "a", file, previewUrl: "blob:a", isVideo: false, isHeic: false, status: "pending" },
+    ];
+    const apiAttempts = new Map<string, number>();
+    const upload = (signal?: AbortSignal) =>
+      engine.uploadSharedFiles({
+        eventsUrl: "https://api.test",
+        identifier: "evt",
+        files,
+        description: "",
+        descriptionEntryId: "a",
+        allowMessages: true,
+        initialUploadedCount: 0,
+        signal,
+        fetchUploadApiData: async (input: RequestInfo | URL) => {
+          const path = new URL(String(input)).pathname.replace(/^.*\/moments\/shared/, "");
+          const attempt = (apiAttempts.get(path) ?? 0) + 1;
+          apiAttempts.set(path, attempt);
+          return api(path, attempt);
+        },
+        publicAccessQuery: () => ({}),
+        publicAccessFetchInit: (init?: RequestInit) => init,
+        updateFiles: (updater) => {
+          files = updater(files);
+        },
+        onUploadedCount: () => {},
+        onError: () => {},
+        onPublicationResponse: () => {},
+      });
+    const retryPending = () => {
+      files = files.map((entry) =>
+        entry.status === "done" ? entry : { ...entry, status: "pending" as const },
+      );
+    };
+    return { records, upload, retryPending, status: () => files[0].status };
+  }
+
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it("after a cancel mid-PUT the retry is timed from scratch", async () => {
+    const { records, upload, retryPending, status } = await setup((path) =>
+      path === "/batch-upload-urls" ? { urls: [presign("a")] } : { ok: true },
+    );
+    FakeXhr.putDelayMs = 300;
+    const controller = new AbortController();
+    const first = upload(controller.signal);
+    setTimeout(() => controller.abort(), 50);
+    await first;
+    expect(records).toEqual([]);
+
+    await sleep(1000);
+    FakeXhr.putDelayMs = 0;
+    retryPending();
+    await upload();
+
+    expect(status()).toBe("done");
+    expect(records).toHaveLength(1);
+    expect(records[0].outcome).toBe("done");
+    // The idle second between attempts is not counted in this attempt.
+    expect(records[0].phasesMs.put).toBeLessThan(900);
+    expect(records[0].totalMs).toBeLessThan(900);
+    expect(records[0].phasesMs.preview).toBeUndefined();
+  }, 20_000);
+
+  it("after an error the retry is reported too", async () => {
+    const { records, upload, retryPending, status } = await setup((path, attempt) => {
+      if (path === "/batch-upload-urls") return { urls: [presign("a")] };
+      if (path === "/confirm" && attempt === 1) {
+        throw new ApiFetchError("object not found", 400, null);
+      }
+      return { ok: true };
+    });
+    await upload();
+    expect(status()).toBe("error");
+    retryPending();
+    await upload();
+
+    expect(status()).toBe("done");
+    expect(records.map((record) => record.outcome)).toEqual(["error", "done"]);
+    expect(Object.keys(records[1].phasesMs).sort()).toEqual(
+      ["confirm", "optimize", "presign", "put"],
+    );
   }, 20_000);
 });

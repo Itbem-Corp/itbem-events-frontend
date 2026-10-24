@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  beginUploadAttempt,
   beginUploadTiming,
   classifyUploadKind,
   classifyUploadPlatform,
   createUploadTimer,
   discardUploadTiming,
   finishUploadTiming,
+  uploadTimingFor,
   type UploadTimingRecord,
 } from "../../src/lib/uploadTiming";
 
@@ -190,5 +192,44 @@ describe("entry registry", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("keeps the selection timer for the first attempt and starts fresh on a retry", () => {
+    const first = beginUploadTiming("r", { type: "image/jpeg", size: 9 });
+    expect(beginUploadAttempt("r", { type: "image/jpeg", size: 9 })).toBe(first);
+    // Second attempt after a silent abort: the half-run timer is replaced.
+    const retry = beginUploadAttempt("r", { type: "image/jpeg", size: 9 });
+    expect(retry).not.toBe(first);
+    expect(uploadTimingFor("r")).toBe(retry);
+    // Retry after the entry finished with an error: a new timer, not a no-op.
+    finishUploadTiming("r", "error");
+    const afterError = beginUploadAttempt("r", { type: "image/jpeg", size: 9 });
+    expect(uploadTimingFor("r")).toBe(afterError);
+    discardUploadTiming("r");
+  });
+});
+
+describe("discard and failing sinks", () => {
+  it("clears marks on discard and when the sink throws", () => {
+    const perf = fakePerf([0, 1, 2, 3]);
+    const throwing = createUploadTimer(
+      { type: "image/jpeg", size: 1 },
+      { sink: () => { throw new Error("sink down"); }, performance: perf, userAgent: DESKTOP_CHROME },
+    );
+    throwing.start("put");
+    throwing.finish("done");
+    expect(perf.clearMarks).toHaveBeenCalledWith(expect.stringMatching(/:put:start$/));
+
+    const sink = vi.fn();
+    const discardPerf = fakePerf([0, 1]);
+    const discarded = createUploadTimer(
+      { type: "image/jpeg", size: 1 },
+      { sink, performance: discardPerf, userAgent: DESKTOP_CHROME },
+    );
+    discarded.start("put");
+    discarded.discard();
+    discarded.finish("done");
+    expect(sink).not.toHaveBeenCalled();
+    expect(discardPerf.clearMarks).toHaveBeenCalledWith(expect.stringMatching(/:put:start$/));
   });
 });
