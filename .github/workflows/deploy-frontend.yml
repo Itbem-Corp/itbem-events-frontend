@@ -1,10 +1,7 @@
 name: Build Cloudflare Worker release
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  # Automatic CI temporarily paused; run manually when needed.
   workflow_dispatch:
 
 permissions:
@@ -15,7 +12,7 @@ env:
   PUBLIC_DASHBOARD_URL: ${{ vars.PUBLIC_DASHBOARD_URL || 'https://dashboard.eventiapp.com.mx' }}
 
 jobs:
-  # ── Job 1: build + lint check (runs on every push & PR) ──────────────────
+  # Build and checks are available for manual runs.
   build:
     name: Build
     if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
