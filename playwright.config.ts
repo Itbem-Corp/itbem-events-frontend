@@ -41,6 +41,7 @@ export default defineConfig({
   projects: [
     {
       name: 'mobile',
+      testIgnore: '**/visual-budget.spec.ts',
       use: {
         ...devices['Pixel 5'],
         viewport: { width: 375, height: 812 },
@@ -48,10 +49,22 @@ export default defineConfig({
     },
     {
       name: 'desktop',
+      testIgnore: '**/visual-budget.spec.ts',
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
       },
+    },
+    // EV-31 performance budget (60 fps, CLS < 0.1) runs in both engines.
+    {
+      name: 'budget-chromium',
+      testMatch: '**/visual-budget.spec.ts',
+      use: { ...devices['Pixel 5'], viewport: { width: 393, height: 851 } },
+    },
+    {
+      name: 'budget-webkit',
+      testMatch: '**/visual-budget.spec.ts',
+      use: { ...devices['iPhone 13'] },
     },
   ],
 

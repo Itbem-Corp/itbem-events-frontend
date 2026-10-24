@@ -1,5 +1,6 @@
 @config "../../tailwind.config.cjs";
 @import "tailwindcss" source("..");
+@import "./visual-base.css";
 
 @layer base {
   :root {
