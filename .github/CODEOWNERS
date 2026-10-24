@@ -1,10 +1,2 @@
-# Default ownership
-* @anditbem
-
-# Security-sensitive surfaces
-/.github/ @anditbem
-/SECURITY.md @anditbem
-/Dockerfile* @anditbem
-/infra/ @anditbem
-/templates/ @anditbem
-
+# Code owner review assignments are temporarily paused.
+# Restore ownership rules when mandatory reviews are needed again.
