@@ -78,7 +78,11 @@ export function classifyUploadKind(file: UploadTimingFileInfo): UploadTimingKind
   return "other";
 }
 
-/** Default sink: a DOM event any analytics layer can listen to, plus a dev log. */
+/**
+ * Default sink: a DOM event any analytics layer can listen to, plus a dev log.
+ * Provisional destination: where these records are actually sent (logger,
+ * analytics or a backend endpoint) is defined in EV-53.
+ */
 export const defaultUploadTimingSink: UploadTimingSink = (record) => {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
