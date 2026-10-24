@@ -13,6 +13,8 @@ const IPHONE_SAFARI =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
 const IPHONE_CHROME =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/124.0 Mobile/15E148 Safari/604.1";
+const IPHONE_INSTAGRAM =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 330.0.0.0 (iPhone15,2; iOS 17_4; es_MX)";
 const ANDROID_CHROME =
   "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36";
 const DESKTOP_CHROME =
@@ -41,6 +43,13 @@ describe("classifyUploadPlatform", () => {
     });
     expect(classifyUploadPlatform(ANDROID_CHROME).platform).toBe("android");
     expect(classifyUploadPlatform(DESKTOP_CHROME).platform).toBe("desktop");
+  });
+
+  it("does not count iOS in-app browsers as Safari", () => {
+    expect(classifyUploadPlatform(IPHONE_INSTAGRAM)).toEqual({
+      platform: "ios",
+      iosSafari: false,
+    });
   });
 
   it("treats a touch Macintosh as iPadOS", () => {
@@ -115,6 +124,20 @@ describe("createUploadTimer", () => {
       outcome: "error",
       phasesMs: {},
     });
+  });
+
+  it("re-measures a phase after reset", () => {
+    const sink = vi.fn();
+    const timer = createUploadTimer(
+      { type: "image/jpeg", size: 1 },
+      { sink, performance: fakePerf([0, 10, 500, 600, 650, 700]), userAgent: DESKTOP_CHROME },
+    );
+    timer.start("presign"); // now=10 (failed batch)
+    timer.reset("presign");
+    timer.start("presign"); // now=500
+    timer.end("presign"); // now=600 -> 100
+    timer.finish("done");
+    expect(sink.mock.calls[0][0].phasesMs).toEqual({ presign: 100 });
   });
 
   it("never throws when the sink or performance fail", () => {

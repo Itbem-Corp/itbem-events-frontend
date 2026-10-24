@@ -858,7 +858,7 @@ export async function uploadSharedFiles({
       );
     } catch (error) {
       progressBatcher.delete(entry.id);
-      if (!(error as { silent?: boolean }).silent) {
+      if (!(error as { silent?: boolean } | null)?.silent) {
         finishUploadTiming(entry.id, "error");
       }
       void abortMultipart();
@@ -1162,7 +1162,12 @@ export async function uploadSharedFiles({
           batchData,
           uploadContentTypeForEntry,
         ) ?? new Map<string, CachedMomentPresign>();
+      // Entries without a batch URL presign on their own; measure that instead.
+      singleEntries
+        .filter((entry) => !presignCache.has(entry.id))
+        .forEach((entry) => uploadTimingFor(entry.id).reset("presign"));
     } catch (error) {
+      singleEntries.forEach((entry) => uploadTimingFor(entry.id).reset("presign"));
       if (isApiFetchError(error) && error.status >= 400 && error.status < 500) {
         onError(error.message);
         return {
@@ -1198,6 +1203,8 @@ export async function uploadSharedFiles({
         onError(SHARED_UPLOAD_CONNECTION_ERROR_MESSAGE);
       }
       if (entry.isVideo && entry.file.size > MULTIPART_THRESHOLD) {
+        // Covers multipart start failures thrown before its own try (no-op if already reported).
+        finishUploadTiming(entry.id, "error");
         const message =
           error instanceof Error
             ? error.message

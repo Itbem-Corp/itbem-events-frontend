@@ -55,7 +55,9 @@ export function classifyUploadPlatform(
   const isIos = /iPhone|iPad|iPod/.test(userAgent) || isIpadOs;
   if (isIos) {
     const otherBrowser = /CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(userAgent);
-    return { platform: "ios", iosSafari: !otherBrowser };
+    // In-app browsers (Instagram, Facebook...) lack "Version/x Safari/".
+    const safariToken = /Version\/[\d.]+.*Safari\//.test(userAgent);
+    return { platform: "ios", iosSafari: safariToken && !otherBrowser };
   }
   if (/Android/.test(userAgent)) return { platform: "android", iosSafari: false };
   return { platform: "desktop", iosSafari: false };
@@ -111,6 +113,8 @@ export interface UploadTimingOptions {
 export interface UploadTimer {
   start(phase: UploadTimingPhase): void;
   end(phase: UploadTimingPhase): void;
+  /** Forgets a phase so it can be measured again (e.g. batch presign fell back). */
+  reset(phase: UploadTimingPhase): void;
   /** Marks the file as going through multipart (large videos). */
   setMultipart(): void;
   /** Reports the record once; later calls are ignored. */
@@ -120,6 +124,7 @@ export interface UploadTimer {
 const NOOP_TIMER: UploadTimer = {
   start() {},
   end() {},
+  reset() {},
   setMultipart() {},
   finish() {},
 };
@@ -182,6 +187,16 @@ export function createUploadTimer(
             markName(phase, "start"),
             markName(phase, "end"),
           );
+        });
+      },
+      reset(phase) {
+        safe(() => {
+          if (finished) return;
+          startedAt.delete(phase);
+          delete phasesMs[phase];
+          perf.clearMarks?.(markName(phase, "start"));
+          perf.clearMarks?.(markName(phase, "end"));
+          perf.clearMeasures?.(`upload:${id}:${phase}`);
         });
       },
       setMultipart() {
