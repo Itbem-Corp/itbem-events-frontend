@@ -154,11 +154,11 @@ async function runScenario(scenario: Scenario, withTiming: boolean): Promise<Out
       },
       publicAccessQuery: () => ({}),
       publicAccessFetchInit: (init?: RequestInit) => init,
-      updateFiles: (updater) => {
+      updateFiles: (updater: (entries: SharedUploadFileEntry[]) => SharedUploadFileEntry[]) => {
         files = updater(files);
       },
-      onUploadedCount: (count) => uploadedCounts.push(count),
-      onError: (message) => errors.push(message),
+      onUploadedCount: (count: number) => uploadedCounts.push(count),
+      onError: (message: string) => errors.push(message),
       onPublicationResponse: () => {},
     });
     return {
@@ -357,7 +357,7 @@ describe("a retried upload reports its own attempt (EV-46)", () => {
         },
         publicAccessQuery: () => ({}),
         publicAccessFetchInit: (init?: RequestInit) => init,
-        updateFiles: (updater) => {
+        updateFiles: (updater: (entries: SharedUploadFileEntry[]) => SharedUploadFileEntry[]) => {
           files = updater(files);
         },
         onUploadedCount: () => {},
