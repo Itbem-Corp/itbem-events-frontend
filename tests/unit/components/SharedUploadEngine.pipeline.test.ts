@@ -242,6 +242,25 @@ describe("backend upload rate limit (EV-48)", () => {
     expect(events).toContain("put:b");
   }, 20_000);
 
+  it("only the quota 429 marks the guest's limit as reached on the page", async () => {
+    // Same rule SharedUploadPage.fetchUploadApiData applies to quotaExhaustedRef.
+    const { isUploadQuotaExhaustedError } = await import("../../../src/lib/uploadRetry");
+    const { resolveUploadBatchOutcome } = await import("../../../src/lib/sharedUploadAccess");
+    const rateLimited = await apiError(429, RATE_LIMIT_BODY);
+    const quota = await apiError(429, QUOTA_BODY);
+    expect(isUploadQuotaExhaustedError(rateLimited)).toBe(false);
+    expect(isUploadQuotaExhaustedError(quota)).toBe(true);
+    expect(isUploadQuotaExhaustedError(await apiError(500, null))).toBe(false);
+
+    // A batch where the rate limiter was hit (and retried) and another file
+    // failed for an unrelated reason: the guest is not told the limit was reached.
+    const entries = [{ status: "done" }, { status: "error" }];
+    expect(resolveUploadBatchOutcome(entries, isUploadQuotaExhaustedError(rateLimited)).kind)
+      .toBe("incomplete");
+    expect(resolveUploadBatchOutcome(entries, isUploadQuotaExhaustedError(quota)).kind)
+      .toBe("partial-limit");
+  });
+
   it("a quota 429 on the presign is final for that file", async () => {
     optimizeImpl = async (file) => file;
     const quota = await apiError(429, QUOTA_BODY);
