@@ -1,5 +1,4 @@
 import {
-  buildSharedMomentBatchUploadUrlsUrl,
   buildSharedMomentConfirmUrl,
   buildSharedMomentUploadUrl,
   buildSharedMultipartAbortUrl,
@@ -8,13 +7,10 @@ import {
 } from "../../lib/apiUrls";
 import { isApiFetchError } from "../../lib/apiFetch";
 import {
-  mapBatchMomentPresigns,
   normalizeCompletedUploadParts,
   requireMomentUploadPresign,
   requireSharedMultipartUploadStart,
-  type CachedMomentPresign,
   type MomentUploadUrl,
-  type MomentUploadUrlBatch,
   type SharedMultipartUploadStart,
 } from "../../lib/momentUploads";
 import { resolveMomentUploadContentType } from "../../lib/momentUploadContentType";
@@ -47,6 +43,8 @@ const MULTIPART_THRESHOLD = 10 * 1024 * 1024;
 const PART_SIZE = 8 * 1024 * 1024;
 const POOL_SIZE = 8;
 const PART_CONCURRENCY = 4;
+/** Images optimized at once: canvas decodes are heavy on phones. */
+export const OPTIMIZE_CONCURRENCY = 2;
 
 type QueryValue = string | number | boolean | null | undefined;
 type PublicAccessQuery = Record<string, QueryValue>;
@@ -442,6 +440,48 @@ function getAdaptivePoolSize(): number {
   }
 }
 
+/**
+ * Lets at most `max` operations run at once; waiters leave the line as soon as
+ * their signal aborts.
+ */
+export function createConcurrencyLimiter(max: number) {
+  let active = 0;
+  const waiting: Array<() => void> = [];
+  const release = () => {
+    const next = waiting.shift();
+    if (next) next();
+    else active -= 1;
+  };
+  return async function run<T>(
+    operation: () => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    throwIfSignalAborted(signal);
+    if (active >= max) {
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+          const index = waiting.indexOf(grant);
+          if (index >= 0) waiting.splice(index, 1);
+          reject(abortError());
+        };
+        const grant = () => {
+          signal?.removeEventListener("abort", onAbort);
+          resolve();
+        };
+        waiting.push(grant);
+        signal?.addEventListener("abort", onAbort, { once: true });
+      });
+    } else {
+      active += 1;
+    }
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  };
+}
+
 async function runPool(
   tasks: Array<() => Promise<void>>,
   concurrency = POOL_SIZE,
@@ -496,7 +536,7 @@ function asUploadsDisabledError(): Error & { uploadsDisabled: true } {
 }
 
 /**
- * Runs compression, batch presigning, single PUTs, multipart uploads, confirms,
+ * Runs per-file compression (overlapping uploads) and presigning, single PUTs, multipart uploads, confirms,
  * retries, and progress updates after the UI has synchronously entered its
  * uploading state.
  */
@@ -576,12 +616,6 @@ export async function uploadSharedFiles({
       normalizeConnectionAbortedEntries(previous, abortedEntryIds),
     );
     requests.forEach(([request]) => request.abort());
-  };
-
-  const throwIfAborted = () => {
-    if (signal?.aborted) {
-      throw new DOMException("Upload aborted", "AbortError");
-    }
   };
 
   const trackRequest = (
@@ -870,7 +904,6 @@ export async function uploadSharedFiles({
   const uploadOne = async (
     entry: SharedUploadFileEntry,
     includeDescription: boolean,
-    cachedPresign?: CachedMomentPresign,
   ): Promise<void> => {
     if (entry.status === "done") {
       uploaded += 1;
@@ -889,54 +922,42 @@ export async function uploadSharedFiles({
     const timer = uploadTimingFor(entry.id);
 
     try {
-      let uploadUrl: string;
-      let objectKey: string;
-      let uploadContentType = effectiveContentType;
-      let uploadHeaders: Record<string, string> = {};
-
-      if (cachedPresign) {
-        uploadUrl = cachedPresign.uploadUrl;
-        objectKey = cachedPresign.objectKey;
-        uploadContentType = cachedPresign.contentType;
-        uploadHeaders = cachedPresign.uploadHeaders ?? {};
-      } else {
-        let data: MomentUploadUrl;
-        timer.start("presign");
-        try {
-          data = await withRetry(() =>
-            fetchUploadApiData<MomentUploadUrl>(
-              buildSharedMomentUploadUrl(
-                eventsUrl,
-                identifier,
-                publicAccessQuery(),
-              ),
-              {
-                method: "POST",
-                signal,
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  content_type: effectiveContentType,
-                  filename: fileToUpload.name,
-                  file_size: fileToUpload.size,
-                }),
-              },
-              "Error obteniendo URL",
+      let data: MomentUploadUrl;
+      timer.start("presign");
+      try {
+        data = await withRetry(() =>
+          fetchUploadApiData<MomentUploadUrl>(
+            buildSharedMomentUploadUrl(
+              eventsUrl,
+              identifier,
+              publicAccessQuery(),
             ),
-          );
-        } catch (error) {
-          if (uploadsDisabledError(error)) {
-            uploadsDisabled = true;
-            return;
-          }
-          throw error;
+            {
+              method: "POST",
+              signal,
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                content_type: effectiveContentType,
+                filename: fileToUpload.name,
+                file_size: fileToUpload.size,
+              }),
+            },
+            "Error obteniendo URL",
+          ),
+        );
+      } catch (error) {
+        if (uploadsDisabledError(error)) {
+          uploadsDisabled = true;
+          return;
         }
-        timer.end("presign");
-        const presign = requireMomentUploadPresign(data, effectiveContentType);
-        uploadUrl = presign.uploadUrl;
-        objectKey = presign.objectKey;
-        uploadContentType = presign.contentType;
-        uploadHeaders = presign.uploadHeaders ?? {};
+        throw error;
       }
+      timer.end("presign");
+      const presign = requireMomentUploadPresign(data, effectiveContentType);
+      const uploadUrl = presign.uploadUrl;
+      const objectKey = presign.objectKey;
+      const uploadContentType = presign.contentType;
+      const uploadHeaders = presign.uploadHeaders ?? {};
 
       timer.start("put");
       await withRetry(
@@ -1094,106 +1115,48 @@ export async function uploadSharedFiles({
   };
 
   const pendingEntries = files.filter((entry) => entry.status !== "done");
-  for (const entry of pendingEntries) {
-    throwIfAborted();
+  // Each file is uploaded as soon as it is optimized, with at most
+  // OPTIMIZE_CONCURRENCY optimizations at once. Presign is per file: the batch
+  // endpoint needs the final size and type of every file up front.
+  const limitOptimization = createConcurrencyLimiter(OPTIMIZE_CONCURRENCY);
+  const optimizeEntry = (entry: SharedUploadFileEntry) => {
     // A retried entry gets a fresh timer instead of the half-run previous one.
     const optimizeTimer = beginUploadAttempt(entry.id, entry.file);
-    optimizeTimer.start("optimize");
-    compressedFiles.set(
-      entry.id,
-      await optimizeMomentUploadImage(entry.file, {
-        maxDimension: 2048,
-        quality: 0.86,
-        signal,
-      }),
-    );
-    optimizeTimer.end("optimize");
-    throwIfAborted();
-    await yieldToBrowser();
-  }
-
-  const uploadFileForEntry = (entry: SharedUploadFileEntry) =>
-    compressedFiles.get(entry.id) ?? entry.file;
-  const uploadContentTypeForEntry = (entry: SharedUploadFileEntry) =>
-    resolveMomentUploadContentType(uploadFileForEntry(entry));
-  const singleEntries = pendingEntries.filter(
-    (entry) => !(entry.isVideo && entry.file.size > MULTIPART_THRESHOLD),
-  );
-  let presignCache = new Map<string, CachedMomentPresign>();
-
-  if (singleEntries.length > 0 && identifier && !connectionError) {
-    singleEntries.forEach((entry) => uploadTimingFor(entry.id).start("presign"));
-    try {
-      const batchData = await withRetry(async () => {
-        try {
-          return await fetchUploadApiData<MomentUploadUrlBatch>(
-            buildSharedMomentBatchUploadUrlsUrl(
-              eventsUrl,
-              identifier,
-              publicAccessQuery(),
-            ),
-            {
-              method: "POST",
-              signal,
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                files: singleEntries.map((entry) => {
-                  const uploadFile = uploadFileForEntry(entry);
-                  return {
-                    content_type: resolveMomentUploadContentType(uploadFile),
-                    filename: uploadFile.name,
-                    file_size: uploadFile.size,
-                  };
-                }),
-              }),
-            },
-            "Batch presign failed",
-          );
-        } catch (error) {
-          if (uploadsDisabledError(error)) {
-            uploadsDisabled = true;
-            return null;
-          }
-          throw error;
-        }
-      });
-      singleEntries.forEach((entry) => uploadTimingFor(entry.id).end("presign"));
-      presignCache =
-        mapBatchMomentPresigns(
-          singleEntries,
-          batchData,
-          uploadContentTypeForEntry,
-        ) ?? new Map<string, CachedMomentPresign>();
-      // Entries without a batch URL presign on their own; measure that instead.
-      singleEntries
-        .filter((entry) => !presignCache.has(entry.id))
-        .forEach((entry) => uploadTimingFor(entry.id).reset("presign"));
-    } catch (error) {
-      singleEntries.forEach((entry) => uploadTimingFor(entry.id).reset("presign"));
-      if (isApiFetchError(error) && error.status >= 400 && error.status < 500) {
-        onError(error.message);
-        return {
-          abortedEarly: true,
-          connectionError,
-          uploadsDisabled,
-        };
+    return limitOptimization(async () => {
+      optimizeTimer.start("optimize");
+      try {
+        compressedFiles.set(
+          entry.id,
+          await optimizeMomentUploadImage(entry.file, {
+            maxDimension: 2048,
+            quality: 0.86,
+            signal,
+          }),
+        );
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") throw error;
+        // Best effort: the original file is uploaded, as before.
       }
-    }
-  }
+      optimizeTimer.end("optimize");
+      await yieldToBrowser();
+    }, signal);
+  };
 
   const uploadTasks = pendingEntries.map((entry) => async () => {
-    if (connectionError || uploadsDisabled) return;
+    if (connectionError || uploadsDisabled || signal?.aborted) return;
     inFlightEntryIds.add(entry.id);
     const includeDescription = entry.id === descriptionEntryId;
     try {
+      await optimizeEntry(entry);
       if (entry.isVideo && entry.file.size > MULTIPART_THRESHOLD) {
         await uploadMultipart(entry, includeDescription);
         uploaded += 1;
         onUploadedCount(uploaded);
       } else {
-        await uploadOne(entry, includeDescription, presignCache.get(entry.id));
+        await uploadOne(entry, includeDescription);
       }
     } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") return;
       if ((error as { silent?: boolean }).silent) return;
       if ((error as { uploadsDisabled?: boolean }).uploadsDisabled) {
         uploadsDisabled = true;

@@ -188,6 +188,11 @@ function presign(id: string) {
   return { upload_url: `https://s3.test/${id}`, object_key: `moments/${id}` };
 }
 
+/** Answer for POST /upload-url: the id is the file name without extension. */
+function presignForBody(body: unknown) {
+  return presign((body as { filename: string }).filename.replace(".gif", ""));
+}
+
 beforeEach(() => {
   FakeXhr.putDelayMs = 0;
   const target = new EventTarget();
@@ -210,9 +215,7 @@ describe("upload timing does not change the guest upload (EV-46)", () => {
     const { seen, records } = await expectSameGuestOutcome({
       files: [photo("a"), photo("b"), photo("c")],
       api: (path, attempt, body) => {
-        if (path === "/batch-upload-urls") {
-          return { urls: [presign("a"), presign("b"), presign("c")] };
-        }
+        if (path === "/upload-url") return presignForBody(body);
         if (path === "/confirm") {
           const key = (body as { object_key: string }).object_key;
           if (key === "moments/c" && attempt === 1) {
@@ -241,15 +244,11 @@ describe("upload timing does not change the guest upload (EV-46)", () => {
     }
   }, 20_000);
 
-  it("batch presign without a URL per file falls back to one presign each", async () => {
+  it("presigns each file on its own, never through the batch endpoint", async () => {
     const { seen, records } = await expectSameGuestOutcome({
       files: [photo("a"), photo("b")],
       api: (path, _attempt, body) => {
-        if (path === "/batch-upload-urls") return { urls: [presign("a")] };
-        if (path === "/upload-url") {
-          const name = (body as { filename: string }).filename.replace(".gif", "");
-          return presign(name);
-        }
+        if (path === "/upload-url") return presignForBody(body);
         if (path === "/confirm") return { ok: true };
         throw new Error(`unexpected ${path}`);
       },
@@ -257,6 +256,7 @@ describe("upload timing does not change the guest upload (EV-46)", () => {
 
     expect(seen.files.map((file) => file.status)).toEqual(["done", "done"]);
     expect(seen.requests.filter((request) => request.startsWith("POST /upload-url"))).toHaveLength(2);
+    expect(seen.requests.some((request) => request.includes("batch-upload-urls"))).toBe(false);
     expect(records).toHaveLength(2);
     records.forEach((record) => expect(record.phasesMs.presign).toBeGreaterThanOrEqual(0));
   }, 20_000);
@@ -268,8 +268,8 @@ describe("upload timing does not change the guest upload (EV-46)", () => {
     }));
     const { seen, records } = await expectSameGuestOutcome({
       files: [video("v", 20 * MB), photo("p")],
-      api: (path) => {
-        if (path === "/batch-upload-urls") return { urls: [presign("p")] };
+      api: (path, _attempt, body) => {
+        if (path === "/upload-url") return presignForBody(body);
         if (path === "/multipart/start") {
           return { upload_id: "up-1", object_key: "moments/v", part_urls: parts };
         }
@@ -298,7 +298,7 @@ describe("upload timing does not change the guest upload (EV-46)", () => {
     const { seen, records } = await expectSameGuestOutcome({
       files: [photo("a")],
       api: (path) => {
-        if (path === "/batch-upload-urls") return { urls: [presign("a")] };
+        if (path === "/upload-url") return presign("a");
         if (path === "/confirm") throw new ApiFetchError("object not found", 400, null);
         throw new Error(`unexpected ${path}`);
       },
@@ -376,7 +376,7 @@ describe("a retried upload reports its own attempt (EV-46)", () => {
 
   it("after a cancel mid-PUT the retry is timed from scratch", async () => {
     const { records, upload, retryPending, status } = await setup((path) =>
-      path === "/batch-upload-urls" ? { urls: [presign("a")] } : { ok: true },
+      path === "/upload-url" ? presign("a") : { ok: true },
     );
     FakeXhr.putDelayMs = 300;
     const controller = new AbortController();
@@ -401,7 +401,7 @@ describe("a retried upload reports its own attempt (EV-46)", () => {
 
   it("after an error the retry is reported too", async () => {
     const { records, upload, retryPending, status } = await setup((path, attempt) => {
-      if (path === "/batch-upload-urls") return { urls: [presign("a")] };
+      if (path === "/upload-url") return presign("a");
       if (path === "/confirm" && attempt === 1) {
         throw new ApiFetchError("object not found", 400, null);
       }
