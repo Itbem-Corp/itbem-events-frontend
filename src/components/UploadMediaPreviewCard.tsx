@@ -25,6 +25,8 @@ export interface UploadMediaPreviewCardProps {
   errorMsg?: string;
   progress?: number;
   subtitle?: string;
+  /** Background validation (EV-47): shown as "Preparando…" until it ends. */
+  validating?: boolean;
   uploading: boolean;
   theme: "dark" | "light";
   shouldReduceMotion: boolean;
@@ -48,6 +50,7 @@ function UploadMediaPreviewCardComponent({
   errorMsg,
   progress,
   subtitle,
+  validating,
   uploading,
   theme,
   shouldReduceMotion,
@@ -136,7 +139,18 @@ function UploadMediaPreviewCardComponent({
         />
       )}
 
-      {isVideo && status === "pending" && (
+      {validating && (
+        <div
+          className="absolute inset-0 flex items-center justify-center bg-black/40"
+          data-testid="upload-validating-overlay"
+        >
+          <span className="px-1 text-center text-[11px] font-medium text-white">
+            Preparando…
+          </span>
+        </div>
+      )}
+
+      {isVideo && status === "pending" && !validating && (
         <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-full bg-black/60 py-0.5 pl-1.5 pr-2 backdrop-blur-sm">
           <Play aria-hidden="true" className="h-3 w-3 text-white" />
           <span className="text-[10px] font-medium text-white">
@@ -251,6 +265,7 @@ export function areUploadMediaPreviewCardPropsEqual(
     previous.errorMsg === next.errorMsg &&
     previous.progress === next.progress &&
     previous.subtitle === next.subtitle &&
+    previous.validating === next.validating &&
     previous.uploading === next.uploading &&
     previous.theme === next.theme &&
     previous.shouldReduceMotion === next.shouldReduceMotion &&

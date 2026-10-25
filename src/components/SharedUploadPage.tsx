@@ -533,6 +533,74 @@ export default function SharedUploadPage({
     };
   }, []);
 
+  /**
+   * Checks video durations after the entries are already on screen (EV-47).
+   * Over five minutes: removed with the usual message. Unknown (0): allowed.
+   */
+  const validateVideosInBackground = async (
+    engine: Awaited<ReturnType<typeof loadSharedUploadEngineForAction>>,
+    videos: SharedUploadFileEntry[],
+    controller: AbortController,
+  ) => {
+    const rejectedIds = new Set<string>();
+    try {
+      await Promise.all(
+        videos.map(async (entry) => {
+          let duration = 0;
+          try {
+            duration = await engine.validateSharedUploadVideoDuration(
+              entry.file,
+              controller.signal,
+            );
+          } catch {
+            return; // aborted: cleanup happens where the abort was issued
+          }
+          if (controller.signal.aborted || !mountedRef.current) return;
+          if (!engine.isSharedUploadVideoDurationAllowed(duration)) {
+            rejectedIds.add(entry.id);
+            return;
+          }
+          commitFiles((previous) =>
+            previous.map((candidate) =>
+              candidate.id === entry.id
+                ? { ...candidate, validating: false }
+                : candidate,
+            ),
+          );
+        }),
+      );
+      if (controller.signal.aborted || !mountedRef.current) return;
+
+      if (rejectedIds.size > 0) {
+        rejectedIds.forEach((id) => discardUploadTiming(id));
+        commitFiles((previous) => {
+          previous
+            .filter((candidate) => rejectedIds.has(candidate.id))
+            .forEach((candidate) => {
+              if (candidate.previewUrl && candidate.previewUrl !== "heic") {
+                URL.revokeObjectURL(candidate.previewUrl);
+              }
+            });
+          return previous.filter((candidate) => !rejectedIds.has(candidate.id));
+        });
+        setVideoThumbs((previous) => {
+          const next = new Map(previous);
+          rejectedIds.forEach((id) => next.delete(id));
+          return next;
+        });
+        addToast(
+          rejectedIds.size === 1
+            ? "Un video supera el límite de 5 minutos y no fue agregado"
+            : rejectedIds.size +
+                " videos superan el límite de 5 minutos y no fueron agregados",
+          "error",
+        );
+      }
+    } finally {
+      selectionAbortControllersRef.current.delete(controller);
+    }
+  };
+
   const addFiles = async (incoming: File[]) => {
     if (uploading) return;
     preloadUploadMediaPreviewGrid();
@@ -615,16 +683,16 @@ export default function SharedUploadPage({
     setIsPreparing(true);
     const preparationController = new AbortController();
     selectionAbortControllersRef.current.add(preparationController);
+    let validationInBackground = false;
 
     try {
       const engine = await loadSharedUploadEngineForAction();
       if (preparationController.signal.aborted) return;
 
-      const { validEntries, rejectedVideoEntries } =
-        await engine.prepareSharedUploadEntries(
-          acceptedFiles,
-          preparationController.signal,
-        );
+      const { validEntries } = await engine.prepareSharedUploadEntries(
+        acceptedFiles,
+        preparationController.signal,
+      );
       if (preparationController.signal.aborted || !mountedRef.current) {
         validEntries.forEach((entry) => {
           discardUploadTiming(entry.id);
@@ -633,17 +701,6 @@ export default function SharedUploadPage({
           }
         });
         return;
-      }
-
-      rejectedVideoEntries.forEach((entry) => discardUploadTiming(entry.id));
-      if (rejectedVideoEntries.length > 0) {
-        addToast(
-          rejectedVideoEntries.length === 1
-            ? "Un video supera el límite de 5 minutos y no fue agregado"
-            : rejectedVideoEntries.length +
-                " videos superan el límite de 5 minutos y no fueron agregados",
-          "error",
-        );
       }
 
       if (validEntries.length > 0) {
@@ -676,6 +733,16 @@ export default function SharedUploadPage({
                 });
               });
           });
+
+        const validatingVideos = validEntries.filter((entry) => entry.isVideo);
+        if (validatingVideos.length > 0) {
+          validationInBackground = true;
+          void validateVideosInBackground(
+            engine,
+            validatingVideos,
+            preparationController,
+          );
+        }
 
         validEntries
           .filter((entry) => entry.isHeic)
@@ -728,7 +795,9 @@ export default function SharedUploadPage({
         0,
         pendingSelectionSlotsRef.current - reservedSlots,
       );
-      selectionAbortControllersRef.current.delete(preparationController);
+      if (!validationInBackground) {
+        selectionAbortControllersRef.current.delete(preparationController);
+      }
       selectionPreparationCountRef.current = Math.max(
         0,
         selectionPreparationCountRef.current - 1,
@@ -769,7 +838,8 @@ export default function SharedUploadPage({
       files.length === 0 ||
       !identifier ||
       uploading ||
-      selectionPreparationCountRef.current > 0
+      selectionPreparationCountRef.current > 0 ||
+      filesRef.current.some((entry) => entry.validating)
     ) {
       return;
     }
@@ -1595,6 +1665,7 @@ export default function SharedUploadPage({
                   files.length === 0 ||
                   uploading ||
                   isPreparing ||
+                  files.some((e) => e.validating) ||
                   files.every((e) => e.status === "done")
                 }
                 onClick={handleUpload}
