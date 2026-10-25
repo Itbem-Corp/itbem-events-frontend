@@ -143,6 +143,8 @@ function UploadMediaPreviewCardComponent({
         <div
           className="absolute inset-0 flex items-center justify-center bg-black/40"
           data-testid="upload-validating-overlay"
+          role="status"
+          aria-live="polite"
         >
           <span className="px-1 text-center text-[11px] font-medium text-white">
             Preparando…
