@@ -161,6 +161,27 @@ test.describe('Shared upload page', () => {
     await expect(page.getByRole('button', { name: 'Abrir vista previa de largo.mp4' })).toHaveCount(0);
   });
 
+  test('shows no limit toast for an over-limit video removed while it was validating', async ({ page }) => {
+    await stubVideoMetadata(page, 400, 2500);
+    await mockSharedUploadStatus(page, MOMENT_EVENT_IDENTIFIER, { uploadsRemaining: 5 });
+
+    await page.goto(PAGE_URL);
+    await expect(page.getByRole('heading', { name: /Comparte tus momentos/ })).toBeVisible({ timeout: 15_000 });
+
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'quitado.mp4',
+      mimeType: 'video/mp4',
+      buffer: Buffer.from('removed-video'),
+    });
+    await expect(page.getByTestId('upload-validating-overlay')).toBeVisible({ timeout: 2_000 });
+    await page.getByRole('button', { name: 'Quitar quitado.mp4' }).click();
+    await expect(page.getByRole('button', { name: 'Abrir vista previa de quitado.mp4' })).toHaveCount(0);
+
+    // Validation (2.5 s) has finished well before this point.
+    await page.waitForTimeout(4_000);
+    await expect(page.getByText(/supera el límite de 5 minutos/)).toHaveCount(0);
+  });
+
   test('keeps a video with unknown duration (0) and enables upload after validation', async ({ page }) => {
     await stubVideoMetadata(page, 0, 1500);
     await mockSharedUploadStatus(page, MOMENT_EVENT_IDENTIFIER, { uploadsRemaining: 5 });

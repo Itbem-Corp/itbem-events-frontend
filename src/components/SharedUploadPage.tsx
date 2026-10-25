@@ -571,6 +571,14 @@ export default function SharedUploadPage({
       );
       if (controller.signal.aborted || !mountedRef.current) return;
 
+      // A video the guest already removed while it was validating gets no
+      // toast: removeFile already released its preview and timing.
+      rejectedIds.forEach((id) => {
+        if (!filesRef.current.some((candidate) => candidate.id === id)) {
+          rejectedIds.delete(id);
+        }
+      });
+
       if (rejectedIds.size > 0) {
         rejectedIds.forEach((id) => discardUploadTiming(id));
         commitFiles((previous) => {
