@@ -34,6 +34,7 @@ export interface UploadMediaPreviewEntry {
   errorMsg?: string;
   progress?: number;
   subtitle?: string;
+  validating?: boolean;
 }
 
 interface UploadMediaPreviewGridProps {
@@ -134,6 +135,7 @@ export function UploadMediaPreviewGrid({
               errorMsg={entry.errorMsg}
               progress={entry.progress}
               subtitle={entry.subtitle}
+              validating={entry.validating}
               uploading={uploading}
               theme={theme}
               shouldReduceMotion={shouldReduceMotion}

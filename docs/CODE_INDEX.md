@@ -92,6 +92,7 @@ EVENTS_URL: string    // Backend API base URL
 - Max files: 10
 - Max image: 25 MB
 - Max video: 200 MB
+- Max video duration: 5 min (300 s; unknown duration `0` is allowed). Since EV-47 selected entries are shown at once; videos carry `validating: true` ("Preparando…" overlay) while `validateSharedUploadVideoDuration` runs in the background, the over-limit ones are removed with a toast, and upload stays disabled until every video finishes validating.
 - Reads identifier: `window.location.pathname.match(/\/events\/([^/]+)\/upload/)`
 
 ---

@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { prepareSharedUploadEntries } from "../../../src/components/shared-upload/SharedUploadEngine";
+import {
+  isSharedUploadVideoDurationAllowed,
+  prepareSharedUploadEntries,
+  validateSharedUploadVideoDuration,
+} from "../../../src/components/shared-upload/SharedUploadEngine";
 
 function installPendingVideoElement(): void {
   vi.stubGlobal("document", {
@@ -28,46 +32,70 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("shared upload preparation lifecycle", () => {
-  it("revokes temporary and preview URLs when preparation is aborted", async () => {
+describe("shared upload preparation", () => {
+  it("returns video entries at once, flagged validating, without reading metadata", async () => {
+    // No document stub: any attempt to create a <video> would throw.
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview");
+    const photo = new File(["p"], "a.jpg", { type: "image/jpeg" });
+    const video = new File(["v"], "clip.mp4", { type: "video/mp4" });
+
+    const { validEntries } = await prepareSharedUploadEntries([video, photo]);
+
+    expect(validEntries.map((entry) => entry.file)).toEqual([photo, video]);
+    expect(validEntries[0].validating).toBeUndefined();
+    expect(validEntries[1]).toMatchObject({ isVideo: true, validating: true });
+  });
+
+  it("rejects without creating entries when already aborted", async () => {
+    const createObjectUrl = vi.spyOn(URL, "createObjectURL");
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      prepareSharedUploadEntries(
+        [new File(["v"], "clip.mp4", { type: "video/mp4" })],
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(createObjectUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe("shared upload video duration validation", () => {
+  it("revokes its temporary URL when aborted", async () => {
     installPendingVideoElement();
-    const createObjectUrl = vi
-      .spyOn(URL, "createObjectURL")
-      .mockReturnValueOnce("blob:preview")
-      .mockReturnValueOnce("blob:metadata");
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:metadata");
     const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL");
     const controller = new AbortController();
-    const file = new File(["video"], "clip.mp4", { type: "video/mp4" });
 
-    const preparation = prepareSharedUploadEntries(
-      [file],
+    const validation = validateSharedUploadVideoDuration(
+      new File(["v"], "clip.mp4", { type: "video/mp4" }),
       controller.signal,
     );
     controller.abort();
 
-    await expect(preparation).rejects.toMatchObject({ name: "AbortError" });
-    expect(createObjectUrl).toHaveBeenCalledTimes(2);
+    await expect(validation).rejects.toMatchObject({ name: "AbortError" });
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:metadata");
-    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:preview");
   });
 
-  it("treats missing metadata as unknown after a bounded timeout", async () => {
+  it("treats missing metadata as unknown (0) after a bounded timeout", async () => {
     vi.useFakeTimers();
     installPendingVideoElement();
-    vi.spyOn(URL, "createObjectURL")
-      .mockReturnValueOnce("blob:preview")
-      .mockReturnValueOnce("blob:metadata");
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:metadata");
     const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL");
-    const file = new File(["video"], "clip.mp4", { type: "video/mp4" });
 
-    const preparation = prepareSharedUploadEntries([file]);
+    const validation = validateSharedUploadVideoDuration(
+      new File(["v"], "clip.mp4", { type: "video/mp4" }),
+    );
     await vi.advanceTimersByTimeAsync(5000);
 
-    await expect(preparation).resolves.toMatchObject({
-      rejectedVideoEntries: [],
-      validEntries: [{ file }],
-    });
+    await expect(validation).resolves.toBe(0);
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:metadata");
-    expect(revokeObjectUrl).not.toHaveBeenCalledWith("blob:preview");
+  });
+
+  it("allows up to 5 minutes and unknown duration, rejects longer", () => {
+    expect(isSharedUploadVideoDurationAllowed(300)).toBe(true);
+    expect(isSharedUploadVideoDurationAllowed(0)).toBe(true);
+    expect(isSharedUploadVideoDurationAllowed(300.5)).toBe(false);
   });
 });

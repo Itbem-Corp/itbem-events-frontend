@@ -114,6 +114,94 @@ test.describe('Shared upload page', () => {
     await expect(previewVideo).not.toHaveAttribute('autoplay', '');
   });
 
+  // EV-47: video metadata arrives late; the entry must already be on screen.
+  async function stubVideoMetadata(
+    page: import('@playwright/test').Page,
+    duration: number,
+    delayMs: number,
+  ) {
+    await page.addInitScript(
+      ({ duration, delayMs }) => {
+        Object.defineProperty(HTMLMediaElement.prototype, 'duration', {
+          configurable: true,
+          get: () => duration,
+        });
+        Object.defineProperty(HTMLMediaElement.prototype, 'src', {
+          configurable: true,
+          get() {
+            return '';
+          },
+          set(this: HTMLMediaElement) {
+            window.setTimeout(() => this.onloadedmetadata?.(new Event('loadedmetadata')), delayMs);
+          },
+        });
+      },
+      { duration, delayMs },
+    );
+  }
+
+  test('shows a video at once as "Preparando…" and removes it when it exceeds 5 minutes', async ({ page }) => {
+    await stubVideoMetadata(page, 400, 2500);
+    await mockSharedUploadStatus(page, MOMENT_EVENT_IDENTIFIER, { uploadsRemaining: 5 });
+
+    await page.goto(PAGE_URL);
+    await expect(page.getByRole('heading', { name: /Comparte tus momentos/ })).toBeVisible({ timeout: 15_000 });
+
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'largo.mp4',
+      mimeType: 'video/mp4',
+      buffer: Buffer.from('long-video'),
+    });
+
+    await expect(page.getByRole('button', { name: 'Abrir vista previa de largo.mp4' })).toBeVisible({ timeout: 2_000 });
+    await expect(page.getByTestId('upload-validating-overlay')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Compartir momento/ })).toBeDisabled();
+
+    await expect(page.getByText('Un video supera el límite de 5 minutos y no fue agregado')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: 'Abrir vista previa de largo.mp4' })).toHaveCount(0);
+  });
+
+  test('shows no limit toast for an over-limit video removed while it was validating', async ({ page }) => {
+    await stubVideoMetadata(page, 400, 2500);
+    await mockSharedUploadStatus(page, MOMENT_EVENT_IDENTIFIER, { uploadsRemaining: 5 });
+
+    await page.goto(PAGE_URL);
+    await expect(page.getByRole('heading', { name: /Comparte tus momentos/ })).toBeVisible({ timeout: 15_000 });
+
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'quitado.mp4',
+      mimeType: 'video/mp4',
+      buffer: Buffer.from('removed-video'),
+    });
+    await expect(page.getByTestId('upload-validating-overlay')).toBeVisible({ timeout: 2_000 });
+    await page.getByRole('button', { name: 'Quitar quitado.mp4' }).click();
+    await expect(page.getByRole('button', { name: 'Abrir vista previa de quitado.mp4' })).toHaveCount(0);
+
+    // Validation (2.5 s) has finished well before this point.
+    await page.waitForTimeout(4_000);
+    await expect(page.getByText(/supera el límite de 5 minutos/)).toHaveCount(0);
+  });
+
+  test('keeps a video with unknown duration (0) and enables upload after validation', async ({ page }) => {
+    await stubVideoMetadata(page, 0, 1500);
+    await mockSharedUploadStatus(page, MOMENT_EVENT_IDENTIFIER, { uploadsRemaining: 5 });
+
+    await page.goto(PAGE_URL);
+    await expect(page.getByRole('heading', { name: /Comparte tus momentos/ })).toBeVisible({ timeout: 15_000 });
+
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'corto.mp4',
+      mimeType: 'video/mp4',
+      buffer: Buffer.from('unknown-duration'),
+    });
+
+    await expect(page.getByTestId('upload-validating-overlay')).toBeVisible({ timeout: 2_000 });
+    await expect(page.getByRole('button', { name: /Compartir momento/ })).toBeDisabled();
+    await expect(page.getByTestId('upload-validating-overlay')).toHaveCount(0, { timeout: 10_000 });
+    await expect(page.getByRole('button', { name: /Compartir momento/ })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Abrir vista previa de corto.mp4' })).toBeVisible();
+  });
+
   test('keeps shared uploads open when the event is published but the moments wall is not', async ({ page }) => {
     await mockSharedUploadStatus(page, MOMENT_EVENT_IDENTIFIER, {
       eventPublished: true,
