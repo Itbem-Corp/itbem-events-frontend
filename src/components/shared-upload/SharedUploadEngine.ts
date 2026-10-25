@@ -422,6 +422,52 @@ export async function withRetry<T>(
   throw lastError ?? new Error("withRetry: maxAttempts must be >= 1");
 }
 
+/**
+ * The backend allows 30 upload requests per IP every 6 s (fixed window,
+ * routes.go uploadRateLimiter). Per-file presign (EV-48) roughly doubles the
+ * requests of a batch, so a rate-limited request waits out the window instead
+ * of failing the file.
+ */
+export const RATE_LIMIT_RETRY_DELAY_MS = 6000;
+export const RATE_LIMIT_MAX_RETRIES = 2;
+
+/**
+ * A 429 from the per-IP rate limiter carries no data; the quota 429
+ * (limit reached) carries uploads_limit/uploads_remaining and is final.
+ */
+export function isUploadRateLimitError(error: unknown): boolean {
+  if (!isApiFetchError(error) || error.status !== 429) return false;
+  const data = (error.payload as { data?: unknown } | null)?.data;
+  return data === undefined || data === null;
+}
+
+export async function retryWhenRateLimited<T>(
+  operation: () => Promise<T>,
+  signal?: AbortSignal,
+  delayMs = RATE_LIMIT_RETRY_DELAY_MS,
+  maxRetries = RATE_LIMIT_MAX_RETRIES,
+): Promise<T> {
+  for (let retry = 0; ; retry += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (retry >= maxRetries || !isUploadRateLimitError(error)) throw error;
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+          clearTimeout(timeoutId);
+          reject(abortError());
+        };
+        const timeoutId = setTimeout(() => {
+          signal?.removeEventListener("abort", onAbort);
+          resolve();
+        }, delayMs);
+        if (signal?.aborted) onAbort();
+        else signal?.addEventListener("abort", onAbort, { once: true });
+      });
+    }
+  }
+}
+
 function getAdaptivePoolSize(): number {
   const connection = (
     navigator as unknown as {
@@ -652,25 +698,29 @@ export async function uploadSharedFiles({
     let startData: SharedMultipartUploadStart;
     timer.start("presign");
     try {
-      startData = await withRetry(() =>
-        fetchUploadApiData<SharedMultipartUploadStart>(
-          buildSharedMultipartStartUrl(
-            eventsUrl,
-            identifier,
-            publicAccessQuery(),
+      startData = await retryWhenRateLimited(
+        () =>
+          withRetry(() =>
+            fetchUploadApiData<SharedMultipartUploadStart>(
+              buildSharedMultipartStartUrl(
+                eventsUrl,
+                identifier,
+                publicAccessQuery(),
+              ),
+              {
+                method: "POST",
+                signal,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  content_type: contentType,
+                  filename: file.name,
+                  file_size: file.size,
+                }),
+              },
+              "Error iniciando subida",
+            ),
           ),
-          {
-            method: "POST",
-            signal,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              content_type: contentType,
-              filename: file.name,
-              file_size: file.size,
-            }),
-          },
-          "Error iniciando subida",
-        ),
+        signal,
       );
     } catch (error) {
       if (uploadsDisabledError(error)) throw asUploadsDisabledError();
@@ -925,25 +975,29 @@ export async function uploadSharedFiles({
       let data: MomentUploadUrl;
       timer.start("presign");
       try {
-        data = await withRetry(() =>
-          fetchUploadApiData<MomentUploadUrl>(
-            buildSharedMomentUploadUrl(
-              eventsUrl,
-              identifier,
-              publicAccessQuery(),
+        data = await retryWhenRateLimited(
+          () =>
+            withRetry(() =>
+              fetchUploadApiData<MomentUploadUrl>(
+                buildSharedMomentUploadUrl(
+                  eventsUrl,
+                  identifier,
+                  publicAccessQuery(),
+                ),
+                {
+                  method: "POST",
+                  signal,
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    content_type: effectiveContentType,
+                    filename: fileToUpload.name,
+                    file_size: fileToUpload.size,
+                  }),
+                },
+                "Error obteniendo URL",
+              ),
             ),
-            {
-              method: "POST",
-              signal,
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                content_type: effectiveContentType,
-                filename: fileToUpload.name,
-                file_size: fileToUpload.size,
-              }),
-            },
-            "Error obteniendo URL",
-          ),
+          signal,
         );
       } catch (error) {
         if (uploadsDisabledError(error)) {
@@ -1027,7 +1081,7 @@ export async function uploadSharedFiles({
         ),
       );
       timer.start("confirm");
-      const confirmResponse = await withRetry(
+      const confirmResponse = await retryWhenRateLimited(() => withRetry(
         () =>
         fetchUploadApiData<unknown>(
           buildSharedMomentConfirmUrl(
@@ -1068,7 +1122,7 @@ export async function uploadSharedFiles({
               ),
             ),
         },
-      );
+      ), signal);
       timer.end("confirm");
       finishUploadTiming(entry.id, "done");
       onPublicationResponse(confirmResponse);
