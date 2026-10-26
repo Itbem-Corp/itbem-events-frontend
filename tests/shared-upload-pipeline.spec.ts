@@ -108,24 +108,25 @@ function installPipelineProbe() {
   };
   (window as unknown as { __ev48: PipelineProbe }).__ev48 = probe;
 
-  // Only the image optimizer calls createImageBitmap for JPEGs, and it always
-  // ends with canvas.toBlob (momentUploadImage.ts).
+  // On this page only the image optimizer (momentUploadImage.ts) calls
+  // createImageBitmap/toBlob for JPEGs: an optimization runs from the decode
+  // to the toBlob callback. A failed decode falls back to new Image() and
+  // still ends in toBlob, so it is not counted as finished there. The rare
+  // "no 2d context" early return would leave the counter high, which can only
+  // make the peak assertion stricter.
   const originalCreateImageBitmap = window.createImageBitmap.bind(window);
   window.createImageBitmap = ((...args: Parameters<typeof createImageBitmap>) => {
     probe.active += 1;
     probe.peak = Math.max(probe.peak, probe.active);
     probe.decodeStarts.push(performance.now());
-    return originalCreateImageBitmap(...args).catch((error: unknown) => {
-      probe.active -= 1;
-      throw error;
-    });
+    return originalCreateImageBitmap(...args);
   }) as typeof createImageBitmap;
   const originalToBlob = HTMLCanvasElement.prototype.toBlob;
   HTMLCanvasElement.prototype.toBlob = function (callback, ...rest) {
     return originalToBlob.call(
       this,
       (blob) => {
-        probe.active -= 1;
+        probe.active = Math.max(0, probe.active - 1);
         probe.encodeEnds.push(performance.now());
         callback(blob);
       },
@@ -153,7 +154,8 @@ function installPipelineProbe() {
     'click',
     (event) => {
       const button = (event.target as Element | null)?.closest('button');
-      if (probe.click === null && button?.textContent?.includes('Compartir momento')) {
+      // "Compartir momento" for one file, "Compartir 10 momentos" for ten.
+      if (probe.click === null && /^Compartir/.test(button?.textContent?.trim() ?? '')) {
         probe.click = performance.now();
       }
     },
@@ -209,7 +211,7 @@ test('10 photos of ~6 MB: first PUT before the last optimization, at most 2 at o
   await page.goto(PAGE_URL);
   await expect(page.getByRole('heading', { name: /Comparte tus momentos/ })).toBeVisible({ timeout: 15_000 });
   await page.locator('input[type="file"]').first().setInputFiles(paths);
-  const share = page.getByRole('button', { name: /Compartir momento/ });
+  const share = page.getByRole('button', { name: `Compartir ${PHOTO_COUNT} momentos` });
   await expect(share).toBeEnabled({ timeout: 30_000 });
   await share.click();
 
@@ -232,8 +234,11 @@ test('10 photos of ~6 MB: first PUT before the last optimization, at most 2 at o
     confirms,
     firstOptimizationEndMs: Math.round(firstOptimizationEndMs),
     firstPutMs: Math.round(firstPutMs),
+    // Conservative floor for the pre-EV-48 engine: measured here with 2
+    // optimizations at once, while the old engine ran them one by one and then
+    // made a batch presign, so its real first PUT came later than this.
     baselineFloorMs: Math.round(lastOptimizationEndMs),
-    savedMs: Math.round(lastOptimizationEndMs - firstPutMs),
+    savedVsFloorMs: Math.round(lastOptimizationEndMs - firstPutMs),
   };
   await testInfo.attach('ev48-first-put.json', {
     body: JSON.stringify(result, null, 2),
