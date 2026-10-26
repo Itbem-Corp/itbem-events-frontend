@@ -63,6 +63,8 @@ export interface SharedUploadFileEntry {
   errorMsg?: string;
   progress?: number;
   subtitle?: string;
+  /** True while the video duration is still being checked in the background. */
+  validating?: boolean;
 }
 
 export const SHARED_UPLOAD_CONNECTION_ERROR_MESSAGE = UPLOAD_CONNECTION_MESSAGE;
@@ -125,7 +127,6 @@ export function collectConnectionAbortedEntryIds(
 
 export interface PreparedSharedUploadEntries {
   validEntries: SharedUploadFileEntry[];
-  rejectedVideoEntries: SharedUploadFileEntry[];
 }
 
 export type SharedUploadApiFetcher = <T>(
@@ -281,57 +282,33 @@ export function isSharedUploadVideoDurationAllowed(duration: number): boolean {
 }
 
 /**
- * Builds preview entries and rejects videos over five minutes before they are
- * committed to React state. The original ordering behavior is preserved:
- * non-video entries first, followed by accepted videos.
+ * Builds preview entries without waiting for video metadata (EV-47). Videos
+ * come back flagged `validating`; the page checks their duration in the
+ * background with validateSharedUploadVideoDuration. Ordering is preserved:
+ * non-video entries first, followed by videos.
  */
 export async function prepareSharedUploadEntries(
   files: File[],
   signal?: AbortSignal,
 ): Promise<PreparedSharedUploadEntries> {
   throwIfSignalAborted(signal);
-  const entries = files.map(buildEntry);
-  try {
-    const videoEntries = entries.filter((entry) => entry.isVideo);
-    const nonVideoEntries = entries.filter((entry) => !entry.isVideo);
+  const entries = files.map(buildEntry).map((entry) =>
+    entry.isVideo ? { ...entry, validating: true } : entry,
+  );
+  return {
+    validEntries: [
+      ...entries.filter((entry) => !entry.isVideo),
+      ...entries.filter((entry) => entry.isVideo),
+    ],
+  };
+}
 
-    if (videoEntries.length === 0) {
-      throwIfSignalAborted(signal);
-      return { validEntries: nonVideoEntries, rejectedVideoEntries: [] };
-    }
-
-    const videosWithDuration = await Promise.all(
-      videoEntries.map(async (entry) => ({
-        entry,
-        duration: await getVideoDuration(entry.file, signal),
-      })),
-    );
-    throwIfSignalAborted(signal);
-    const rejectedVideoEntries = videosWithDuration
-      .filter(({ duration }) => !isSharedUploadVideoDurationAllowed(duration))
-      .map(({ entry }) => entry);
-    const validVideoEntries = videosWithDuration
-      .filter(({ duration }) => isSharedUploadVideoDurationAllowed(duration))
-      .map(({ entry }) => entry);
-
-    rejectedVideoEntries.forEach((entry) => {
-      if (entry.previewUrl && entry.previewUrl !== "heic") {
-        URL.revokeObjectURL(entry.previewUrl);
-      }
-    });
-
-    return {
-      validEntries: [...nonVideoEntries, ...validVideoEntries],
-      rejectedVideoEntries,
-    };
-  } catch (error) {
-    entries.forEach((entry) => {
-      if (entry.previewUrl && entry.previewUrl !== "heic") {
-        URL.revokeObjectURL(entry.previewUrl);
-      }
-    });
-    throw error;
-  }
+/** Reads a video's duration in seconds; 0 when unknown (error or 5 s timeout). */
+export function validateSharedUploadVideoDuration(
+  file: File,
+  signal?: AbortSignal,
+): Promise<number> {
+  return getVideoDuration(file, signal);
 }
 
 /** Best-effort HEIC/HEIF conversion for the on-screen preview only. */
