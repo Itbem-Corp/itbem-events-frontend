@@ -66,6 +66,56 @@ describe("momentUploadImage", () => {
     }
   });
 
+  describe("when the browser cannot encode WebP (toBlob falls back to PNG)", () => {
+    const stubCanvasWithoutWebp = () => {
+      vi.stubGlobal("document", {
+        createElement: () => ({
+          width: 0,
+          height: 0,
+          getContext: () => ({ drawImage: () => {} }),
+          toBlob: (resolve: (blob: Blob | null) => void, type: string) =>
+            resolve(
+              new Blob([new Uint8Array(10)], {
+                type: type === "image/webp" ? "image/png" : type,
+              }),
+            ),
+        }),
+      });
+      vi.stubGlobal(
+        "createImageBitmap",
+        vi.fn(async () => ({ width: 3000, height: 2000, close: () => {} })),
+      );
+    };
+
+    it("uploads an opaque HEIC as JPEG", async () => {
+      stubCanvasWithoutWebp();
+      try {
+        const file = new File([new Uint8Array(800 * 1024)], "IMG_0002.heic", {
+          type: "image/heic",
+        });
+        const result = await optimizeMomentUploadImage(file);
+
+        expect(result.type).toBe("image/jpeg");
+        expect(result.name).toBe("IMG_0002.jpg");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("keeps a possibly transparent PNG instead of blackening it as JPEG", async () => {
+      stubCanvasWithoutWebp();
+      try {
+        const file = new File([new Uint8Array(800 * 1024)], "logo.png", {
+          type: "image/png",
+        });
+
+        await expect(optimizeMomentUploadImage(file)).resolves.toBe(file);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+  });
+
   it("returns the original HEIC when the browser cannot decode it", async () => {
     const file = new File([new Uint8Array(800 * 1024)], "foto.heic", {
       type: "image/heic",

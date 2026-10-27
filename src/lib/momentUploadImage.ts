@@ -51,12 +51,27 @@ function optimizedFileName(name: string, type: string): string {
   return `${base}.${OUTPUT_EXTENSIONS[type] ?? "webp"}`;
 }
 
-// Prefers WebP; browsers that cannot encode it (toBlob falls back to PNG) get JPEG.
+// Formats that never carry transparency, so a JPEG fallback cannot blacken it.
+const OPAQUE_IMAGE_TYPES = new Set(["image/jpeg", "image/jpg", "image/heic", "image/heif"]);
+const OPAQUE_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "heic", "heif"]);
+
+function isOpaqueImage(file: Pick<File, "type" | "name">): boolean {
+  const type = file.type.trim().toLowerCase();
+  return type
+    ? OPAQUE_IMAGE_TYPES.has(type)
+    : OPAQUE_IMAGE_EXTENSIONS.has(uploadFileExtension(file));
+}
+
+// Prefers WebP; browsers that cannot encode it (toBlob falls back to PNG) get
+// JPEG, but only for opaque sources: JPEG has no alpha and a transparent PNG,
+// WebP or AVIF would come out with a black background. Those keep the original.
 async function encodeOptimized(
   canvas: HTMLCanvasElement,
   quality: number,
+  allowJpeg: boolean,
 ): Promise<Blob | null> {
-  for (const type of ["image/webp", "image/jpeg"]) {
+  const types = allowJpeg ? ["image/webp", "image/jpeg"] : ["image/webp"];
+  for (const type of types) {
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, type, quality),
     );
@@ -143,7 +158,7 @@ export async function optimizeMomentUploadImage(
     context.imageSmoothingQuality = "high";
     context.drawImage(source, 0, 0, canvas.width, canvas.height);
 
-    const blob = await encodeOptimized(canvas, quality);
+    const blob = await encodeOptimized(canvas, quality, isOpaqueImage(file));
     throwIfAborted(signal);
     // Keep the original unless the result is at least 2 % smaller.
     if (!blob || blob.size >= file.size * 0.98) {
