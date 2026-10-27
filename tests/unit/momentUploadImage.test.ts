@@ -90,8 +90,8 @@ describe("momentUploadImage", () => {
 
     it.each([
       ["equal size", ORIGINAL_BYTES],
-      ["only 1 % smaller", ORIGINAL_BYTES * 0.99],
-      ["exactly 2 % smaller", ORIGINAL_BYTES * 0.98],
+      ["only 1 % smaller", 990_000],
+      ["1 byte short of 2 % smaller", 980_001],
     ])("keeps the original when the result is %s", async (_label, bytes) => {
       stubEncoderProducing(bytes);
       try {
@@ -102,13 +102,16 @@ describe("momentUploadImage", () => {
       }
     });
 
-    it("uploads the optimized file once it saves more than 2 %", async () => {
-      stubEncoderProducing(ORIGINAL_BYTES * 0.97);
+    it.each([
+      ["exactly 2 % smaller", 980_000],
+      ["3 % smaller", 970_000],
+    ])("uploads the optimized file when it is %s", async (_label, bytes) => {
+      stubEncoderProducing(bytes);
       try {
         const file = heic();
         const result = await optimizeMomentUploadImage(file);
         expect(result).not.toBe(file);
-        expect(result.size).toBe(ORIGINAL_BYTES * 0.97);
+        expect(result.size).toBe(bytes);
         expect(result.type).toBe("image/webp");
       } finally {
         vi.unstubAllGlobals();
@@ -206,11 +209,122 @@ describe("momentUploadImage", () => {
   });
 
   it("returns the original HEIC when the browser cannot decode it", async () => {
-    const file = new File([new Uint8Array(800 * 1024)], "foto.heic", {
-      type: "image/heic",
+    const decode = vi.fn(async () => {
+      throw new DOMException("The source image could not be decoded.", "InvalidStateError");
+    });
+    class UndecodableImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_value: string) {
+        queueMicrotask(() => this.onerror?.());
+      }
+    }
+    vi.stubGlobal("createImageBitmap", decode);
+    vi.stubGlobal("Image", UndecodableImage);
+    const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const create = vi
+      .spyOn(URL, "createObjectURL")
+      .mockImplementation(() => "blob:heic");
+
+    try {
+      const file = new File([new Uint8Array(800 * 1024)], "foto.heic", {
+        type: "image/heic",
+      });
+
+      await expect(optimizeMomentUploadImage(file)).resolves.toBe(file);
+      expect(decode).toHaveBeenCalledOnce();
+      expect(revoke).toHaveBeenCalledWith("blob:heic");
+    } finally {
+      create.mockRestore();
+      revoke.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("optimizes a .heic reported as application/octet-stream", () => {
+    expect(
+      shouldOptimizeMomentImage({
+        type: "application/octet-stream",
+        name: "IMG_0003.HEIC",
+      }),
+    ).toBe(true);
+    expect(
+      shouldOptimizeMomentImage({
+        type: "application/octet-stream",
+        name: "archivo.bin",
+      }),
+    ).toBe(false);
+  });
+
+  describe("animated WebP/AVIF", () => {
+    const padded = (header: number[]) => {
+      const bytes = new Uint8Array(800 * 1024);
+      bytes.set(header);
+      return bytes;
+    };
+    const ascii = (text: string) => [...text].map((c) => c.charCodeAt(0));
+    const webpHeader = (flags: number) => [
+      ...ascii("RIFF"),
+      0, 0, 0, 0,
+      ...ascii("WEBP"),
+      ...ascii("VP8X"),
+      10, 0, 0, 0,
+      flags,
+    ];
+    const avifHeader = (brands: string[]) => [
+      0, 0, 0, 16 + brands.length * 4,
+      ...ascii("ftyp"),
+      ...ascii("avif"),
+      0, 0, 0, 0,
+      ...brands.flatMap(ascii),
+    ];
+    const stubDecoder = () => {
+      const decode = vi.fn(async () => ({
+        width: 2000,
+        height: 1500,
+        close: () => {},
+      }));
+      vi.stubGlobal("createImageBitmap", decode);
+      vi.stubGlobal("document", {
+        createElement: () => ({
+          width: 0,
+          height: 0,
+          getContext: () => ({ drawImage: () => {} }),
+          toBlob: (resolve: (blob: Blob | null) => void, type: string) =>
+            resolve(new Blob([new Uint8Array(10)], { type })),
+        }),
+      });
+      return decode;
+    };
+
+    it.each([
+      ["animated WebP", "anim.webp", "image/webp", webpHeader(0x02)],
+      ["animated AVIF", "anim.avif", "image/avif", avifHeader(["mif1", "avis"])],
+    ])("uploads an %s untouched", async (_label, name, type, header) => {
+      const decode = stubDecoder();
+      try {
+        const file = new File([padded(header)], name, { type });
+        await expect(optimizeMomentUploadImage(file)).resolves.toBe(file);
+        expect(decode).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
 
-    await expect(optimizeMomentUploadImage(file)).resolves.toBe(file);
+    it.each([
+      ["still WebP", "foto.webp", "image/webp", webpHeader(0x10)],
+      ["still AVIF", "foto.avif", "image/avif", avifHeader(["mif1", "miaf"])],
+    ])("still optimizes a %s", async (_label, name, type, header) => {
+      stubDecoder();
+      try {
+        const file = new File([padded(header)], name, { type });
+        const result = await optimizeMomentUploadImage(file);
+        expect(result).not.toBe(file);
+        expect(result.type).toBe("image/webp");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
   });
 
   it("uses the extension when a mobile browser omits the MIME type", () => {
