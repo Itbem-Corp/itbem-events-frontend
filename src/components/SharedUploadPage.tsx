@@ -774,7 +774,11 @@ export default function SharedUploadPage({
                       ? {
                           // The converted JPEG is preview-only: it has no
                           // EXIF, so uploading it loses the photo's rotation.
-                          // The original HEIC goes up and the server rotates it.
+                          // The upload starts from the original HEIC:
+                          // optimizeMomentUploadImage re-decodes it with EXIF
+                          // orientation applied and sends WebP/JPEG, or the
+                          // original HEIC (rotated by the server) if the
+                          // browser cannot decode it or nothing is saved.
                           ...candidate,
                           previewUrl: newPreview,
                           isHeic: false,

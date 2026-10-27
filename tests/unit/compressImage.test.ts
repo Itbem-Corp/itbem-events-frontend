@@ -19,27 +19,36 @@ describe("moment upload content type helpers", () => {
     expect(shouldSkipCompression("video/x-matroska")).toBe(true);
   });
 
-  it("skips image formats that are kept as-is", () => {
+  it("keeps animated GIF as-is", () => {
     expect(shouldSkipCompression("image/gif")).toBe(true);
-    expect(shouldSkipCompression("image/heic")).toBe(true);
-    expect(shouldSkipCompression("image/heif")).toBe(true);
-    expect(shouldSkipCompression("image/webp")).toBe(true);
-    expect(shouldSkipCompression("image/avif")).toBe(true);
   });
 
-  it("marks common raster images as compressible", () => {
+  it("marks raster and iPhone images as compressible", () => {
     expect(shouldSkipCompression("image/jpeg")).toBe(false);
     expect(shouldSkipCompression("image/jpg")).toBe(false);
     expect(shouldSkipCompression("image/png")).toBe(false);
+    expect(shouldSkipCompression("image/heic")).toBe(false);
+    expect(shouldSkipCompression("image/heif")).toBe(false);
+    expect(shouldSkipCompression("image/webp")).toBe(false);
+    expect(shouldSkipCompression("image/avif")).toBe(false);
   });
 
-  it("predicts JPEG for compressible original images", () => {
+  it("predicts WebP for compressible original images", () => {
     expect(
       predictedMomentUploadContentType({
         name: "foto.png",
         type: "image/png",
       }),
-    ).toBe("image/jpeg");
+    ).toBe("image/webp");
+    expect(
+      predictedMomentUploadContentType({
+        name: "foto.heic",
+        type: "image/heic",
+      }),
+    ).toBe("image/webp");
+    expect(
+      predictedMomentUploadContentType({ name: "anim.gif", type: "image/gif" }),
+    ).toBe("image/gif");
   });
 
   it("resolves the content type from the actual file that will be uploaded", () => {

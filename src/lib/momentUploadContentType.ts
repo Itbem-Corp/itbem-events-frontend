@@ -55,17 +55,13 @@ export function resolveMomentUploadContentType(file: MomentUploadFileLike): stri
 
 export function shouldCompressMomentUploadImage(contentType: string): boolean {
   const ct = cleanContentType(contentType);
-  return (
-    ct.startsWith("image/") &&
-    ct !== "image/gif" &&
-    ct !== "image/heic" &&
-    ct !== "image/heif" &&
-    ct !== "image/webp" &&
-    ct !== "image/avif"
-  );
+  // Mirrors momentUploadImage.ts: only GIF is kept as-is.
+  return ct.startsWith("image/") && ct !== "image/gif";
 }
 
+// Best guess before optimizing: WebP output (JPEG only where the browser cannot
+// encode WebP). The real type always comes from the optimized File.
 export function predictedMomentUploadContentType(file: MomentUploadFileLike): string {
   const contentType = resolveMomentUploadContentType(file);
-  return shouldCompressMomentUploadImage(contentType) ? "image/jpeg" : contentType;
+  return shouldCompressMomentUploadImage(contentType) ? "image/webp" : contentType;
 }

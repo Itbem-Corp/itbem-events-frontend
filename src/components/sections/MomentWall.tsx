@@ -1012,7 +1012,7 @@ export default function MomentWall({
 
     try {
       const fileToUpload = await optimizeMomentUploadImage(file, {
-        maxDimension: 2560,
+        maxDimension: 2048,
         quality: 0.9,
         signal: uploadController.signal,
       });
