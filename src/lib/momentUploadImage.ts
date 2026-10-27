@@ -6,15 +6,19 @@ export interface MomentImageOptimizationOptions {
   signal?: AbortSignal;
 }
 
-const PASSTHROUGH_IMAGE_TYPES = new Set([
-  "image/gif",
-  "image/heic",
-  "image/heif",
-  "image/webp",
-  "image/avif",
-]);
+// GIF stays untouched (canvas would drop the animation). HEIC/HEIF/WebP/AVIF are
+// optimized when the browser can decode them; otherwise the original is kept.
+const PASSTHROUGH_IMAGE_TYPES = new Set(["image/gif"]);
 
-const OPTIMIZABLE_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png"]);
+const OPTIMIZABLE_IMAGE_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "heic",
+  "heif",
+  "webp",
+  "avif",
+]);
 const MIN_OPTIMIZATION_BYTES = 700 * 1024;
 
 export function shouldOptimizeMomentImage(
@@ -37,9 +41,28 @@ function throwIfAborted(signal?: AbortSignal): void {
   }
 }
 
-function optimizedFileName(name: string): string {
+const OUTPUT_EXTENSIONS: Record<string, string> = {
+  "image/webp": "webp",
+  "image/jpeg": "jpg",
+};
+
+function optimizedFileName(name: string, type: string): string {
   const base = name.replace(/\.[^.]+$/, "") || "momento";
-  return `${base}.webp`;
+  return `${base}.${OUTPUT_EXTENSIONS[type] ?? "webp"}`;
+}
+
+// Prefers WebP; browsers that cannot encode it (toBlob falls back to PNG) get JPEG.
+async function encodeOptimized(
+  canvas: HTMLCanvasElement,
+  quality: number,
+): Promise<Blob | null> {
+  for (const type of ["image/webp", "image/jpeg"]) {
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, type, quality),
+    );
+    if (blob && blob.type === type) return blob;
+  }
+  return null;
 }
 
 async function loadFallbackImage(file: File): Promise<{
@@ -120,16 +143,15 @@ export async function optimizeMomentUploadImage(
     context.imageSmoothingQuality = "high";
     context.drawImage(source, 0, 0, canvas.width, canvas.height);
 
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/webp", quality),
-    );
+    const blob = await encodeOptimized(canvas, quality);
     throwIfAborted(signal);
-    if (!blob || blob.type !== "image/webp" || blob.size >= file.size * 0.98) {
+    // Keep the original unless the result is at least 2 % smaller.
+    if (!blob || blob.size >= file.size * 0.98) {
       return file;
     }
 
-    return new File([blob], optimizedFileName(file.name), {
-      type: "image/webp",
+    return new File([blob], optimizedFileName(file.name, blob.type), {
+      type: blob.type,
       lastModified: file.lastModified,
     });
   } catch (error) {

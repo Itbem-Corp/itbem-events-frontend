@@ -5,18 +5,40 @@ import {
 } from "../../src/lib/momentUploadImage";
 
 describe("momentUploadImage", () => {
-  it.each(["image/jpeg", "image/png"])("optimizes %s uploads", (type) => {
+  it.each([
+    "image/jpeg",
+    "image/png",
+    "image/heic",
+    "image/heif",
+    "image/webp",
+    "image/avif",
+  ])("optimizes %s uploads", (type) => {
     expect(shouldOptimizeMomentImage({ type, name: "foto.jpg" })).toBe(true);
   });
 
-  it.each(["image/webp", "image/avif", "image/gif", "image/heic", "video/mp4"])(
-    "preserves already efficient or special media %s",
+  it.each(["image/gif", "video/mp4"])(
+    "preserves special media %s",
     (type) => {
       expect(shouldOptimizeMomentImage({ type, name: "archivo.bin" })).toBe(
         false,
       );
     },
   );
+
+  it.each(["foto.HEIC", "foto.heif"])(
+    "optimizes %s when the browser omits the MIME type",
+    (name) => {
+      expect(shouldOptimizeMomentImage({ type: "", name })).toBe(true);
+    },
+  );
+
+  it("returns the original HEIC when the browser cannot decode it", async () => {
+    const file = new File([new Uint8Array(800 * 1024)], "foto.heic", {
+      type: "image/heic",
+    });
+
+    await expect(optimizeMomentUploadImage(file)).resolves.toBe(file);
+  });
 
   it("uses the extension when a mobile browser omits the MIME type", () => {
     expect(shouldOptimizeMomentImage({ type: "", name: "foto.JPEG" })).toBe(
