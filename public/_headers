@@ -15,3 +15,7 @@
 
 /sw-cache-policy.js
   Cache-Control: no-cache
+
+# The commit this build was made from (scripts/write-version.mjs): never cached, so a deploy is seen at once.
+/version.json
+  Cache-Control: no-store
