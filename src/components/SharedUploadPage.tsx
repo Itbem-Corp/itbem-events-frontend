@@ -43,6 +43,7 @@ import {
 } from "../lib/sharedUploadAccess";
 import { buildEventMomentsUrl } from "../lib/apiUrls";
 import { fetchApiData, isApiFetchError } from "../lib/apiFetch";
+import { isUploadQuotaExhaustedError } from "../lib/uploadRetry";
 import { withUploadDeviceHeader } from "../lib/uploadDeviceId";
 import {
   mergeUploadPublicationHint,
@@ -379,7 +380,9 @@ export default function SharedUploadPage({
         return data;
       } catch (error) {
         if (isApiFetchError(error)) {
-          if (error.status === 429) quotaExhaustedRef.current = true;
+          // The per-IP rate-limit 429 is retried by the engine (EV-48); only
+          // the quota 429 means the guest reached the limit.
+          if (isUploadQuotaExhaustedError(error)) quotaExhaustedRef.current = true;
           applyUploadQuota(error.payload);
         }
         throw error;

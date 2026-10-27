@@ -224,11 +224,12 @@ test.describe('Shared upload page', () => {
 
     await page.goto(PAGE_URL);
 
-    await expect(page.getByRole('heading', { name: /No pudimos abrir este enlace de subida/ })).toBeVisible({ timeout: 15_000 });
+    // A 403 probe renders the "forbidden" state of UploadStatusErrorState.
+    await expect(page.getByRole('heading', { name: /Este enlace no permite compartir archivos/ })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/Seleccionar/)).not.toBeVisible();
   });
 
-  test('uploads one image through batch presign, S3 PUT, and confirm', async ({ page }) => {
+  test('uploads one image through per-file presign, S3 PUT, and confirm', async ({ page }) => {
     let batchFileCount = 0;
     let putCalled = false;
     let confirmPayload: Record<string, unknown> | null = null;
@@ -244,8 +245,10 @@ test.describe('Shared upload page', () => {
         putCalled = true;
       },
     });
+    // Uploads left after the confirm: with 0 the success screen hides
+    // "Subir más fotos o videos".
     await mockSharedMomentConfirm(page, MOMENT_EVENT_IDENTIFIER, {
-      uploadsRemaining: 0,
+      uploadsRemaining: 4,
       onConfirm: (payload) => {
         confirmPayload = payload as Record<string, unknown>;
       },
@@ -270,7 +273,7 @@ test.describe('Shared upload page', () => {
     expect(confirmPayload?.['s3_key']).toBe(`moments/${MOMENT_EVENT_IDENTIFIER}/shared/file-0.jpg`);
 
     await page.getByRole('button', { name: /Subir más fotos o videos/ }).click();
-    await expect(page.getByRole('heading', { name: /Gracias por compartir tus momentos/ })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /Comparte tus momentos/ })).toBeVisible({ timeout: 10_000 });
   });
 
   test('keeps original image MIME when client compression falls back', async ({ page }) => {
@@ -378,6 +381,11 @@ test.describe('Shared upload page', () => {
     });
     await page.getByRole('button', { name: /Compartir momento/ }).click();
 
-    await expect(page.getByText(/El archivo no se pudo registrar/)).toBeVisible({ timeout: 15_000 });
+    // The thumbnail repeats the message in an sr-only "Error: …" span; match the
+    // page's error banner (role="alert") only.
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'El archivo no se pudo registrar' }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Error: El archivo no se pudo registrar')).toBeAttached();
   });
 });

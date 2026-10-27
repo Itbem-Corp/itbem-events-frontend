@@ -534,18 +534,19 @@ export async function mockSharedBatchUploadUrls(
   identifier = MOMENT_EVENT_IDENTIFIER,
   options: SharedBatchUploadOptions = {},
 ): Promise<void> {
+  // The engine presigns per file (EV-48); the batch endpoint stays mocked for
+  // callers that still use it. Both report through onBatch.
+  for (const endpoint of ["upload-url", "batch-upload-urls"]) {
+    const single = endpoint === "upload-url";
   await page.route(
-    API_BASE +
-      "/api/events/" +
-      identifier +
-      "/moments/shared/batch-upload-urls",
+    API_BASE + "/api/events/" + identifier + "/moments/shared/" + endpoint,
     async (route) => {
       if (route.request().method() !== "POST") {
         await route.continue();
         return;
       }
       const body = route.request().postDataJSON() as { files?: unknown[] };
-      const files = body.files ?? [];
+      const files = single ? [body] : (body.files ?? []);
       options.onBatch?.(files);
 
       if (options.status && options.status >= 400) {
@@ -569,6 +570,16 @@ export async function mockSharedBatchUploadUrls(
         return;
       }
 
+      const urls = files.map((file, index) => {
+        const contract = sharedUploadFileContract(file, index);
+        const objectKey = `moments/${identifier}/shared/file-${index}${contract.extension}`;
+        return {
+          upload_url: `https://itbem-events-bucket-prod.s3.us-east-2.amazonaws.com/shared/${identifier}/file-${index}${contract.extension}?X-Amz-Signature=fake-${index}`,
+          object_key: objectKey,
+          s3_key: objectKey,
+          content_type: contract.contentType,
+        };
+      });
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -579,21 +590,13 @@ export async function mockSharedBatchUploadUrls(
             uploads_limit: 30,
             uploads_used: 30 - (options.uploadsRemaining ?? 30),
             uploads_remaining: options.uploadsRemaining ?? 30,
-            urls: files.map((file, index) => {
-              const contract = sharedUploadFileContract(file, index);
-              const objectKey = `moments/${identifier}/shared/file-${index}${contract.extension}`;
-              return {
-                upload_url: `https://itbem-events-bucket-prod.s3.us-east-2.amazonaws.com/shared/${identifier}/file-${index}${contract.extension}?X-Amz-Signature=fake-${index}`,
-                object_key: objectKey,
-                s3_key: objectKey,
-                content_type: contract.contentType,
-              };
-            }),
+            ...(single ? urls[0] : { urls }),
           },
         }),
       });
     },
   );
+  }
 
   await page.route(
     `https://itbem-events-bucket-prod.s3.us-east-2.amazonaws.com/shared/${identifier}/**`,
