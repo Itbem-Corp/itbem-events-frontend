@@ -424,6 +424,29 @@ function getAdaptivePoolSize(): number {
 }
 
 /**
+ * Parts in flight per multipart upload. Slower links get fewer so each part
+ * finishes (and reports progress) instead of all four stalling together; with
+ * no `navigator.connection` data (iOS Safari) it stays at PART_CONCURRENCY.
+ * The part size stays at the backend's multipartPartSize (8 MB).
+ */
+export function getPartConcurrency(
+  connection?: { effectiveType?: string } | null,
+): number {
+  switch (connection?.effectiveType) {
+    case "slow-2g":
+    case "2g":
+      return 1;
+    case "3g":
+      return 2;
+    default:
+      return PART_CONCURRENCY;
+  }
+}
+
+/** How long a part may go without a progress event before we explain it. */
+export const PROGRESS_STALL_MS = 10_000;
+
+/**
  * Lets at most `max` operations run at once; waiters leave the line as soon as
  * their signal aborts.
  */
@@ -732,22 +755,51 @@ export async function uploadSharedFiles({
                 const request = new XMLHttpRequest();
                 let settled = false;
                 let releaseRequest = () => {};
+                let stallTimer: ReturnType<typeof setTimeout> | undefined;
+                let stalled = false;
+                const setSubtitle = (subtitle: string | undefined) =>
+                  updateFiles((previous) =>
+                    previous.map((candidate) =>
+                      candidate.id === entry.id
+                        ? { ...candidate, subtitle }
+                        : candidate,
+                    ),
+                  );
+                const armStallTimer = () => {
+                  clearTimeout(stallTimer);
+                  stallTimer = setTimeout(() => {
+                    stalled = true;
+                    setSubtitle(
+                      "Conexión lenta, seguimos subiendo. No cierres esta pantalla.",
+                    );
+                  }, PROGRESS_STALL_MS);
+                };
                 const resolveRequest = (value: string) => {
                   if (settled) return;
                   settled = true;
+                  clearTimeout(stallTimer);
                   releaseRequest();
                   resolve(value);
                 };
                 const rejectRequest = (error: unknown) => {
                   if (settled) return;
                   settled = true;
+                  clearTimeout(stallTimer);
                   releaseRequest();
                   reject(error);
                 };
                 request.open("PUT", urlEntry.url);
                 request.timeout = 10 * 60 * 1000;
+                armStallTimer();
                 request.upload.onprogress = (event) => {
                   if (!event.lengthComputable) return;
+                  armStallTimer();
+                  if (stalled) {
+                    stalled = false;
+                    setSubtitle(
+                      `Subiendo parte ${partNumber}/${parts.length}...`,
+                    );
+                  }
                   bytesUploaded[partNumber - 1] = event.loaded;
                   publishProgress(
                     entry.id,
@@ -812,7 +864,10 @@ export async function uploadSharedFiles({
       timer.start("put");
       await runPool(
         parts.map((part) => () => uploadPart(part)),
-        PART_CONCURRENCY,
+        getPartConcurrency(
+          (navigator as unknown as { connection?: { effectiveType?: string } })
+            .connection,
+        ),
       );
       timer.end("put");
       const completedParts = normalizeCompletedUploadParts(etags);
