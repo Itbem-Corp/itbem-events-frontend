@@ -3,6 +3,7 @@ import {
   calcParts,
   calcProgress,
   createStallWatchdog,
+  createUploadSubtitle,
   getPartConcurrency,
   PROGRESS_STALL_MS,
 } from "../../../src/components/shared-upload/SharedUploadEngine";
@@ -107,6 +108,19 @@ describe("createStallWatchdog", () => {
     watchdog.stop();
   });
 
+  it("reports isStalled until the next touch, and fires only once per stall", () => {
+    const onStall = vi.fn();
+    const watchdog = createStallWatchdog(onStall, vi.fn());
+    watchdog.touch();
+    expect(watchdog.isStalled()).toBe(false);
+    vi.advanceTimersByTime(PROGRESS_STALL_MS * 3);
+    expect(watchdog.isStalled()).toBe(true);
+    expect(onStall).toHaveBeenCalledTimes(1);
+    watchdog.touch();
+    expect(watchdog.isStalled()).toBe(false);
+    watchdog.stop();
+  });
+
   it("never fires after stop", () => {
     const onStall = vi.fn();
     const watchdog = createStallWatchdog(onStall, vi.fn());
@@ -114,6 +128,57 @@ describe("createStallWatchdog", () => {
     watchdog.stop();
     vi.advanceTimersByTime(PROGRESS_STALL_MS * 3);
     expect(onStall).not.toHaveBeenCalled();
+  });
+});
+
+describe("createUploadSubtitle", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const setup = () => {
+    const shown: Array<string | undefined> = [];
+    const subtitle = createUploadSubtitle((text) => shown.push(text), "lento");
+    return { shown, subtitle, last: () => shown.at(-1) };
+  };
+
+  it("explains a presign that does not answer for 10 s", () => {
+    const { subtitle, last } = setup();
+    subtitle.moved(); // armed before the presign request
+    vi.advanceTimersByTime(PROGRESS_STALL_MS);
+    expect(last()).toBe("lento");
+    subtitle.stop();
+  });
+
+  it("keeps the stall notice when a queued part starts without bytes moving", () => {
+    const { subtitle, last } = setup();
+    subtitle.moved();
+    subtitle.step("Subiendo parte 1/3...");
+    vi.advanceTimersByTime(PROGRESS_STALL_MS);
+    expect(last()).toBe("lento");
+    subtitle.step("Subiendo parte 2/3...");
+    expect(last()).toBe("lento");
+    subtitle.moved();
+    expect(last()).toBe("Subiendo parte 2/3...");
+    subtitle.stop();
+  });
+
+  it("shows a retry over the notice, and a new stall message replaces the shown one", () => {
+    const { subtitle, last } = setup();
+    subtitle.moved();
+    vi.advanceTimersByTime(PROGRESS_STALL_MS);
+    subtitle.explain("Reintentando parte 1/3 (intento 2 de 3)...");
+    expect(last()).toBe("Reintentando parte 1/3 (intento 2 de 3)...");
+    subtitle.stallMessage("finalizando lento");
+    expect(last()).toBe("finalizando lento");
+    subtitle.stop();
+  });
+
+  it("does not show the new stall message while not stalled", () => {
+    const { subtitle, shown } = setup();
+    subtitle.moved();
+    subtitle.stallMessage("otro");
+    expect(shown).not.toContain("otro");
+    subtitle.stop();
   });
 });
 

@@ -443,7 +443,10 @@ export function getPartConcurrency(
   }
 }
 
-/** How long a part may go without a progress event before we explain it. */
+/**
+ * How long a multipart file's shown percentage may stay the same (presign,
+ * part queue, part PUTs, retry backoff, confirm) before the row explains it.
+ */
 export const PROGRESS_STALL_MS = 10_000;
 
 /**
@@ -567,9 +570,49 @@ export function createStallWatchdog(
       }
       arm();
     },
+    isStalled() {
+      return stalled;
+    },
     stop() {
       clearTimeout(timer);
     },
+  };
+}
+
+/**
+ * The row subtitle of a multipart file. `step` is what the file is doing;
+ * after PROGRESS_STALL_MS without `moved` the stall notice replaces it, and a
+ * new step does not hide that notice: only movement of the percentage
+ * (`moved`) or an explicit reason (`explain`, e.g. a retry) does.
+ */
+export function createUploadSubtitle(
+  show: (text: string | undefined) => void,
+  initialStallMessage: string,
+  stallMs = PROGRESS_STALL_MS,
+) {
+  let step: string | undefined;
+  let stallMessage = initialStallMessage;
+  const watchdog = createStallWatchdog(
+    () => show(stallMessage),
+    () => show(step),
+    stallMs,
+  );
+  return {
+    step(text: string | undefined) {
+      step = text;
+      if (!watchdog.isStalled()) show(text);
+    },
+    explain(text: string) {
+      step = text;
+      show(text);
+    },
+    stallMessage(text: string) {
+      stallMessage = text;
+      if (watchdog.isStalled()) show(text);
+    },
+    moved: () => watchdog.touch(),
+    isStalled: () => watchdog.isStalled(),
+    stop: () => watchdog.stop(),
   };
 }
 
@@ -697,8 +740,23 @@ export async function uploadSharedFiles({
     const timer = uploadTimingFor(entry.id);
     timer.setMultipart();
 
+    // Armed before presign so its rate-limit waits are covered too.
+    const subtitle = createUploadSubtitle(
+      (text) =>
+        updateFiles((previous) =>
+          previous.map((candidate) =>
+            candidate.id === entry.id
+              ? { ...candidate, subtitle: text }
+              : candidate,
+          ),
+        ),
+      "Preparando la subida; la conexión está lenta. No cierres esta pantalla.",
+    );
+    let shownProgress = 0;
+
     let startData: SharedMultipartUploadStart;
     timer.start("presign");
+    subtitle.moved();
     try {
       startData = await retryWhenRateLimited(
         () =>
@@ -725,12 +783,22 @@ export async function uploadSharedFiles({
         signal,
       );
     } catch (error) {
+      subtitle.stop();
       if (uploadsDisabledError(error)) throw asUploadsDisabledError();
       throw error;
     }
 
     timer.end("presign");
-    const multipart = requireSharedMultipartUploadStart(startData, contentType);
+    subtitle.stallMessage(
+      "Conexión lenta, seguimos subiendo. No cierres esta pantalla.",
+    );
+    let multipart: ReturnType<typeof requireSharedMultipartUploadStart>;
+    try {
+      multipart = requireSharedMultipartUploadStart(startData, contentType);
+    } catch (error) {
+      subtitle.stop();
+      throw error;
+    }
     const uploadId = multipart.uploadId;
     const objectKey = multipart.objectKey;
     const uploadContentType = multipart.contentType;
@@ -754,31 +822,7 @@ export async function uploadSharedFiles({
         }),
       ).catch(() => undefined);
 
-    // What the row says right now, and what it says when nothing moved for
-    // PROGRESS_STALL_MS; the watchdog swaps between the two.
-    let subtitle: string | undefined;
-    let stallMessage =
-      "Conexión lenta, seguimos subiendo. No cierres esta pantalla.";
-    const showSubtitle = (text: string | undefined) =>
-      updateFiles((previous) =>
-        previous.map((candidate) =>
-          candidate.id === entry.id
-            ? { ...candidate, subtitle: text }
-            : candidate,
-        ),
-      );
-    const setSubtitle = (text: string | undefined) => {
-      subtitle = text;
-      showSubtitle(text);
-    };
-    const watchdog = createStallWatchdog(
-      () => showSubtitle(stallMessage),
-      () => showSubtitle(subtitle),
-    );
-    let shownProgress = 0;
-
     try {
-      watchdog.touch();
       const parts = calcParts(file.size, PART_SIZE);
       const bytesUploaded = new Array<number>(parts.length).fill(0);
       const etags = new Array<{ part_number: number; etag: string }>(
@@ -801,7 +845,7 @@ export async function uploadSharedFiles({
           throw new Error(`No se encontró la URL de la parte ${partNumber}.`);
         }
         const blob = file.slice(start, end);
-        setSubtitle(`Subiendo parte ${partNumber}/${parts.length}...`);
+        subtitle.step(`Subiendo parte ${partNumber}/${parts.length}...`);
         bytesUploaded[partNumber - 1] = 0;
         const etag = await withRetry(
           () =>
@@ -837,7 +881,7 @@ export async function uploadSharedFiles({
                   );
                   if (next === shownProgress) return;
                   shownProgress = next;
-                  watchdog.touch();
+                  subtitle.moved();
                   publishProgress(entry.id, next);
                 };
                 request.onload = () => {
@@ -891,8 +935,9 @@ export async function uploadSharedFiles({
           1000,
           {
             onRetry: (nextAttempt, maxAttempts) => {
-              watchdog.touch();
-              setSubtitle(
+              // A retry explains the wait by itself, so it shows even over
+              // the stall notice; it does not count as movement.
+              subtitle.explain(
                 `Reintentando parte ${partNumber}/${parts.length} (intento ${nextAttempt} de ${maxAttempts})...`,
               );
             },
@@ -929,10 +974,15 @@ export async function uploadSharedFiles({
             : candidate,
         ),
       );
-      stallMessage =
-        "Seguimos finalizando la subida. No cierres esta pantalla.";
-      setSubtitle("Finalizando la subida...");
-      watchdog.touch();
+      subtitle.stallMessage(
+        "Seguimos finalizando la subida. No cierres esta pantalla.",
+      );
+      subtitle.step("Finalizando la subida...");
+      if (shownProgress < 90) {
+        // The bar just jumped to 90: that is movement.
+        shownProgress = 90;
+        subtitle.moved();
+      }
       const completeUrl = buildSharedMultipartCompleteUrl(
         eventsUrl,
         identifier,
@@ -967,7 +1017,7 @@ export async function uploadSharedFiles({
         signal,
       );
       timer.end("confirm");
-      watchdog.stop();
+      subtitle.stop();
       finishUploadTiming(entry.id, "done");
       onPublicationResponse(completeResponse);
       updateFiles((previous) =>
@@ -983,7 +1033,7 @@ export async function uploadSharedFiles({
         ),
       );
     } catch (error) {
-      watchdog.stop();
+      subtitle.stop();
       progressBatcher.delete(entry.id);
       if (!(error as { silent?: boolean } | null)?.silent) {
         finishUploadTiming(entry.id, "error");

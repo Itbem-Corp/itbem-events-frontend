@@ -307,6 +307,10 @@ describe("optimize + upload pipeline (EV-48)", () => {
           reject(new DOMException("aborted", "AbortError")),
         );
       });
+    // Load the engine first: after vi.resetModules the import inside run()
+    // can take longer than the 20 ms below, and the abort would then land
+    // before any optimization started.
+    await import(ENGINE_MODULE);
     const controller = new AbortController();
     const pending = run(["a", "b", "c", "d"], controller.signal);
     await sleep(20);
