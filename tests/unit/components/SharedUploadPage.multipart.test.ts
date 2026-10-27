@@ -1,8 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   calcParts,
   calcProgress,
+  createStallWatchdog,
   getPartConcurrency,
+  PROGRESS_STALL_MS,
 } from "../../../src/components/shared-upload/SharedUploadEngine";
 
 describe("calcParts", () => {
@@ -52,6 +54,66 @@ describe("calcProgress", () => {
     const a = calcProgress([1024 * 1024, 0], total);
     const b = calcProgress([4 * 1024 * 1024, 0], total);
     expect(b).toBeGreaterThan(a);
+  });
+});
+
+describe("calcProgress during a part retry", () => {
+  it("holds the shown value when a retried part restarts at 0 bytes", () => {
+    const part = 8 * 1024 * 1024;
+    const total = 3 * part;
+    const bytes = [part, part / 2, 0];
+    const shown = calcProgress(bytes, total); // 45
+    expect(shown).toBe(45);
+    // Part 2 fails and withRetry restarts it: its bytes go back to 0.
+    bytes[1] = 0;
+    expect(calcProgress(bytes, total, shown)).toBe(shown);
+    // The retry catches up past the old value and the bar moves again.
+    bytes[1] = part;
+    expect(calcProgress(bytes, total, shown)).toBe(60);
+  });
+
+  it("never passes 90 even with a floor above it", () => {
+    expect(calcProgress([1], 10, 95)).toBe(90);
+    expect(calcProgress([], 0, 40)).toBe(40);
+  });
+});
+
+describe("createStallWatchdog", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("reports a stall after PROGRESS_STALL_MS without a touch, and resumes on the next touch", () => {
+    const onStall = vi.fn();
+    const onResume = vi.fn();
+    const watchdog = createStallWatchdog(onStall, onResume);
+    watchdog.touch();
+    vi.advanceTimersByTime(PROGRESS_STALL_MS - 1);
+    expect(onStall).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onStall).toHaveBeenCalledTimes(1);
+    watchdog.touch();
+    expect(onResume).toHaveBeenCalledTimes(1);
+    watchdog.stop();
+  });
+
+  it("stays quiet while touched more often than the limit", () => {
+    const onStall = vi.fn();
+    const watchdog = createStallWatchdog(onStall, vi.fn());
+    for (let i = 0; i < 5; i += 1) {
+      watchdog.touch();
+      vi.advanceTimersByTime(PROGRESS_STALL_MS - 1000);
+    }
+    expect(onStall).not.toHaveBeenCalled();
+    watchdog.stop();
+  });
+
+  it("never fires after stop", () => {
+    const onStall = vi.fn();
+    const watchdog = createStallWatchdog(onStall, vi.fn());
+    watchdog.touch();
+    watchdog.stop();
+    vi.advanceTimersByTime(PROGRESS_STALL_MS * 3);
+    expect(onStall).not.toHaveBeenCalled();
   });
 });
 
