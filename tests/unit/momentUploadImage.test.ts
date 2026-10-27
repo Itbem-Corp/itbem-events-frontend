@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   optimizeMomentUploadImage,
   shouldOptimizeMomentImage,
@@ -31,6 +31,40 @@ describe("momentUploadImage", () => {
       expect(shouldOptimizeMomentImage({ type: "", name })).toBe(true);
     },
   );
+
+  it("resizes to at most 2048 px by default and keeps the encoded type", async () => {
+    const canvases: { width: number; height: number }[] = [];
+    vi.stubGlobal("document", {
+      createElement: () => {
+        const canvas = {
+          width: 0,
+          height: 0,
+          getContext: () => ({ drawImage: () => {} }),
+          toBlob: (resolve: (blob: Blob | null) => void, type: string) =>
+            resolve(new Blob([new Uint8Array(10)], { type })),
+        };
+        canvases.push(canvas);
+        return canvas;
+      },
+    });
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({ width: 4032, height: 3024, close: () => {} })),
+    );
+
+    try {
+      const file = new File([new Uint8Array(800 * 1024)], "IMG_0001.HEIC", {
+        type: "image/heic",
+      });
+      const result = await optimizeMomentUploadImage(file);
+
+      expect(canvases[0]).toMatchObject({ width: 2048, height: 1536 });
+      expect(result.type).toBe("image/webp");
+      expect(result.name).toBe("IMG_0001.webp");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 
   it("returns the original HEIC when the browser cannot decode it", async () => {
     const file = new File([new Uint8Array(800 * 1024)], "foto.heic", {

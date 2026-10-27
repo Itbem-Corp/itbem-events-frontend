@@ -92,7 +92,7 @@ async function loadFallbackImage(file: File): Promise<{
 export async function optimizeMomentUploadImage(
   file: File,
   {
-    maxDimension = 2560,
+    maxDimension = 2048,
     quality = 0.9,
     signal,
   }: MomentImageOptimizationOptions = {},
