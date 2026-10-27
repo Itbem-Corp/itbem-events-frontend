@@ -66,6 +66,95 @@ describe("momentUploadImage", () => {
     }
   });
 
+  describe("2 % minimum saving", () => {
+    const ORIGINAL_BYTES = 1_000_000;
+    const stubEncoderProducing = (bytes: number) => {
+      vi.stubGlobal("document", {
+        createElement: () => ({
+          width: 0,
+          height: 0,
+          getContext: () => ({ drawImage: () => {} }),
+          toBlob: (resolve: (blob: Blob | null) => void, type: string) =>
+            resolve(new Blob([new Uint8Array(bytes)], { type })),
+        }),
+      });
+      vi.stubGlobal(
+        "createImageBitmap",
+        vi.fn(async () => ({ width: 1600, height: 1200, close: () => {} })),
+      );
+    };
+    const heic = () =>
+      new File([new Uint8Array(ORIGINAL_BYTES)], "foto.heic", {
+        type: "image/heic",
+      });
+
+    it.each([
+      ["equal size", ORIGINAL_BYTES],
+      ["only 1 % smaller", ORIGINAL_BYTES * 0.99],
+      ["exactly 2 % smaller", ORIGINAL_BYTES * 0.98],
+    ])("keeps the original when the result is %s", async (_label, bytes) => {
+      stubEncoderProducing(bytes);
+      try {
+        const file = heic();
+        await expect(optimizeMomentUploadImage(file)).resolves.toBe(file);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("uploads the optimized file once it saves more than 2 %", async () => {
+      stubEncoderProducing(ORIGINAL_BYTES * 0.97);
+      try {
+        const file = heic();
+        const result = await optimizeMomentUploadImage(file);
+        expect(result).not.toBe(file);
+        expect(result.size).toBe(ORIGINAL_BYTES * 0.97);
+        expect(result.type).toBe("image/webp");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+  });
+
+  it("decodes with EXIF orientation applied and sizes the canvas from the rotated bitmap", async () => {
+    const canvases: { width: number; height: number }[] = [];
+    vi.stubGlobal("document", {
+      createElement: () => {
+        const canvas = {
+          width: 0,
+          height: 0,
+          getContext: () => ({ drawImage: () => {} }),
+          toBlob: (resolve: (blob: Blob | null) => void, type: string) =>
+            resolve(new Blob([new Uint8Array(10)], { type })),
+        };
+        canvases.push(canvas);
+        return canvas;
+      },
+    });
+    // A portrait iPhone photo is stored 4032x3024 with EXIF orientation 6;
+    // decoding "from-image" hands back the upright 3024x4032 bitmap.
+    const decode = vi.fn(async () => ({
+      width: 3024,
+      height: 4032,
+      close: () => {},
+    }));
+    vi.stubGlobal("createImageBitmap", decode);
+
+    try {
+      const file = new File([new Uint8Array(800 * 1024)], "retrato.heic", {
+        type: "image/heic",
+      });
+      await optimizeMomentUploadImage(file);
+
+      expect(decode).toHaveBeenCalledWith(file, {
+        imageOrientation: "from-image",
+      });
+      expect(canvases[0]).toMatchObject({ width: 1536, height: 2048 });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   describe("when the browser cannot encode WebP (toBlob falls back to PNG)", () => {
     const stubCanvasWithoutWebp = () => {
       vi.stubGlobal("document", {
