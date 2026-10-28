@@ -424,6 +424,32 @@ function getAdaptivePoolSize(): number {
 }
 
 /**
+ * Parts in flight per multipart upload. Slower links get fewer so each part
+ * finishes (and reports progress) instead of all four stalling together; with
+ * no `navigator.connection` data (iOS Safari) it stays at PART_CONCURRENCY.
+ * The part size stays at the backend's multipartPartSize (8 MB).
+ */
+export function getPartConcurrency(
+  connection?: { effectiveType?: string } | null,
+): number {
+  switch (connection?.effectiveType) {
+    case "slow-2g":
+    case "2g":
+      return 1;
+    case "3g":
+      return 2;
+    default:
+      return PART_CONCURRENCY;
+  }
+}
+
+/**
+ * How long a multipart file's shown percentage may stay the same (presign,
+ * part queue, part PUTs, retry backoff, confirm) before the row explains it.
+ */
+export const PROGRESS_STALL_MS = 10_000;
+
+/**
  * Lets at most `max` operations run at once; waiters leave the line as soon as
  * their signal aborts.
  */
@@ -499,13 +525,95 @@ export function calcParts(
   return parts;
 }
 
+/**
+ * Upload share of the bar (0–90; confirm owns the last 10). `floor` is the
+ * value already shown: a retried part restarts its bytes at 0, and the bar
+ * must hold instead of jumping back.
+ */
 export function calcProgress(
   bytesPerPart: number[],
   totalBytes: number,
+  floor = 0,
 ): number {
-  if (totalBytes === 0) return 0;
+  if (totalBytes === 0) return Math.min(90, floor);
   const uploaded = bytesPerPart.reduce((sum, bytes) => sum + bytes, 0);
-  return Math.min(90, Math.round((uploaded / totalBytes) * 90));
+  return Math.min(
+    90,
+    Math.max(floor, Math.round((uploaded / totalBytes) * 90)),
+  );
+}
+
+/**
+ * Calls `onStall` when `touch` has not been called for `stallMs`, and
+ * `onResume` on the first touch after a stall. One per file, so queue waits,
+ * retry backoff and the confirm call are covered, not only an open PUT.
+ */
+export function createStallWatchdog(
+  onStall: () => void,
+  onResume: () => void,
+  stallMs = PROGRESS_STALL_MS,
+) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stalled = false;
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      stalled = true;
+      onStall();
+    }, stallMs);
+  };
+  return {
+    touch() {
+      if (stalled) {
+        stalled = false;
+        onResume();
+      }
+      arm();
+    },
+    isStalled() {
+      return stalled;
+    },
+    stop() {
+      clearTimeout(timer);
+    },
+  };
+}
+
+/**
+ * The row subtitle of a multipart file. `step` is what the file is doing;
+ * after PROGRESS_STALL_MS without `moved` the stall notice replaces it, and a
+ * new step does not hide that notice: only movement of the percentage
+ * (`moved`) or an explicit reason (`explain`, e.g. a retry) does.
+ */
+export function createUploadSubtitle(
+  show: (text: string | undefined) => void,
+  initialStallMessage: string,
+  stallMs = PROGRESS_STALL_MS,
+) {
+  let step: string | undefined;
+  let stallMessage = initialStallMessage;
+  const watchdog = createStallWatchdog(
+    () => show(stallMessage),
+    () => show(step),
+    stallMs,
+  );
+  return {
+    step(text: string | undefined) {
+      step = text;
+      if (!watchdog.isStalled()) show(text);
+    },
+    explain(text: string) {
+      step = text;
+      show(text);
+    },
+    stallMessage(text: string) {
+      stallMessage = text;
+      if (watchdog.isStalled()) show(text);
+    },
+    moved: () => watchdog.touch(),
+    isStalled: () => watchdog.isStalled(),
+    stop: () => watchdog.stop(),
+  };
 }
 
 function uploadsDisabledError(error: unknown): boolean {
@@ -632,8 +740,23 @@ export async function uploadSharedFiles({
     const timer = uploadTimingFor(entry.id);
     timer.setMultipart();
 
+    // Armed before presign so its rate-limit waits are covered too.
+    const subtitle = createUploadSubtitle(
+      (text) =>
+        updateFiles((previous) =>
+          previous.map((candidate) =>
+            candidate.id === entry.id
+              ? { ...candidate, subtitle: text }
+              : candidate,
+          ),
+        ),
+      "Preparando la subida; la conexión está lenta. No cierres esta pantalla.",
+    );
+    let shownProgress = 0;
+
     let startData: SharedMultipartUploadStart;
     timer.start("presign");
+    subtitle.moved();
     try {
       startData = await retryWhenRateLimited(
         () =>
@@ -660,12 +783,22 @@ export async function uploadSharedFiles({
         signal,
       );
     } catch (error) {
+      subtitle.stop();
       if (uploadsDisabledError(error)) throw asUploadsDisabledError();
       throw error;
     }
 
     timer.end("presign");
-    const multipart = requireSharedMultipartUploadStart(startData, contentType);
+    subtitle.stallMessage(
+      "Conexión lenta, seguimos subiendo. No cierres esta pantalla.",
+    );
+    let multipart: ReturnType<typeof requireSharedMultipartUploadStart>;
+    try {
+      multipart = requireSharedMultipartUploadStart(startData, contentType);
+    } catch (error) {
+      subtitle.stop();
+      throw error;
+    }
     const uploadId = multipart.uploadId;
     const objectKey = multipart.objectKey;
     const uploadContentType = multipart.contentType;
@@ -712,18 +845,10 @@ export async function uploadSharedFiles({
           throw new Error(`No se encontró la URL de la parte ${partNumber}.`);
         }
         const blob = file.slice(start, end);
-        updateFiles((previous) =>
-          previous.map((candidate) =>
-            candidate.id === entry.id
-              ? {
-                  ...candidate,
-                  subtitle: `Subiendo parte ${partNumber}/${parts.length}...`,
-                }
-              : candidate,
-          ),
-        );
+        subtitle.step(`Subiendo parte ${partNumber}/${parts.length}...`);
         bytesUploaded[partNumber - 1] = 0;
-        const etag = await withRetry(() =>
+        const etag = await withRetry(
+          () =>
           runScheduledPut(
             entry.id,
             () =>
@@ -749,10 +874,15 @@ export async function uploadSharedFiles({
                 request.upload.onprogress = (event) => {
                   if (!event.lengthComputable) return;
                   bytesUploaded[partNumber - 1] = event.loaded;
-                  publishProgress(
-                    entry.id,
-                    calcProgress(bytesUploaded, file.size),
+                  const next = calcProgress(
+                    bytesUploaded,
+                    file.size,
+                    shownProgress,
                   );
+                  if (next === shownProgress) return;
+                  shownProgress = next;
+                  subtitle.moved();
+                  publishProgress(entry.id, next);
                 };
                 request.onload = () => {
                   if (request.status >= 200 && request.status < 300) {
@@ -801,6 +931,17 @@ export async function uploadSharedFiles({
                 else request.send(blob);
               }),
           ),
+          3,
+          1000,
+          {
+            onRetry: (nextAttempt, maxAttempts) => {
+              // A retry explains the wait by itself, so it shows even over
+              // the stall notice; it does not count as movement.
+              subtitle.explain(
+                `Reintentando parte ${partNumber}/${parts.length} (intento ${nextAttempt} de ${maxAttempts})...`,
+              );
+            },
+          },
         );
         bytesUploaded[partNumber - 1] = end - start;
         etags[partNumber - 1] = {
@@ -812,7 +953,10 @@ export async function uploadSharedFiles({
       timer.start("put");
       await runPool(
         parts.map((part) => () => uploadPart(part)),
-        PART_CONCURRENCY,
+        getPartConcurrency(
+          (navigator as unknown as { connection?: { effectiveType?: string } })
+            .connection,
+        ),
       );
       timer.end("put");
       const completedParts = normalizeCompletedUploadParts(etags);
@@ -826,10 +970,19 @@ export async function uploadSharedFiles({
       updateFiles((previous) =>
         previous.map((candidate) =>
           candidate.id === entry.id
-            ? { ...candidate, progress: 90, subtitle: undefined }
+            ? { ...candidate, progress: 90 }
             : candidate,
         ),
       );
+      subtitle.stallMessage(
+        "Seguimos finalizando la subida. No cierres esta pantalla.",
+      );
+      subtitle.step("Finalizando la subida...");
+      if (shownProgress < 90) {
+        // The bar just jumped to 90: that is movement.
+        shownProgress = 90;
+        subtitle.moved();
+      }
       const completeUrl = buildSharedMultipartCompleteUrl(
         eventsUrl,
         identifier,
@@ -864,6 +1017,7 @@ export async function uploadSharedFiles({
         signal,
       );
       timer.end("confirm");
+      subtitle.stop();
       finishUploadTiming(entry.id, "done");
       onPublicationResponse(completeResponse);
       updateFiles((previous) =>
@@ -879,6 +1033,7 @@ export async function uploadSharedFiles({
         ),
       );
     } catch (error) {
+      subtitle.stop();
       progressBatcher.delete(entry.id);
       if (!(error as { silent?: boolean } | null)?.silent) {
         finishUploadTiming(entry.id, "error");
