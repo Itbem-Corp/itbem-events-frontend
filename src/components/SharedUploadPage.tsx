@@ -22,7 +22,11 @@ import { UploadStatusLoadingState } from "./shared-upload/UploadStatusLoadingSta
 import { UploadThemeToggle } from "./shared-upload/UploadThemeToggle";
 import { usePublicEventAccess } from "../hooks/usePublicEventAccess";
 import { normalizeEventsUrl } from "../lib/eventsUrl";
-import { discardUploadTiming, uploadTimingFor } from "../lib/uploadTiming";
+import {
+  configureUploadTimingDestination,
+  discardUploadTiming,
+  uploadTimingFor,
+} from "../lib/uploadTiming";
 import {
   publicAccessFetchInit,
   publicAccessQueryParams,
@@ -473,6 +477,22 @@ export default function SharedUploadPage({
       if (mountedRef.current) setQuotaRetrying(false);
     }
   }
+
+  // EV-53: upload phase timings go to the backend aggregate endpoint.
+  useEffect(() => {
+    if (!identifier || typeof window === "undefined") return;
+    const access = resolvePublicAccessParams(
+      { accessToken },
+      window.location.search,
+    );
+    configureUploadTimingDestination({
+      eventsUrl: EVENTS_URL,
+      identifier,
+      access,
+      query: publicAccessQueryParams(access),
+    });
+    return () => configureUploadTimingDestination(null);
+  }, [EVENTS_URL, identifier, accessToken]);
 
   useEffect(() => {
     if (!identifier) return;

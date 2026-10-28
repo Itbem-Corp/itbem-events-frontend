@@ -8,6 +8,9 @@
  * the guest sees or how the upload behaves.
  */
 
+import { buildEventApiUrl } from "./apiUrls";
+import { publicAccessFetchInit, type PublicAccessFetchParams } from "./publicPreview";
+
 export const UPLOAD_TIMING_PHASES = [
   "preview",
   "optimize",
@@ -80,13 +83,71 @@ export function classifyUploadKind(file: UploadTimingFileInfo): UploadTimingKind
   return "other";
 }
 
+export interface UploadTimingDestination {
+  eventsUrl: string;
+  identifier: string;
+  access?: PublicAccessFetchParams;
+  /** Public access query (invitation/preview token) the backend needs for private events. */
+  query?: Record<string, string | number | boolean | null | undefined>;
+}
+
+let timingDestination: UploadTimingDestination | null = null;
+
+/** Sets (or clears, with null) the event the timing records are sent to. */
+export function configureUploadTimingDestination(
+  destination: UploadTimingDestination | null,
+): void {
+  timingDestination =
+    destination && destination.identifier ? destination : null;
+}
+
 /**
- * Default sink: a DOM event any analytics layer can listen to, plus a dev log.
- * Provisional destination: where these records are actually sent (logger,
- * analytics or a backend endpoint) is defined in EV-53.
+ * Sends one record to POST /api/events/:identifier/upload-timings (EV-53).
+ * Only the fields the backend aggregates are sent: no size, MIME type, file
+ * name, guest id or URL. Failures are swallowed: measuring never affects the
+ * upload.
+ */
+export function sendUploadTimingRecord(
+  record: UploadTimingRecord,
+  destination: UploadTimingDestination | null = timingDestination,
+): void {
+  if (!destination || typeof fetch === "undefined") return;
+  try {
+    const body = {
+      platform: record.platform,
+      iosSafari: record.iosSafari,
+      kind: record.kind,
+      outcome: record.outcome,
+      phasesMs: record.phasesMs,
+      totalMs: record.totalMs,
+    };
+    void fetch(
+      buildEventApiUrl(
+        destination.eventsUrl,
+        destination.identifier,
+        "upload-timings",
+        destination.query,
+      ),
+      publicAccessFetchInit(destination.access ?? {}, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        keepalive: true,
+      }),
+    ).catch(() => {});
+  } catch {
+    /* observational only */
+  }
+}
+
+/**
+ * Default sink: sends the record to the backend aggregate endpoint when a
+ * destination is configured, emits a DOM event any analytics layer can listen
+ * to, and logs in dev.
  */
 export const defaultUploadTimingSink: UploadTimingSink = (record) => {
   if (typeof window === "undefined") return;
+  sendUploadTimingRecord(record);
   window.dispatchEvent(
     new CustomEvent<UploadTimingRecord>(UPLOAD_TIMING_EVENT_NAME, {
       detail: record,

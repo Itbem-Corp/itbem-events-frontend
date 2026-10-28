@@ -7,6 +7,7 @@ import {
   createUploadTimer,
   discardUploadTiming,
   finishUploadTiming,
+  sendUploadTimingRecord,
   uploadTimingFor,
   type UploadTimingRecord,
 } from "../../src/lib/uploadTiming";
@@ -231,5 +232,62 @@ describe("discard and failing sinks", () => {
     discarded.finish("done");
     expect(sink).not.toHaveBeenCalled();
     expect(discardPerf.clearMarks).toHaveBeenCalledWith(expect.stringMatching(/:put:start$/));
+  });
+});
+
+describe("sendUploadTimingRecord (EV-53)", () => {
+  const record: UploadTimingRecord = {
+    event: "upload_phase_timings",
+    platform: "ios",
+    iosSafari: true,
+    kind: "heic",
+    sizeBytes: 4_200_000,
+    mimeType: "image/heic",
+    multipart: false,
+    outcome: "done",
+    phasesMs: { optimize: 300, put: 1200 },
+    totalMs: 1700,
+  };
+
+  it("posts only the aggregate fields to the event upload-timings endpoint", () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      sendUploadTimingRecord(record, {
+        eventsUrl: "https://api.example.com/",
+        identifier: "boda-ana",
+        query: { invitation: "tok" },
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(String(url)).toMatch(
+        /^https:\/\/api\.example\.com\/api\/events\/boda-ana\/upload-timings\?/,
+      );
+      expect(init.method).toBe("POST");
+      expect(JSON.parse(init.body)).toEqual({
+        platform: "ios",
+        iosSafari: true,
+        kind: "heic",
+        outcome: "done",
+        phasesMs: { optimize: 300, put: 1200 },
+        totalMs: 1700,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does nothing without a destination and never throws when fetch fails", () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("offline"));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      sendUploadTimingRecord(record, null);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(() =>
+        sendUploadTimingRecord(record, { eventsUrl: "https://a.b/", identifier: "x" }),
+      ).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
