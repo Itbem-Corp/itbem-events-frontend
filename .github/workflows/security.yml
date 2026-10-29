@@ -10,7 +10,7 @@ permissions:
 jobs:
   dependency-review:
     if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name == 'pull_request' && vars.DEPENDENCY_REVIEW_ENABLED == 'true') }}
-    runs-on: [self-hosted, Linux, X64, itbem-org-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: read
@@ -24,7 +24,7 @@ jobs:
 
   audit:
     if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: [self-hosted, Linux, X64, itbem-org-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -46,7 +46,7 @@ jobs:
 
   codeql:
     if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: [self-hosted, Linux, X64, itbem-org-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       actions: read
