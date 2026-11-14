@@ -13,7 +13,7 @@ ejecuta automáticamente.
 ## Setup Local
 
 Requiere Node.js 22.12 o superior. La versión reproducible para equipo y CI
-está fijada en `.nvmrc` (22.23.1).
+está fijada en `.nvmrc` (22.23.5).
 
 ```bash
 # 0. Con nvm, seleccionar el runtime del proyecto
