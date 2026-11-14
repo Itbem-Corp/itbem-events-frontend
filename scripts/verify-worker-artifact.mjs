@@ -37,4 +37,14 @@ assert(
   "Worker artifact must pin SESSION to its provisioned KV namespace.",
 );
 
+const versionPath = resolve(clientPath, "version.json");
+assert(existsSync(versionPath), "Worker artifact is missing dist/client/version.json (scripts/write-version.mjs).");
+const version = JSON.parse(readFileSync(versionPath, "utf8"));
+if (process.env.GITHUB_ACTIONS === "true") {
+  assert(
+    version.sha === (process.env.GITHUB_SHA ?? "").toLowerCase(),
+    "dist/client/version.json must name the commit being deployed (GITHUB_SHA).",
+  );
+}
+
 console.log("Worker artifact contract passed.");
